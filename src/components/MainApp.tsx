@@ -17,6 +17,8 @@ import { appointmentService } from '../services/appointmentService';
 import { useLocation } from 'react-router-dom';
 
 import { getUpdatedStock } from '../domain/stock';
+import { getNextDoseAt } from '../domain/medicationRules';
+import { pushService } from '../services/pushService';
 
 const STORAGE_KEYS = {
   SETTINGS: 'medmanager_v2_settings'
@@ -26,7 +28,8 @@ const DEFAULT_SETTINGS: AppSettings = {
   thresholdExpiring: 3,
   thresholdRunningOut: 3,
   showDelayDisclaimer: true,
-  showGreeting: true
+  showGreeting: true,
+  preNotificationMinutes: 5
 };
 
 const MainApp: React.FC = () => {
@@ -69,6 +72,14 @@ const MainApp: React.FC = () => {
     // Merge with defaults to ensure new fields like showGreeting are present
     return { ...DEFAULT_SETTINGS, ...loaded };
   });
+
+  useEffect(() => {
+    if (user && meds.length > 0) {
+      pushService.syncMedicationReminders(user.id, meds, settings.preNotificationMinutes).catch(err => 
+        console.error('Erro ao sincronizar lembretes após mudança de configuração:', err)
+      );
+    }
+  }, [user, meds, settings.preNotificationMinutes]);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -127,11 +138,15 @@ const MainApp: React.FC = () => {
       const exists = meds.some(m => m.id === newMed.id);
       if (exists) {
         const updated = await medicationService.updateMedication(user.id, newMed.id, newMed);
-        setMeds(prev => prev.map(m => m.id === updated.id ? updated : m));
+        const newMeds = meds.map(m => m.id === updated.id ? updated : m);
+        setMeds(newMeds);
+        await pushService.syncMedicationReminders(user.id, newMeds);
       } else {
         const finalMed = { ...newMed, color: newMed.color || COLORS[Math.floor(Math.random() * COLORS.length)] };
         const created = await medicationService.createMedication(user.id, finalMed);
-        setMeds(prev => [created, ...prev]);
+        const newMeds = [created, ...meds];
+        setMeds(newMeds);
+        await pushService.syncMedicationReminders(user.id, newMeds);
       }
       setEditingMedication(null);
       setView('meds');
@@ -144,12 +159,14 @@ const MainApp: React.FC = () => {
     if (!user) return;
     openConfirm(
       'Excluir Medicamento',
-      'Tem certeza que deseja excluir este medicamento? Esta ação não pode ser desfeita.',
+      'Tem certeza que deseja excluir este medicamento? Esta ação não pode ser desfeita. (O histórico do medicamento também será apagado)',
       async () => {
         try {
           await medicationService.deleteMedication(user.id, id);
-          setMeds(prev => prev.filter(m => m.id !== id));
+          const newMeds = meds.filter(m => m.id !== id);
+          setMeds(newMeds);
           setDoses(prev => prev.filter(d => d.medicationId !== id));
+          await pushService.syncMedicationReminders(user.id, newMeds);
         } catch (error) {
           console.error('Erro ao excluir medicamento:', error);
         }
@@ -246,7 +263,9 @@ const MainApp: React.FC = () => {
         // Atualiza estoque baseado na mudança de status para meds regulares
         if (med) {
           const updatedMed = await medicationService.updateMedication(user.id, med.id, { 
-            currentStock: getUpdatedStock(med.currentStock, newStatus) 
+            currentStock: getUpdatedStock(med.currentStock, newStatus),
+            // Recalcular próxima dose ao marcar como tomado
+            next_dose_at: newStatus === 'taken' ? getNextDoseAt(med) : med.next_dose_at
           });
           setMeds(currentMeds => currentMeds.map(m => m.id === updatedMed.id ? updatedMed : m));
         }
@@ -266,7 +285,8 @@ const MainApp: React.FC = () => {
         const med = meds.find(m => m.id === medicationId);
         if (med) {
           const updatedMed = await medicationService.updateMedication(user.id, med.id, { 
-            currentStock: getUpdatedStock(med.currentStock, 'taken') 
+            currentStock: getUpdatedStock(med.currentStock, 'taken'),
+            next_dose_at: getNextDoseAt(med)
           });
           setMeds(prev => prev.map(m => m.id === updatedMed.id ? updatedMed : m));
         }

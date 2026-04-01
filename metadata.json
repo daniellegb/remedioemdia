@@ -1,5 +1,7 @@
 {
-  "name": "Remédio em Dia",
+  "name": "Remédio em Dia v2",
   "description": "Sistema completo de gestão de medicamentos e compromissos médicos.",
-  "requestFramePermissions": []
+  "requestFramePermissions": [
+    "notifications"
+  ]
 }

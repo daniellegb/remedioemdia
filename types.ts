@@ -25,6 +25,15 @@ export interface Medication {
   expiryDate?: string;
   notes?: string;
   color: string;
+  next_dose_at?: string; // ISO string
+}
+
+export interface PushSubscriptionData {
+  id?: string;
+  user_id: string;
+  endpoint: string;
+  subscription: any; // Store the full PushSubscription JSON
+  created_at?: string;
 }
 
 export type AppointmentType = 'Consulta' | 'Exame';
@@ -53,6 +62,7 @@ export interface AppSettings {
   thresholdRunningOut: number;
   showDelayDisclaimer: boolean;
   showGreeting: boolean;
+  preNotificationMinutes: number;
 }
 
 export interface Profile {
