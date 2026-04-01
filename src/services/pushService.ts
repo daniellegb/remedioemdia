@@ -99,10 +99,12 @@ export const pushService = {
 
   async checkVapidMatch() {
     try {
-      const clientVapid = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+      // Tentar ler de import.meta.env (Vite) ou process.env (injetado via vite.config.ts)
+      const clientVapid = import.meta.env.VITE_VAPID_PUBLIC_KEY || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : undefined);
       
       // Verificação básica de configuração
-      if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL === 'your-supabase-url') {
+      if (!supabaseUrl || supabaseUrl === 'your-supabase-url') {
         throw new Error('Supabase URL não configurada');
       }
 
@@ -111,7 +113,7 @@ export const pushService = {
           debug: true, 
           clientEnv: { 
             VAPID_PUBLIC_KEY: clientVapid,
-            SUPABASE_URL: import.meta.env.VITE_SUPABASE_URL
+            SUPABASE_URL: supabaseUrl
           } 
         }
       });

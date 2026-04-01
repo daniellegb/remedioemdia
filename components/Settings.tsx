@@ -66,9 +66,9 @@ const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData }) 
         setPushEnabled(false);
       } else {
         // Subscribe
-        const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY;
+        const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
         if (!vapidKey || vapidKey === 'your-vapid-public-key') {
-          alert("Erro: Chave VAPID não configurada corretamente no ambiente.");
+          alert(`Erro: Chave VAPID não encontrada no Cliente.\n\nValor atual: ${vapidKey}\n\nCertifique-se de que configurou VITE_VAPID_PUBLIC_KEY na Vercel e fez um REDEPLOY.`);
           setIsPushLoading(false);
           return;
         }

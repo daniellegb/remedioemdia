@@ -1,7 +1,8 @@
 import React from 'react';
-import { Pill, Heart, Settings, Plus, ChevronRight, User, Users, Info } from 'lucide-react';
+import { Pill, Heart, Settings, Plus, ChevronRight, User, Users, Info, ExternalLink, Copy, Check } from 'lucide-react';
 import { useOnboarding } from '../hooks/useOnboarding';
 import { motion, AnimatePresence } from 'motion/react';
+import ConfirmationModal from './ConfirmationModal';
 
 interface Props {
   onComplete: (skipMedication?: boolean) => void;
@@ -9,6 +10,18 @@ interface Props {
 
 const Onboarding: React.FC<Props> = ({ onComplete }) => {
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [alertModal, setAlertModal] = React.useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    variant: 'info' | 'danger' | 'warning' | 'success';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    variant: 'info'
+  });
+
   const {
     state,
     setMode,
@@ -17,6 +30,10 @@ const Onboarding: React.FC<Props> = ({ onComplete }) => {
     nextStep,
     completeOnboarding
   } = useOnboarding();
+
+  const showAlert = (title: string, message: string, variant: 'info' | 'danger' | 'warning' | 'success' = 'info') => {
+    setAlertModal({ isOpen: true, title, message, variant });
+  };
 
   const handleFinish = async (skipMedication: boolean) => {
     if (isSubmitting) return;
@@ -28,7 +45,11 @@ const Onboarding: React.FC<Props> = ({ onComplete }) => {
       await onComplete(skipMedication);
     } catch (error) {
       console.error('Error in handleFinish:', error);
-      alert('Ocorreu um erro ao salvar seus dados. Por favor, tente novamente.');
+      showAlert(
+        'Erro ao salvar',
+        'Ocorreu um erro ao salvar seus dados. Por favor, tente novamente.',
+        'danger'
+      );
     } finally {
       setIsSubmitting(false);
     }
@@ -299,6 +320,16 @@ const Onboarding: React.FC<Props> = ({ onComplete }) => {
           {renderStep()}
         </AnimatePresence>
       </div>
+
+      <ConfirmationModal
+        isOpen={alertModal.isOpen}
+        onClose={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        onConfirm={() => setAlertModal(prev => ({ ...prev, isOpen: false }))}
+        title={alertModal.title}
+        message={alertModal.message}
+        confirmLabel="Entendido"
+        variant={alertModal.variant}
+      />
     </div>
   );
 };
