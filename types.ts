@@ -78,8 +78,11 @@ export interface Profile {
 export interface UserPreferences {
   id?: string;
   user_id: string;
-  expiry_warning_days: number;
-  low_stock_warning_days: number;
+  threshold_expiring: number;
+  threshold_running_out: number;
+  show_delay_disclaimer: boolean;
+  show_greeting: boolean;
+  pre_notification_minutes: number;
 }
 
 export type ViewType = 'dashboard' | 'calendar' | 'meds' | 'appointments' | 'settings' | 'add-appointment' | 'add-med' | 'onboarding';

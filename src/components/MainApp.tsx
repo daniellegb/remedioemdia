@@ -8,12 +8,14 @@ import AddAppointment from '../../components/AddAppointment';
 import Calendar from '../../components/Calendar';
 import Settings from '../../components/Settings';
 import ConfirmationModal from '../../components/ConfirmationModal';
-import { ViewType, Medication, DoseEvent, Appointment, AppSettings, UsageCategory } from '../../types';
+import { ViewType, Medication, DoseEvent, Appointment, AppSettings, UsageCategory, UserPreferences } from '../../types';
 import { COLORS } from '../../constants';
 import { useAuthContext } from '../context/AuthContext';
-import { medicationService } from '../services/medicationService';
-import { consumptionService } from '../services/consumptionService';
-import { appointmentService } from '../services/appointmentService';
+import { medicationService, mapMedToCamelCase } from '../services/medicationService';
+import { consumptionService, mapDoseToCamelCase } from '../services/consumptionService';
+import { appointmentService, mapAppToCamelCase } from '../services/appointmentService';
+import { userPreferencesService } from '../services/userPreferencesService';
+import { supabase } from '../lib/supabase';
 import { useLocation } from 'react-router-dom';
 
 import { getUpdatedStock } from '../domain/stock';
@@ -67,11 +69,7 @@ const MainApp: React.FC = () => {
     return defaultValue;
   };
 
-  const [settings, setSettings] = useState<AppSettings>(() => {
-    const loaded = loadData(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
-    // Merge with defaults to ensure new fields like showGreeting are present
-    return { ...DEFAULT_SETTINGS, ...loaded };
-  });
+  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
 
   useEffect(() => {
     if (user && meds.length > 0) {
@@ -85,19 +83,91 @@ const MainApp: React.FC = () => {
     if (!user) return;
     setLoading(true);
     try {
-      const [medsData, dosesData, appointmentsData] = await Promise.all([
+      const [medsData, dosesData, appointmentsData, prefsData] = await Promise.all([
         medicationService.getMedications(user.id),
         consumptionService.getConsumptionRecords(user.id),
-        appointmentService.getAppointments(user.id)
+        appointmentService.getAppointments(user.id),
+        userPreferencesService.getPreferences(user.id)
       ]);
       setMeds(medsData);
       setDoses(dosesData);
       setAppointments(appointmentsData);
+      
+      if (prefsData) {
+        setSettings({
+          thresholdExpiring: prefsData.threshold_expiring,
+          thresholdRunningOut: prefsData.threshold_running_out,
+          showDelayDisclaimer: prefsData.show_delay_disclaimer,
+          showGreeting: prefsData.show_greeting,
+          preNotificationMinutes: prefsData.pre_notification_minutes
+        });
+      }
     } catch (error) {
       console.error('Erro ao buscar dados:', error);
     } finally {
       setLoading(false);
     }
+  }, [user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('db-changes')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'medications', filter: `user_id=eq.${user.id}` }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const newMed = mapMedToCamelCase(payload.new);
+          setMeds(prev => [newMed, ...prev.filter(m => m.id !== newMed.id)]);
+        } else if (payload.eventType === 'UPDATE') {
+          const updatedMed = mapMedToCamelCase(payload.new);
+          setMeds(prev => prev.map(m => m.id === updatedMed.id ? updatedMed : m));
+        } else if (payload.eventType === 'DELETE') {
+          setMeds(prev => prev.filter(m => m.id !== payload.old.id));
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'consumption_records', filter: `user_id=eq.${user.id}` }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const newDose = mapDoseToCamelCase(payload.new);
+          setDoses(prev => [newDose, ...prev.filter(d => d.id !== newDose.id)]);
+        } else if (payload.eventType === 'UPDATE') {
+          const updatedDose = mapDoseToCamelCase(payload.new);
+          setDoses(prev => prev.map(d => d.id === updatedDose.id ? updatedDose : d));
+        } else if (payload.eventType === 'DELETE') {
+          setDoses(prev => prev.filter(d => d.id !== payload.old.id));
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'appointments', filter: `user_id=eq.${user.id}` }, (payload) => {
+        if (payload.eventType === 'INSERT') {
+          const newApp = mapAppToCamelCase(payload.new);
+          setAppointments(prev => [newApp, ...prev.filter(a => a.id !== newApp.id)]);
+        } else if (payload.eventType === 'UPDATE') {
+          const updatedApp = mapAppToCamelCase(payload.new);
+          setAppointments(prev => prev.map(a => a.id === updatedApp.id ? updatedApp : a));
+        } else if (payload.eventType === 'DELETE') {
+          setAppointments(prev => prev.filter(a => a.id !== payload.old.id));
+        }
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_preferences', filter: `user_id=eq.${user.id}` }, (payload) => {
+        if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+          const prefs = payload.new as UserPreferences;
+          const newSettings: AppSettings = {
+            thresholdExpiring: prefs.threshold_expiring,
+            thresholdRunningOut: prefs.threshold_running_out,
+            showDelayDisclaimer: prefs.show_delay_disclaimer,
+            showGreeting: prefs.show_greeting,
+            preNotificationMinutes: prefs.pre_notification_minutes
+          };
+          
+          // Update ref to avoid syncing back
+          lastSyncedSettings.current = JSON.stringify(newSettings);
+          setSettings(newSettings);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
   }, [user]);
 
   useEffect(() => {
@@ -128,9 +198,27 @@ const MainApp: React.FC = () => {
     });
   };
 
+  const lastSyncedSettings = React.useRef<string>(JSON.stringify(settings));
+
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEYS.SETTINGS, JSON.stringify(settings));
-  }, [settings]);
+    if (!user) return;
+    
+    const currentSettingsStr = JSON.stringify(settings);
+    localStorage.setItem(STORAGE_KEYS.SETTINGS, currentSettingsStr);
+    
+    // Only sync to DB if settings actually changed locally (not from a remote sync)
+    if (currentSettingsStr !== lastSyncedSettings.current) {
+      lastSyncedSettings.current = currentSettingsStr;
+      
+      userPreferencesService.updatePreferences(user.id, {
+        threshold_expiring: settings.thresholdExpiring,
+        threshold_running_out: settings.thresholdRunningOut,
+        show_delay_disclaimer: settings.showDelayDisclaimer,
+        show_greeting: settings.showGreeting,
+        pre_notification_minutes: settings.preNotificationMinutes
+      }).catch(err => console.error('Erro ao salvar preferências no banco:', err));
+    }
+  }, [settings, user]);
 
   const handleSaveMedication = async (newMed: Medication) => {
     if (!user) return;

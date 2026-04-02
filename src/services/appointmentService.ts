@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { Appointment } from '../../types';
 import { notificationService } from './notificationService';
 
-const mapToCamelCase = (app: any): Appointment => ({
+export const mapAppToCamelCase = (app: any): Appointment => ({
   id: app.id,
   type: app.type,
   doctor: app.doctor,
@@ -28,7 +28,7 @@ export const appointmentService = {
       .order('time', { ascending: true });
 
     if (error) throw error;
-    return (data || []).map(mapToCamelCase);
+    return (data || []).map(mapAppToCamelCase);
   },
 
   async createAppointment(userId: string, data: Omit<Appointment, 'id'>) {
@@ -64,7 +64,7 @@ export const appointmentService = {
       );
     }
 
-    return mapToCamelCase(created);
+    return mapAppToCamelCase(created);
   },
 
   async updateAppointment(userId: string, id: string, data: Partial<Appointment>) {
@@ -96,7 +96,7 @@ export const appointmentService = {
       );
     }
 
-    return mapToCamelCase(updated);
+    return mapAppToCamelCase(updated);
   },
 
   async deleteAppointment(userId: string, id: string) {

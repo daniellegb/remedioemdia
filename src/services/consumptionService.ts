@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { DoseEvent, Medication } from '../../types';
 import { getNextDoseAt } from '../domain/medicationRules';
 
-const mapToCamelCase = (record: any): DoseEvent => ({
+export const mapDoseToCamelCase = (record: any): DoseEvent => ({
   id: record.id,
   medicationId: record.medication_id,
   date: record.date,
@@ -44,7 +44,7 @@ export const consumptionService = {
       .order('scheduled_time', { ascending: false });
 
     if (error) throw error;
-    return (data || []).map(mapToCamelCase);
+    return (data || []).map(mapDoseToCamelCase);
   },
 
   async createConsumptionRecord(userId: string, data: Omit<DoseEvent, 'id'>) {
@@ -84,7 +84,7 @@ export const consumptionService = {
       }
     }
 
-    return mapToCamelCase(created);
+    return mapDoseToCamelCase(created);
   },
 
   async deleteConsumptionRecord(userId: string, id: string) {
@@ -113,6 +113,6 @@ export const consumptionService = {
       .single();
 
     if (error) throw error;
-    return mapToCamelCase(updated);
+    return mapDoseToCamelCase(updated);
   }
 };

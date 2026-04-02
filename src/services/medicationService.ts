@@ -2,7 +2,7 @@ import { supabase } from '../lib/supabase';
 import { Medication } from '../../types';
 import { getNextDoseAt } from '../domain/medicationRules';
 
-const mapToCamelCase = (med: any): Medication => ({
+export const mapMedToCamelCase = (med: any): Medication => ({
   id: med.id,
   name: med.name,
   dosage: med.dosage,
@@ -40,7 +40,7 @@ export const medicationService = {
       .order('created_at', { ascending: false });
 
     if (error) throw error;
-    return (data || []).map(mapToCamelCase);
+    return (data || []).map(mapMedToCamelCase);
   },
 
   async createMedication(userId: string, data: Omit<Medication, 'id'>) {
@@ -75,7 +75,7 @@ export const medicationService = {
       .single();
 
     if (error) throw error;
-    return mapToCamelCase(created);
+    return mapMedToCamelCase(created);
   },
 
   async updateMedication(userId: string, id: string, data: Partial<Medication>) {
@@ -105,7 +105,7 @@ export const medicationService = {
       // Precisamos do objeto completo para calcular
       const { data: current } = await supabase.from('medications').select('*').eq('id', id).single();
       if (current) {
-        const fullMed = mapToCamelCase({ ...current, ...updateData });
+        const fullMed = mapMedToCamelCase({ ...current, ...updateData });
         updateData.next_dose_at = getNextDoseAt(fullMed);
       }
     } else if (data.next_dose_at !== undefined) {
@@ -121,7 +121,7 @@ export const medicationService = {
       .single();
 
     if (error) throw error;
-    return mapToCamelCase(updated);
+    return mapMedToCamelCase(updated);
   },
 
   async deleteMedication(userId: string, id: string) {

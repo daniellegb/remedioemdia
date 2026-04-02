@@ -71,8 +71,11 @@ export const useOnboarding = () => {
 
     const preferencesData: UserPreferences = {
       user_id: user.id,
-      expiry_warning_days: state.preferences.expiryWarningDays,
-      low_stock_warning_days: state.preferences.lowStockWarningDays,
+      threshold_expiring: state.preferences.expiryWarningDays,
+      threshold_running_out: state.preferences.lowStockWarningDays,
+      show_delay_disclaimer: true,
+      show_greeting: true,
+      pre_notification_minutes: 5
     };
 
     try {
