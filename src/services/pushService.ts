@@ -5,18 +5,22 @@ export const pushService = {
   async saveSubscription(userId: string, subscription: PushSubscription) {
     const subData = subscription.toJSON();
     const endpoint = subData.endpoint;
+    const p256dh = subData.keys?.p256dh;
+    const auth = subData.keys?.auth;
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
     
-    // Garantir que o endpoint seja enviado como uma coluna separada para o upsert
+    // Garantir que o endpoint seja a única restrição de conflito para suportar múltiplos dispositivos
     const { data, error } = await supabase
       .from('push_subscriptions')
       .upsert({
         user_id: userId,
-        subscription: subData,
-        endpoint: endpoint, // Coluna TEXT dedicada para unicidade
+        endpoint: endpoint,
+        p256dh: p256dh,
+        auth: auth,
+        subscription: subData, // mantemos o JSON completo por segurança
         timezone: timezone
       }, { 
-        onConflict: 'user_id, endpoint' // Agora o PostgreSQL encontrará o índice UNIQUE correspondente
+        onConflict: 'endpoint' // Requisito Obrigatório: Unicidade por endpoint
       });
 
     if (error) {

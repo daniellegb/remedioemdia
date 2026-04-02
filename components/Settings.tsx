@@ -31,62 +31,76 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
     }
   }, [user]);
 
-  const handleTogglePush = async () => {
+  const handleToggleGlobalPush = () => {
+    if (!user) return;
+    onUpdateSettings({ 
+      ...settings, 
+      pushNotificationsEnabled: !settings.pushNotificationsEnabled 
+    });
+  };
+
+  const handleActivateLocalPush = async () => {
     if (!user) return;
     
-    const newStatus = !settings.pushNotificationsEnabled;
-    
-    // Se estiver ligando, tenta subscrever o dispositivo atual se ainda não estiver
-    if (newStatus && !localSubscribed) {
-      // Check if notifications are supported
-      if (!('Notification' in window)) {
-        alert("Este navegador não suporta notificações.");
-        return;
-      }
-
-      // Check if we are in an iframe (AI Studio Preview)
-      const isInIframe = window.self !== window.top;
-      if (isInIframe) {
-        alert("⚠️ ATENÇÃO: Notificações costumam ser bloqueadas dentro do preview do AI Studio.\n\nPor favor, abra o aplicativo em uma NOVA ABA (botão no canto superior direito) para configurar e receber notificações no computador.");
-        if (Notification.permission === 'default') return;
-      }
-
-      // Check if permission was previously denied
-      if (Notification.permission === 'denied') {
-        alert("As notificações foram bloqueadas. Por favor, redefina as permissões nas configurações do seu navegador (clique no cadeado ao lado da URL).");
-        return;
-      }
-
-      setIsPushLoading(true);
-      try {
-        const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
-        if (!vapidKey || vapidKey === 'your-vapid-public-key') {
-          alert(`Erro: Chave VAPID não encontrada no Cliente.\n\nValor atual: ${vapidKey}\n\nCertifique-se de que configurou VITE_VAPID_PUBLIC_KEY na Vercel e fez um REDEPLOY.`);
-          setIsPushLoading(false);
-          return;
-        }
-        
-        if (Notification.permission === 'default') {
-          const permission = await Notification.requestPermission();
-          if (permission !== 'granted') {
-            throw new Error('Permission not granted');
-          }
-        }
-
-        await subscribeUser(user.id, vapidKey);
-        setLocalSubscribed(true);
-      } catch (error: any) {
-        console.error("Erro ao subscrever dispositivo:", error);
-        alert(`Erro ao configurar notificações: ${error.message || "Erro desconhecido"}`);
-        // Não cancelamos a mudança do switch global, pois o usuário quer notificações
-        // mas este dispositivo específico falhou.
-      } finally {
-        setIsPushLoading(false);
-      }
+    // Check if notifications are supported
+    if (!('Notification' in window)) {
+      alert("Este navegador não suporta notificações.");
+      return;
     }
 
-    // Atualiza o estado global sincronizado
-    onUpdateSettings({ ...settings, pushNotificationsEnabled: newStatus });
+    // Check if we are in an iframe (AI Studio Preview)
+    const isInIframe = window.self !== window.top;
+    if (isInIframe) {
+      alert("⚠️ ATENÇÃO: Notificações costumam ser bloqueadas dentro do preview do AI Studio.\n\nPor favor, abra o aplicativo em uma NOVA ABA (botão no canto superior direito) para configurar e receber notificações no computador.");
+      if (Notification.permission === 'default') return;
+    }
+
+    // Check if permission was previously denied
+    if (Notification.permission === 'denied') {
+      alert("As notificações foram bloqueadas. Por favor, redefina as permissões nas configurações do seu navegador (clique no cadeado ao lado da URL).");
+      return;
+    }
+
+    setIsPushLoading(true);
+    try {
+      const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
+      if (!vapidKey || vapidKey === 'your-vapid-public-key') {
+        alert(`Erro: Chave VAPID não encontrada no Cliente.\n\nCertifique-se de que configurou VITE_VAPID_PUBLIC_KEY.`);
+        setIsPushLoading(false);
+        return;
+      }
+      
+      if (Notification.permission === 'default') {
+        const permission = await Notification.requestPermission();
+        if (permission !== 'granted') {
+          throw new Error('Permission not granted');
+        }
+      }
+
+      await subscribeUser(user.id, vapidKey);
+      setLocalSubscribed(true);
+      
+      // Se o switch global estiver desligado, liga ele automaticamente ao ativar o primeiro dispositivo
+      if (!settings.pushNotificationsEnabled) {
+        onUpdateSettings({ ...settings, pushNotificationsEnabled: true });
+      }
+
+      alert("✅ Este dispositivo foi registrado com sucesso!");
+    } catch (error: any) {
+      console.error("Erro ao subscrever dispositivo:", error);
+      alert(`Erro ao configurar notificações: ${error.message || "Erro desconhecido"}`);
+    } finally {
+      setIsPushLoading(false);
+    }
+  };
+
+  const handleTogglePush = async () => {
+    // Mantido para compatibilidade se necessário, mas agora usamos as funções específicas
+    if (settings.pushNotificationsEnabled) {
+      handleToggleGlobalPush();
+    } else {
+      await handleActivateLocalPush();
+    }
   };
 
   const displayName = profile?.mode === 'caregiver' 
@@ -314,14 +328,14 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
                 >
                   <RefreshCw size={18} className={isPushLoading ? 'animate-spin' : ''} />
                 </button>
-                {settings.pushNotificationsEnabled && !localSubscribed && (
+                {(!localSubscribed) && (
                   <button 
-                    onClick={handleTogglePush}
+                    onClick={handleActivateLocalPush}
                     disabled={isPushLoading}
                     className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors text-[10px] font-bold"
                     title="Ativar neste dispositivo"
                   >
-                    ATIVAR NESTE DISPOSITIVO
+                    {isPushLoading ? 'ATIVANDO...' : 'ATIVAR NESTE DISPOSITIVO'}
                   </button>
                 )}
                 {localSubscribed && (
@@ -355,7 +369,7 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
                   </button>
                 )}
                 <button 
-                  onClick={handleTogglePush}
+                  onClick={handleToggleGlobalPush}
                   disabled={isPushLoading}
                   className={`w-12 h-6 rounded-full transition-colors relative ${settings.pushNotificationsEnabled ? 'bg-blue-600' : 'bg-slate-200'} ${isPushLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >

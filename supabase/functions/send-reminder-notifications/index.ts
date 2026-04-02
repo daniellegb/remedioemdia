@@ -106,7 +106,7 @@ serve(async (req) => {
       console.log(`Sending test notification to user ${userId}`)
       const { data: subs, error: subsError } = await supabase
         .from('push_subscriptions')
-        .select('subscription')
+        .select('subscription, endpoint')
         .eq('user_id', userId)
 
       if (subsError) throw subsError
@@ -122,9 +122,9 @@ serve(async (req) => {
       let successCount = 0;
       let errorCount = 0;
 
-      for (const { subscription } of subs) {
+      for (const sub of subs) {
         try {
-          await webpush.sendNotification(subscription, JSON.stringify({
+          await webpush.sendNotification(sub.subscription, JSON.stringify({
             title: 'Teste de Notificação ✅',
             body: 'Seu sistema de lembretes está funcionando corretamente!',
             url: '/dashboard'
@@ -133,6 +133,10 @@ serve(async (req) => {
         } catch (err) {
           console.error('Error sending test push:', err)
           errorCount++;
+          // Se a assinatura expirou ou é inválida, removemos do banco
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint || sub.subscription.endpoint)
+          }
         }
       }
 
@@ -190,7 +194,7 @@ serve(async (req) => {
     if (enabledUserIds.size > 0) {
       const { data: subs, error: subsError } = await supabase
         .from('push_subscriptions')
-        .select('user_id, subscription, timezone')
+        .select('user_id, subscription, timezone, endpoint')
         .in('user_id', Array.from(enabledUserIds))
       
       if (subsError) throw subsError
@@ -208,12 +212,10 @@ serve(async (req) => {
 
       for (const reminder of uniqueReminders) {
         const userSubs = allSubscriptions.filter(s => s.user_id === reminder.user_id)
-        // De-duplicar assinaturas pelo endpoint para evitar envio duplo no mesmo navegador
-        const uniqueSubs = Array.from(new Map(userSubs.map(s => [s.subscription.endpoint, s])).values());
         
-        for (const { subscription, timezone } of uniqueSubs) {
+        for (const sub of userSubs) {
           const userTime = now.toLocaleTimeString('pt-BR', {
-            timeZone: timezone || 'UTC',
+            timeZone: sub.timezone || 'UTC',
             hour12: false,
             hour: '2-digit',
             minute: '2-digit'
@@ -223,7 +225,7 @@ serve(async (req) => {
           if (userTime === reminderTimeShort) {
             try {
               const bodyMessage = reminder.message_template || `Lembrete: Tomar ${reminder.medication_name}`;
-              await webpush.sendNotification(subscription, JSON.stringify({
+              await webpush.sendNotification(sub.subscription, JSON.stringify({
                 title: 'Hora do Medicamento 💊',
                 body: bodyMessage,
                 url: '/dashboard'
@@ -232,7 +234,7 @@ serve(async (req) => {
             } catch (err) {
               console.error(`Error sending push:`, err)
               if (err.statusCode === 410 || err.statusCode === 404) {
-                await supabase.from('push_subscriptions').delete().eq('endpoint', subscription.endpoint)
+                await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint || sub.subscription.endpoint)
               }
             }
           }
@@ -244,9 +246,9 @@ serve(async (req) => {
     if (queuedNotifications && queuedNotifications.length > 0) {
       for (const notification of queuedNotifications) {
         const userSubs = allSubscriptions.filter(s => s.user_id === notification.user_id)
-        for (const { subscription } of userSubs) {
+        for (const sub of userSubs) {
           try {
-            await webpush.sendNotification(subscription, JSON.stringify({
+            await webpush.sendNotification(sub.subscription, JSON.stringify({
               title: notification.title,
               body: notification.body,
               url: '/dashboard'
@@ -254,6 +256,9 @@ serve(async (req) => {
             results.push({ type: 'queue', id: notification.id })
           } catch (err) {
             console.error(`Error sending queued push:`, err)
+            if (err.statusCode === 410 || err.statusCode === 404) {
+              await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint || sub.subscription.endpoint)
+            }
           }
         }
         // Marcar como enviada
