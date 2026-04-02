@@ -14,37 +14,33 @@ export const userPreferencesService = {
   },
 
   async updatePreferences(userId: string, preferences: Partial<UserPreferences>) {
-    try {
-      const payload: any = {
-        user_id: userId,
-        ...preferences
-      };
-      
-      // Only include updated_at if we are not in a known out-of-sync state
-      // (This is a simple way to avoid the error until the user runs the SQL)
-      payload.updated_at = new Date().toISOString();
+    const payload: any = {
+      user_id: userId,
+      ...preferences,
+      updated_at: new Date().toISOString()
+    };
 
+    const attemptUpsert = async (currentPayload: any): Promise<any> => {
       const { data, error } = await supabase
         .from('user_preferences')
-        .upsert(payload, { onConflict: 'user_id' })
+        .upsert(currentPayload, { onConflict: 'user_id' })
         .select()
         .single();
 
       if (error) {
-        // Handle missing column error gracefully
+        // Handle missing column error (PGRST204) gracefully by retrying without the offending column
         if (error.code === 'PGRST204') {
-          console.warn('Database schema out of sync. Some settings might not be saved to the cloud yet. Please run the updated SQL script in Supabase.', error.message);
+          console.warn('Database schema out of sync:', error.message);
           
-          // Try one more time WITHOUT updated_at if that was the cause
-          if (error.message.includes('updated_at')) {
-            delete payload.updated_at;
-            const { data: retryData, error: retryError } = await supabase
-              .from('user_preferences')
-              .upsert(payload, { onConflict: 'user_id' })
-              .select()
-              .single();
-            
-            if (!retryError) return retryData;
+          // Extract column name from error message: "Could not find the 'column_name' column..."
+          const match = error.message.match(/column '([^']+)'/i) || error.message.match(/column "([^"]+)"/i);
+          const columnName = match ? match[1] : null;
+
+          if (columnName && currentPayload[columnName] !== undefined && columnName !== 'user_id') {
+            console.info(`Retrying without missing column: ${columnName}`);
+            const nextPayload = { ...currentPayload };
+            delete nextPayload[columnName];
+            return attemptUpsert(nextPayload);
           }
           
           return null;
@@ -52,6 +48,10 @@ export const userPreferencesService = {
         throw error;
       }
       return data;
+    };
+
+    try {
+      return await attemptUpsert(payload);
     } catch (error) {
       console.error('Error updating preferences:', error);
       throw error;

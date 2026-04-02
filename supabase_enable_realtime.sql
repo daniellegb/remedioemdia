@@ -1,4 +1,4 @@
--- 1. Create user_preferences table if it doesn't exist with all fields
+-- 1. Garantir que a tabela e as colunas existem
 CREATE TABLE IF NOT EXISTS public.user_preferences (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   user_id UUID REFERENCES auth.users ON DELETE CASCADE NOT NULL,
@@ -11,7 +11,7 @@ CREATE TABLE IF NOT EXISTS public.user_preferences (
   UNIQUE(user_id)
 );
 
--- 2. Add columns if they are missing (in case table already existed)
+-- 2. Adicionar colunas caso a tabela já existisse sem elas
 DO $$ 
 BEGIN 
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_preferences' AND column_name='threshold_expiring') THEN
@@ -34,20 +34,27 @@ BEGIN
   END IF;
 END $$;
 
--- 3. Enable RLS for user_preferences
+-- 3. Habilitar RLS e Políticas
 ALTER TABLE public.user_preferences ENABLE ROW LEVEL SECURITY;
-
--- 4. RLS Policies for user_preferences
 DROP POLICY IF EXISTS "Users can manage own preferences" ON public.user_preferences;
 CREATE POLICY "Users can manage own preferences" ON public.user_preferences 
 FOR ALL USING (auth.uid() = user_id);
 
--- 5. Enable Realtime for all relevant tables
--- First, drop if exists to avoid errors if already there
-DROP PUBLICATION IF EXISTS supabase_realtime;
-CREATE PUBLICATION supabase_realtime FOR TABLE 
-  medications, 
-  consumption_records, 
-  appointments, 
-  profiles, 
-  user_preferences;
+-- 4. Corrigir Realtime: Apenas adicionar a tabela à publicação existente
+-- Se a publicação não existir, cria; se existir, adiciona a tabela
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    CREATE PUBLICATION supabase_realtime FOR TABLE medications, consumption_records, appointments, profiles, user_preferences;
+  ELSE
+    -- Tenta adicionar a tabela. Se já estiver lá, o PostgreSQL ignora ou você trata o erro.
+    BEGIN
+      ALTER PUBLICATION supabase_realtime ADD TABLE user_preferences;
+    EXCEPTION WHEN others THEN
+      RAISE NOTICE 'Tabela user_preferences já está na publicação ou erro ao adicionar.';
+    END;
+  END IF;
+END $$;
+
+-- 5. FORÇAR RELOAD DO SCHEMA CACHE (Resolve PGRST204)
+NOTIFY pgrst, 'reload schema';
