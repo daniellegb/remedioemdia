@@ -8,7 +8,7 @@ interface Props {
   setView: (view: ViewType) => void;
 }
 
-const Navigation: React.FC<Props> = ({ currentView, setView }) => {
+const Navigation: React.FC<Props> = React.memo(({ currentView, setView }) => {
   const navItems = [
     { id: 'dashboard', label: 'Hoje', icon: Home },
     { id: 'calendar', label: 'Calendário', icon: Calendar },
@@ -62,6 +62,6 @@ const Navigation: React.FC<Props> = ({ currentView, setView }) => {
       </nav>
     </>
   );
-};
+});
 
 export default Navigation;

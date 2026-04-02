@@ -20,7 +20,7 @@ interface Props {
   onAddMed: (category?: UsageCategory) => void;
 }
 
-const Dashboard: React.FC<Props> = ({ meds, doses, appointments, settings, onToggleDose, onEditMed, onUpdateSettings, onDeleteAppointment, onEditAppointment, onAddMed }) => {
+const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, settings, onToggleDose, onEditMed, onUpdateSettings, onDeleteAppointment, onEditAppointment, onAddMed }) => {
   const { profile, user } = useAuth();
   const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
   const [showPrnSelector, setShowPrnSelector] = useState(false);
@@ -816,6 +816,6 @@ const Dashboard: React.FC<Props> = ({ meds, doses, appointments, settings, onTog
       </div>
     </div>
   );
-};
+});
 
 export default Dashboard;

@@ -13,7 +13,7 @@ interface Props {
   onDelete: (id: string) => void;
 }
 
-const Medications: React.FC<Props> = ({ meds, settings, onAdd, onEdit, onDelete }) => {
+const Medications: React.FC<Props> = React.memo(({ meds, settings, onAdd, onEdit, onDelete }) => {
   
   const getStockStatus = (med: Medication) => {
     const daysLeft = calculateDaysOfStockLeft(med);
@@ -159,6 +159,6 @@ const Medications: React.FC<Props> = ({ meds, settings, onAdd, onEdit, onDelete 
       )}
     </div>
   );
-};
+});
 
 export default Medications;

@@ -74,6 +74,11 @@ const MainApp: React.FC = () => {
     return { ...DEFAULT_SETTINGS, ...loaded };
   });
 
+  const settingsRef = React.useRef<AppSettings>(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+
   const lastSyncedSettings = React.useRef<string>(JSON.stringify(settings));
 
   useEffect(() => {
@@ -113,26 +118,16 @@ const MainApp: React.FC = () => {
           // Update ref to avoid syncing back the same data we just fetched
           lastSyncedSettings.current = JSON.stringify(newSettings);
           setSettings(newSettings);
-        } else {
-          // If no preferences in DB, create them with current settings (which includes localStorage fallback)
-          userPreferencesService.updatePreferences(user.id, {
-            threshold_expiring: settings.thresholdExpiring,
-            threshold_running_out: settings.thresholdRunningOut,
-            show_delay_disclaimer: settings.showDelayDisclaimer,
-            show_greeting: settings.showGreeting,
-            pre_notification_minutes: settings.preNotificationMinutes
-          }).catch(err => console.error('Erro ao criar preferências iniciais no banco:', err));
         }
       } catch (prefError) {
-        console.warn('Não foi possível carregar as preferências do banco (tabela pode não existir):', prefError);
-        // We continue with current settings (localStorage/default)
+        console.warn('Não foi possível carregar as preferências do banco:', prefError);
       }
     } catch (error) {
       console.error('Erro ao buscar dados principais:', error);
     } finally {
       setLoading(false);
     }
-  }, [user, settings.thresholdExpiring, settings.thresholdRunningOut, settings.showDelayDisclaimer, settings.showGreeting, settings.preNotificationMinutes]);
+  }, [user]);
 
   useEffect(() => {
     if (!user) return;
@@ -183,9 +178,13 @@ const MainApp: React.FC = () => {
             preNotificationMinutes: prefs.pre_notification_minutes
           };
           
-          // Update ref to avoid syncing back
-          lastSyncedSettings.current = JSON.stringify(newSettings);
-          setSettings(newSettings);
+          const newSettingsStr = JSON.stringify(newSettings);
+          // Only update state if it's actually different from what we have
+          // and not what we just sent (checked via lastSyncedSettings)
+          if (newSettingsStr !== JSON.stringify(settingsRef.current) && newSettingsStr !== lastSyncedSettings.current) {
+            lastSyncedSettings.current = newSettingsStr;
+            setSettings(newSettings);
+          }
         }
       })
       .subscribe();
@@ -231,23 +230,27 @@ const MainApp: React.FC = () => {
     
     // Only sync to DB if settings actually changed locally (not from a remote sync)
     if (currentSettingsStr !== lastSyncedSettings.current) {
-      lastSyncedSettings.current = currentSettingsStr;
-      
-      userPreferencesService.updatePreferences(user.id, {
-        threshold_expiring: settings.thresholdExpiring,
-        threshold_running_out: settings.thresholdRunningOut,
-        show_delay_disclaimer: settings.showDelayDisclaimer,
-        show_greeting: settings.showGreeting,
-        pre_notification_minutes: settings.preNotificationMinutes
-      }).then(result => {
-        if (result === null) {
-          console.warn('Sincronização de configurações desabilitada temporariamente devido a esquema de banco de dados desatualizado.');
-        }
-      }).catch(err => console.error('Erro ao salvar preferências no banco:', err));
+      const timer = setTimeout(() => {
+        lastSyncedSettings.current = currentSettingsStr;
+        
+        userPreferencesService.updatePreferences(user.id, {
+          threshold_expiring: settings.thresholdExpiring,
+          threshold_running_out: settings.thresholdRunningOut,
+          show_delay_disclaimer: settings.showDelayDisclaimer,
+          show_greeting: settings.showGreeting,
+          pre_notification_minutes: settings.preNotificationMinutes
+        }).then(result => {
+          if (result === null) {
+            console.warn('Sincronização de configurações desabilitada temporariamente devido a esquema de banco de dados desatualizado.');
+          }
+        }).catch(err => console.error('Erro ao salvar preferências no banco:', err));
+      }, 1000); // 1 second debounce
+
+      return () => clearTimeout(timer);
     }
   }, [settings, user]);
 
-  const handleSaveMedication = async (newMed: Medication) => {
+  const handleSaveMedication = useCallback(async (newMed: Medication) => {
     if (!user) return;
     try {
       const exists = meds.some(m => m.id === newMed.id);
@@ -268,9 +271,9 @@ const MainApp: React.FC = () => {
     } catch (error) {
       console.error('Erro ao salvar medicamento:', error);
     }
-  };
+  }, [user, meds]);
 
-  const handleDeleteMed = async (id: string) => {
+  const handleDeleteMed = useCallback(async (id: string) => {
     if (!user) return;
     openConfirm(
       'Excluir Medicamento',
@@ -287,14 +290,36 @@ const MainApp: React.FC = () => {
         }
       }
     );
-  };
+  }, [user, meds]);
 
-  const handleEditMedication = (med: Medication) => {
+  const handleEditMedication = useCallback((med: Medication) => {
     setEditingMedication(med);
     setView('add-med');
-  };
+  }, []);
 
-  const handleSaveAppointment = async (newApp: Appointment) => {
+  const handleEditAppointment = useCallback((app: Appointment) => {
+    setEditingAppointment(app);
+    setView('add-appointment');
+  }, []);
+
+  const handleAddMed = useCallback((category?: UsageCategory) => {
+    setEditingMedication(null);
+    setInitialMedCategory(category);
+    setView('add-med');
+  }, []);
+
+  const handleClearData = useCallback(() => {
+    openConfirm(
+      'Limpar Dados',
+      'Isso apagará todos os seus remédios e consultas. Esta ação não pode ser desfeita. Continuar?',
+      () => {
+        localStorage.clear();
+        window.location.reload();
+      }
+    );
+  }, []);
+
+  const handleSaveAppointment = useCallback(async (newApp: Appointment) => {
     if (!user) return;
     try {
       const exists = appointments.some(app => app.id === newApp.id);
@@ -310,9 +335,9 @@ const MainApp: React.FC = () => {
     } catch (error) {
       console.error('Erro ao salvar compromisso:', error);
     }
-  };
+  }, [user, appointments]);
 
-  const handleDeleteAppointment = async (id: string) => {
+  const handleDeleteAppointment = useCallback(async (id: string) => {
     if (!user) return;
     openConfirm(
       'Excluir Compromisso',
@@ -326,9 +351,9 @@ const MainApp: React.FC = () => {
         }
       }
     );
-  };
+  }, [user]);
 
-  const handleToggleDose = async (doseId: string, medicationId?: string, time?: string, date?: string) => {
+  const handleToggleDose = useCallback(async (doseId: string, medicationId?: string, time?: string, date?: string) => {
     if (!user) return;
     const todayStr = new Date().toLocaleDateString('en-CA');
     const targetDate = date || todayStr;
@@ -411,7 +436,7 @@ const MainApp: React.FC = () => {
     } catch (error) {
       console.error('Erro ao alternar dose:', error);
     }
-  };
+  }, [user, doses, meds]);
 
   const renderView = () => {
     switch (view) {
@@ -425,15 +450,15 @@ const MainApp: React.FC = () => {
           onEditMed={handleEditMedication}
           onUpdateSettings={setSettings}
           onDeleteAppointment={handleDeleteAppointment}
-          onEditAppointment={(app) => { setEditingAppointment(app); setView('add-appointment'); }}
-          onAddMed={(cat) => { setEditingMedication(null); setInitialMedCategory(cat); setView('add-med'); }}
+          onEditAppointment={handleEditAppointment}
+          onAddMed={handleAddMed}
         />;
       case 'meds':
-        return <Medications meds={meds} settings={settings} onAdd={() => { setEditingMedication(null); setInitialMedCategory(undefined); setView('add-med'); }} onEdit={handleEditMedication} onDelete={handleDeleteMed} />;
+        return <Medications meds={meds} settings={settings} onAdd={() => handleAddMed()} onEdit={handleEditMedication} onDelete={handleDeleteMed} />;
       case 'add-med':
         return <AddMedication onSave={handleSaveMedication} onCancel={() => setView('meds')} initialData={editingMedication} initialCategory={initialMedCategory} />;
       case 'appointments':
-        return <Appointments appointments={appointments} onAddClick={() => { setEditingAppointment(null); setView('add-appointment'); }} onEditClick={(app) => { setEditingAppointment(app); setView('add-appointment'); }} onDeleteClick={handleDeleteAppointment} />;
+        return <Appointments appointments={appointments} onAddClick={() => { setEditingAppointment(null); setView('add-appointment'); }} onEditClick={handleEditAppointment} onDeleteClick={handleDeleteAppointment} />;
       case 'add-appointment':
         return <AddAppointment onSave={handleSaveAppointment} onCancel={() => setView('appointments')} initialData={editingAppointment} />;
       case 'calendar':
@@ -442,16 +467,7 @@ const MainApp: React.FC = () => {
         return <Settings 
           settings={settings} 
           onUpdateSettings={setSettings} 
-          onClearData={() => {
-            openConfirm(
-              'Limpar Dados',
-              'Isso apagará todos os seus remédios e consultas. Esta ação não pode ser desfeita. Continuar?',
-              () => {
-                localStorage.clear();
-                window.location.reload();
-              }
-            );
-          }} 
+          onClearData={handleClearData} 
         />;
       default:
         return <Dashboard 
@@ -463,8 +479,8 @@ const MainApp: React.FC = () => {
           onEditMed={handleEditMedication} 
           onUpdateSettings={setSettings} 
           onDeleteAppointment={handleDeleteAppointment}
-          onEditAppointment={(app) => { setEditingAppointment(app); setView('add-appointment'); }}
-          onAddMed={(cat) => { setEditingMedication(null); setInitialMedCategory(cat); setView('add-med'); }}
+          onEditAppointment={handleEditAppointment}
+          onAddMed={handleAddMed}
         />;
     }
   };

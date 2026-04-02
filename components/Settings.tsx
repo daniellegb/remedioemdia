@@ -13,7 +13,7 @@ interface Props {
   onClearData: () => void;
 }
 
-const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData }) => {
+const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onClearData }) => {
   const { signOut, user, refreshProfile, profile } = useAuth();
   const navigate = useNavigate();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -436,6 +436,6 @@ const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData }) 
       />
     </div>
   );
-};
+});
 
 export default Settings;

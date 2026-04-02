@@ -9,7 +9,7 @@ interface Props {
   onDeleteClick: (id: string) => void;
 }
 
-const Appointments: React.FC<Props> = ({ appointments, onAddClick, onEditClick, onDeleteClick }) => {
+const Appointments: React.FC<Props> = React.memo(({ appointments, onAddClick, onEditClick, onDeleteClick }) => {
   const openGoogleMaps = (address: string) => {
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
     window.open(url, '_blank');
@@ -143,6 +143,6 @@ const Appointments: React.FC<Props> = ({ appointments, onAddClick, onEditClick, 
       </div>
     </div>
   );
-};
+});
 
 export default Appointments;

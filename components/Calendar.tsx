@@ -17,7 +17,7 @@ interface Props {
   onEditMed: (med: Medication) => void;
 }
 
-const Calendar: React.FC<Props> = ({ appointments, meds, doses, onToggleDose, onEditMed }) => {
+const Calendar: React.FC<Props> = React.memo(({ appointments, meds, doses, onToggleDose, onEditMed }) => {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [viewMode, setViewMode] = useState<CalendarViewMode>('monthly');
@@ -614,6 +614,6 @@ const Calendar: React.FC<Props> = ({ appointments, meds, doses, onToggleDose, on
       />
     </div>
   );
-};
+});
 
 export default Calendar;
