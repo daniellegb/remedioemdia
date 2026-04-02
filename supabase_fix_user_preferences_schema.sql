@@ -76,7 +76,12 @@ BEGIN
         RAISE NOTICE 'user_id is already the primary key. No changes needed to constraints.';
     END IF;
 
-    -- 7. Ensure updated_at column exists
+    -- 7. Ensure required columns exist
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_preferences' AND column_name='push_notifications_enabled') THEN
+        ALTER TABLE public.user_preferences ADD COLUMN push_notifications_enabled BOOLEAN DEFAULT TRUE;
+        RAISE NOTICE 'Added push_notifications_enabled column.';
+    END IF;
+
     IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_preferences' AND column_name='updated_at') THEN
         ALTER TABLE public.user_preferences ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
         RAISE NOTICE 'Added updated_at column.';

@@ -11,7 +11,7 @@ export const onboardingService = {
     return data;
   },
 
-  async upsertPreferences(preferences: UserPreferences) {
+  async upsertPreferences(preferences: Partial<UserPreferences> & { user_id: string }) {
     const { data, error } = await supabase
       .from('user_preferences')
       .upsert(preferences, { onConflict: 'user_id' });

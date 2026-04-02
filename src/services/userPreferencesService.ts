@@ -13,7 +13,7 @@ export const userPreferencesService = {
     return data;
   },
 
-  async updatePreferences(userId: string, preferences: Partial<UserPreferences>) {
+  async updatePreferences(userId: string, preferences: Partial<UserPreferences>): Promise<UserPreferences> {
     const cleanedPreferences = Object.fromEntries(
       Object.entries(preferences).filter(([_, value]) => value !== undefined)
     );
@@ -21,7 +21,8 @@ export const userPreferencesService = {
     const payload = {
       user_id: userId,
       ...cleanedPreferences,
-      updated_at: new Date().toISOString()
+      // We don't force updated_at here, let the DB trigger handle it
+      // unless the user specifically wants to pass a specific timestamp
     };
 
     const { data, error } = await supabase

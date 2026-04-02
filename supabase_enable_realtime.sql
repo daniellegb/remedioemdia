@@ -29,6 +29,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_preferences' AND column_name='pre_notification_minutes') THEN
     ALTER TABLE public.user_preferences ADD COLUMN pre_notification_minutes INTEGER DEFAULT 5;
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_preferences' AND column_name='push_notifications_enabled') THEN
+    ALTER TABLE public.user_preferences ADD COLUMN push_notifications_enabled BOOLEAN DEFAULT TRUE;
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='user_preferences' AND column_name='updated_at') THEN
     ALTER TABLE public.user_preferences ADD COLUMN updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW();
   END IF;

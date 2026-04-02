@@ -17,15 +17,15 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
   const { signOut, user, refreshProfile, profile } = useAuth();
   const navigate = useNavigate();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
-  const [pushEnabled, setPushEnabled] = useState(false);
+  const [localSubscribed, setLocalSubscribed] = useState(false);
   const [isPushLoading, setIsPushLoading] = useState(false);
 
   useEffect(() => {
-    // Check if user is already subscribed
+    // Check if THIS device is already subscribed
     if ('serviceWorker' in navigator && user) {
       navigator.serviceWorker.ready.then(registration => {
         registration.pushManager.getSubscription().then(subscription => {
-          setPushEnabled(!!subscription);
+          setLocalSubscribed(!!subscription);
         });
       });
     }
@@ -34,38 +34,31 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
   const handleTogglePush = async () => {
     if (!user) return;
     
-    // Check if notifications are supported
-    if (!('Notification' in window)) {
-      alert("Este navegador não suporta notificações.");
-      return;
-    }
+    const newStatus = !settings.pushNotificationsEnabled;
+    
+    // Se estiver ligando, tenta subscrever o dispositivo atual se ainda não estiver
+    if (newStatus && !localSubscribed) {
+      // Check if notifications are supported
+      if (!('Notification' in window)) {
+        alert("Este navegador não suporta notificações.");
+        return;
+      }
 
-    // Check if we are in an iframe (AI Studio Preview)
-    const isInIframe = window.self !== window.top;
-    if (isInIframe) {
-      alert("⚠️ ATENÇÃO: Notificações costumam ser bloqueadas dentro do preview do AI Studio.\n\nPor favor, abra o aplicativo em uma NOVA ABA (botão no canto superior direito) para configurar e receber notificações no computador.");
-      if (Notification.permission === 'default') return;
-    }
+      // Check if we are in an iframe (AI Studio Preview)
+      const isInIframe = window.self !== window.top;
+      if (isInIframe) {
+        alert("⚠️ ATENÇÃO: Notificações costumam ser bloqueadas dentro do preview do AI Studio.\n\nPor favor, abra o aplicativo em uma NOVA ABA (botão no canto superior direito) para configurar e receber notificações no computador.");
+        if (Notification.permission === 'default') return;
+      }
 
-    // Check if permission was previously denied
-    if (Notification.permission === 'denied') {
-      alert("As notificações foram bloqueadas. Por favor, redefina as permissões nas configurações do seu navegador (clique no cadeado ao lado da URL).");
-      return;
-    }
+      // Check if permission was previously denied
+      if (Notification.permission === 'denied') {
+        alert("As notificações foram bloqueadas. Por favor, redefina as permissões nas configurações do seu navegador (clique no cadeado ao lado da URL).");
+        return;
+      }
 
-    setIsPushLoading(true);
-    try {
-      if (pushEnabled) {
-        // Unsubscribe
-        const registration = await navigator.serviceWorker.ready;
-        const subscription = await registration.pushManager.getSubscription();
-        if (subscription) {
-          await subscription.unsubscribe();
-          await pushService.deleteSubscription(subscription.endpoint);
-        }
-        setPushEnabled(false);
-      } else {
-        // Subscribe
+      setIsPushLoading(true);
+      try {
         const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
         if (!vapidKey || vapidKey === 'your-vapid-public-key') {
           alert(`Erro: Chave VAPID não encontrada no Cliente.\n\nValor atual: ${vapidKey}\n\nCertifique-se de que configurou VITE_VAPID_PUBLIC_KEY na Vercel e fez um REDEPLOY.`);
@@ -73,7 +66,6 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
           return;
         }
         
-        // Request permission explicitly first if default
         if (Notification.permission === 'default') {
           const permission = await Notification.requestPermission();
           if (permission !== 'granted') {
@@ -82,20 +74,19 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
         }
 
         await subscribeUser(user.id, vapidKey);
-        setPushEnabled(true);
+        setLocalSubscribed(true);
+      } catch (error: any) {
+        console.error("Erro ao subscrever dispositivo:", error);
+        alert(`Erro ao configurar notificações: ${error.message || "Erro desconhecido"}`);
+        // Não cancelamos a mudança do switch global, pois o usuário quer notificações
+        // mas este dispositivo específico falhou.
+      } finally {
+        setIsPushLoading(false);
       }
-    } catch (error: any) {
-      console.error("Erro ao gerenciar notificações push:", error);
-      const errorMessage = error.message || error.description || String(error);
-      
-      if (error.message === 'Permission not granted' || error.name === 'NotAllowedError') {
-        alert("Permissão de notificação negada. Ative as notificações para receber lembretes.");
-      } else {
-        alert(`Erro ao configurar notificações: ${errorMessage}. Verifique se você está em uma conexão segura (HTTPS) e se as permissões do navegador permitem notificações.`);
-      }
-    } finally {
-      setIsPushLoading(false);
     }
+
+    // Atualiza o estado global sincronizado
+    onUpdateSettings({ ...settings, pushNotificationsEnabled: newStatus });
   };
 
   const displayName = profile?.mode === 'caregiver' 
@@ -323,7 +314,17 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
                 >
                   <RefreshCw size={18} className={isPushLoading ? 'animate-spin' : ''} />
                 </button>
-                {pushEnabled && (
+                {settings.pushNotificationsEnabled && !localSubscribed && (
+                  <button 
+                    onClick={handleTogglePush}
+                    disabled={isPushLoading}
+                    className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors text-[10px] font-bold"
+                    title="Ativar neste dispositivo"
+                  >
+                    ATIVAR NESTE DISPOSITIVO
+                  </button>
+                )}
+                {localSubscribed && (
                   <button 
                     onClick={async () => {
                       if (!user) return;
@@ -356,14 +357,14 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
                 <button 
                   onClick={handleTogglePush}
                   disabled={isPushLoading}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${pushEnabled ? 'bg-blue-600' : 'bg-slate-200'} ${isPushLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                  className={`w-12 h-6 rounded-full transition-colors relative ${settings.pushNotificationsEnabled ? 'bg-blue-600' : 'bg-slate-200'} ${isPushLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
                 >
-                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${pushEnabled ? 'right-1' : 'left-1'}`} />
+                  <div className={`absolute top-1 w-4 h-4 bg-white rounded-full transition-all ${settings.pushNotificationsEnabled ? 'right-1' : 'left-1'}`} />
                 </button>
               </div>
             </div>
 
-            <div className={`flex items-center justify-between gap-4 pt-4 border-t border-slate-50 transition-opacity ${!pushEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className={`flex items-center justify-between gap-4 pt-4 border-t border-slate-50 transition-opacity ${!settings.pushNotificationsEnabled ? 'opacity-50 pointer-events-none' : ''}`}>
               <div className="flex items-center gap-3">
                 <div className="p-2 bg-blue-50 text-blue-500 rounded-lg">
                   <Bell size={20} />

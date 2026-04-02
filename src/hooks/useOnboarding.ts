@@ -69,13 +69,10 @@ export const useOnboarding = () => {
       onboarding_completed: true,
     };
 
-    const preferencesData: UserPreferences = {
+    const preferencesData: Partial<UserPreferences> & { user_id: string } = {
       user_id: user.id,
       threshold_expiring: state.preferences.expiryWarningDays,
       threshold_running_out: state.preferences.lowStockWarningDays,
-      show_delay_disclaimer: true,
-      show_greeting: true,
-      pre_notification_minutes: 5
     };
 
     try {

@@ -164,20 +164,34 @@ serve(async (req) => {
 
     if (queueError) throw queueError
 
-    // 3. Buscar todas as assinaturas push dos usuários afetados
     const userIds = [
       ...(reminders?.map(r => r.user_id) || []),
       ...(queuedNotifications?.map(n => n.user_id) || [])
     ]
     
     const uniqueUserIds = [...new Set(userIds)]
+
+    // 3. Buscar usuários que têm notificações push habilitadas globalmente
+    const { data: enabledPrefs, error: prefsError } = await supabase
+      .from('user_preferences')
+      .select('user_id')
+      .eq('push_notifications_enabled', true)
+      .in('user_id', uniqueUserIds)
+
+    if (prefsError) {
+      console.warn('Erro ao buscar preferências de notificação, assumindo habilitado por padrão:', prefsError)
+    }
+    
+    const enabledUserIds = new Set(enabledPrefs?.map(p => p.user_id) || (prefsError ? uniqueUserIds : []))
+
+    // 4. Buscar todas as assinaturas push dos usuários afetados e habilitados
     let allSubscriptions: any[] = []
     
-    if (uniqueUserIds.length > 0) {
+    if (enabledUserIds.size > 0) {
       const { data: subs, error: subsError } = await supabase
         .from('push_subscriptions')
         .select('user_id, subscription, timezone')
-        .in('user_id', uniqueUserIds)
+        .in('user_id', Array.from(enabledUserIds))
       
       if (subsError) throw subsError
       allSubscriptions = subs || []
@@ -195,7 +209,7 @@ serve(async (req) => {
       for (const reminder of uniqueReminders) {
         const userSubs = allSubscriptions.filter(s => s.user_id === reminder.user_id)
         // De-duplicar assinaturas pelo endpoint para evitar envio duplo no mesmo navegador
-        const uniqueSubs = Array.from(new Map(userSubs.map(s => [s.endpoint, s])).values());
+        const uniqueSubs = Array.from(new Map(userSubs.map(s => [s.subscription.endpoint, s])).values());
         
         for (const { subscription, timezone } of uniqueSubs) {
           const userTime = now.toLocaleTimeString('pt-BR', {

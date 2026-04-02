@@ -63,6 +63,8 @@ export interface AppSettings {
   showDelayDisclaimer: boolean;
   showGreeting: boolean;
   preNotificationMinutes: number;
+  pushNotificationsEnabled: boolean;
+  updatedAt?: string; // ISO string
 }
 
 export interface Profile {
@@ -83,6 +85,8 @@ export interface UserPreferences {
   show_delay_disclaimer: boolean;
   show_greeting: boolean;
   pre_notification_minutes: number;
+  push_notifications_enabled: boolean;
+  updated_at?: string; // ISO string
 }
 
 export type ViewType = 'dashboard' | 'calendar' | 'meds' | 'appointments' | 'settings' | 'add-appointment' | 'add-med' | 'onboarding';

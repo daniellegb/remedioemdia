@@ -31,7 +31,9 @@ const DEFAULT_SETTINGS: AppSettings = {
   thresholdRunningOut: 3,
   showDelayDisclaimer: true,
   showGreeting: true,
-  preNotificationMinutes: 5
+  preNotificationMinutes: 5,
+  pushNotificationsEnabled: true,
+  updatedAt: new Date(0).toISOString() // Epoch as default
 };
 
 const MainApp: React.FC = () => {
@@ -112,7 +114,9 @@ const MainApp: React.FC = () => {
             thresholdRunningOut: prefsData.threshold_running_out ?? DEFAULT_SETTINGS.thresholdRunningOut,
             showDelayDisclaimer: prefsData.show_delay_disclaimer ?? DEFAULT_SETTINGS.showDelayDisclaimer,
             showGreeting: prefsData.show_greeting ?? DEFAULT_SETTINGS.showGreeting,
-            preNotificationMinutes: prefsData.pre_notification_minutes ?? DEFAULT_SETTINGS.preNotificationMinutes
+            preNotificationMinutes: prefsData.pre_notification_minutes ?? DEFAULT_SETTINGS.preNotificationMinutes,
+            pushNotificationsEnabled: prefsData.push_notifications_enabled ?? DEFAULT_SETTINGS.pushNotificationsEnabled,
+            updatedAt: prefsData.updated_at || DEFAULT_SETTINGS.updatedAt
           };
           
           // Update ref to avoid syncing back the same data we just fetched
@@ -170,19 +174,23 @@ const MainApp: React.FC = () => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_preferences', filter: `user_id=eq.${user.id}` }, (payload) => {
         if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
           const prefs = payload.new as UserPreferences;
-          const newSettings: AppSettings = {
-            thresholdExpiring: prefs.threshold_expiring,
-            thresholdRunningOut: prefs.threshold_running_out,
-            showDelayDisclaimer: prefs.show_delay_disclaimer,
-            showGreeting: prefs.show_greeting,
-            preNotificationMinutes: prefs.pre_notification_minutes
-          };
           
-          const newSettingsStr = JSON.stringify(newSettings);
-          // Only update state if it's actually different from what we have
-          // and not what we just sent (checked via lastSyncedSettings)
-          if (newSettingsStr !== JSON.stringify(settingsRef.current) && newSettingsStr !== lastSyncedSettings.current) {
-            lastSyncedSettings.current = newSettingsStr;
+          // Use updatedAt to decide if we should apply the update
+          const incomingUpdatedAt = prefs.updated_at || new Date(0).toISOString();
+          const currentUpdatedAt = settingsRef.current.updatedAt || new Date(0).toISOString();
+
+          if (new Date(incomingUpdatedAt) > new Date(currentUpdatedAt)) {
+            const newSettings: AppSettings = {
+              thresholdExpiring: prefs.threshold_expiring,
+              thresholdRunningOut: prefs.threshold_running_out,
+              showDelayDisclaimer: prefs.show_delay_disclaimer,
+              showGreeting: prefs.show_greeting,
+              preNotificationMinutes: prefs.pre_notification_minutes,
+              pushNotificationsEnabled: prefs.push_notifications_enabled,
+              updatedAt: incomingUpdatedAt
+            };
+            
+            lastSyncedSettings.current = JSON.stringify(newSettings);
             setSettings(newSettings);
           }
         }
@@ -231,17 +239,29 @@ const MainApp: React.FC = () => {
     // Only sync to DB if settings actually changed locally (not from a remote sync)
     if (currentSettingsStr !== lastSyncedSettings.current) {
       const timer = setTimeout(() => {
-        lastSyncedSettings.current = currentSettingsStr;
-        
         userPreferencesService.updatePreferences(user.id, {
           threshold_expiring: settings.thresholdExpiring,
           threshold_running_out: settings.thresholdRunningOut,
           show_delay_disclaimer: settings.showDelayDisclaimer,
           show_greeting: settings.showGreeting,
-          pre_notification_minutes: settings.preNotificationMinutes
+          pre_notification_minutes: settings.preNotificationMinutes,
+          push_notifications_enabled: settings.pushNotificationsEnabled
         }).then(result => {
-          if (result === null) {
-            console.warn('Sincronização de configurações desabilitada temporariamente devido a esquema de banco de dados desatualizado.');
+          if (result) {
+            const updatedSettings: AppSettings = {
+              thresholdExpiring: result.threshold_expiring,
+              thresholdRunningOut: result.threshold_running_out,
+              showDelayDisclaimer: result.show_delay_disclaimer,
+              showGreeting: result.show_greeting,
+              preNotificationMinutes: result.pre_notification_minutes,
+              pushNotificationsEnabled: result.push_notifications_enabled,
+              updatedAt: result.updated_at
+            };
+            
+            // Update both state and ref AFTER successful response
+            const updatedSettingsStr = JSON.stringify(updatedSettings);
+            lastSyncedSettings.current = updatedSettingsStr;
+            setSettings(updatedSettings);
           }
         }).catch(err => console.error('Erro ao salvar preferências no banco:', err));
       }, 1000); // 1 second debounce
