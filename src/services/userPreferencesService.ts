@@ -26,7 +26,7 @@ export const userPreferencesService = {
 
       const { data, error } = await supabase
         .from('user_preferences')
-        .upsert(payload)
+        .upsert(payload, { onConflict: 'user_id' })
         .select()
         .single();
 
@@ -40,7 +40,7 @@ export const userPreferencesService = {
             delete payload.updated_at;
             const { data: retryData, error: retryError } = await supabase
               .from('user_preferences')
-              .upsert(payload)
+              .upsert(payload, { onConflict: 'user_id' })
               .select()
               .single();
             
