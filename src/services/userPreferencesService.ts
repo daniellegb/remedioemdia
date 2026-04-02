@@ -14,9 +14,13 @@ export const userPreferencesService = {
   },
 
   async updatePreferences(userId: string, preferences: Partial<UserPreferences>) {
+    const cleanedPreferences = Object.fromEntries(
+      Object.entries(preferences).filter(([_, value]) => value !== undefined)
+    );
+
     const payload = {
       user_id: userId,
-      ...preferences,
+      ...cleanedPreferences,
       updated_at: new Date().toISOString()
     };
 
@@ -24,7 +28,7 @@ export const userPreferencesService = {
       .from('user_preferences')
       .upsert(payload)
       .select()
-      .single();
+      .single<UserPreferences>();
 
     if (error) {
       console.error('Error updating preferences:', error);
