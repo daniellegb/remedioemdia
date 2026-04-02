@@ -69,7 +69,12 @@ const MainApp: React.FC = () => {
     return defaultValue;
   };
 
-  const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
+  const [settings, setSettings] = useState<AppSettings>(() => {
+    const loaded = loadData(STORAGE_KEYS.SETTINGS, DEFAULT_SETTINGS);
+    return { ...DEFAULT_SETTINGS, ...loaded };
+  });
+
+  const lastSyncedSettings = React.useRef<string>(JSON.stringify(settings));
 
   useEffect(() => {
     if (user && meds.length > 0) {
@@ -83,31 +88,51 @@ const MainApp: React.FC = () => {
     if (!user) return;
     setLoading(true);
     try {
-      const [medsData, dosesData, appointmentsData, prefsData] = await Promise.all([
+      // Fetch core data first
+      const [medsData, dosesData, appointmentsData] = await Promise.all([
         medicationService.getMedications(user.id),
         consumptionService.getConsumptionRecords(user.id),
-        appointmentService.getAppointments(user.id),
-        userPreferencesService.getPreferences(user.id)
+        appointmentService.getAppointments(user.id)
       ]);
       setMeds(medsData);
       setDoses(dosesData);
       setAppointments(appointmentsData);
       
-      if (prefsData) {
-        setSettings({
-          thresholdExpiring: prefsData.threshold_expiring,
-          thresholdRunningOut: prefsData.threshold_running_out,
-          showDelayDisclaimer: prefsData.show_delay_disclaimer,
-          showGreeting: prefsData.show_greeting,
-          preNotificationMinutes: prefsData.pre_notification_minutes
-        });
+      // Fetch preferences separately to avoid blocking if table doesn't exist or error occurs
+      try {
+        const prefsData = await userPreferencesService.getPreferences(user.id);
+        if (prefsData) {
+          const newSettings: AppSettings = {
+            thresholdExpiring: prefsData.threshold_expiring ?? DEFAULT_SETTINGS.thresholdExpiring,
+            thresholdRunningOut: prefsData.threshold_running_out ?? DEFAULT_SETTINGS.thresholdRunningOut,
+            showDelayDisclaimer: prefsData.show_delay_disclaimer ?? DEFAULT_SETTINGS.showDelayDisclaimer,
+            showGreeting: prefsData.show_greeting ?? DEFAULT_SETTINGS.showGreeting,
+            preNotificationMinutes: prefsData.pre_notification_minutes ?? DEFAULT_SETTINGS.preNotificationMinutes
+          };
+          
+          // Update ref to avoid syncing back the same data we just fetched
+          lastSyncedSettings.current = JSON.stringify(newSettings);
+          setSettings(newSettings);
+        } else {
+          // If no preferences in DB, create them with current settings (which includes localStorage fallback)
+          userPreferencesService.updatePreferences(user.id, {
+            threshold_expiring: settings.thresholdExpiring,
+            threshold_running_out: settings.thresholdRunningOut,
+            show_delay_disclaimer: settings.showDelayDisclaimer,
+            show_greeting: settings.showGreeting,
+            pre_notification_minutes: settings.preNotificationMinutes
+          }).catch(err => console.error('Erro ao criar preferências iniciais no banco:', err));
+        }
+      } catch (prefError) {
+        console.warn('Não foi possível carregar as preferências do banco (tabela pode não existir):', prefError);
+        // We continue with current settings (localStorage/default)
       }
     } catch (error) {
-      console.error('Erro ao buscar dados:', error);
+      console.error('Erro ao buscar dados principais:', error);
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, settings.thresholdExpiring, settings.thresholdRunningOut, settings.showDelayDisclaimer, settings.showGreeting, settings.preNotificationMinutes]);
 
   useEffect(() => {
     if (!user) return;
@@ -197,8 +222,6 @@ const MainApp: React.FC = () => {
       }
     });
   };
-
-  const lastSyncedSettings = React.useRef<string>(JSON.stringify(settings));
 
   useEffect(() => {
     if (!user) return;

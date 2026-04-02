@@ -395,7 +395,7 @@ const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData }) 
           </div>
           <div className="p-6 space-y-4">
             <p className="text-sm text-slate-500">
-              Seus dados são salvos localmente neste navegador.
+              Seus dados são sincronizados na nuvem e estão disponíveis em todos os seus dispositivos.
             </p>
             <button 
               onClick={onClearData}
