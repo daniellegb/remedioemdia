@@ -239,6 +239,10 @@ const MainApp: React.FC = () => {
         show_delay_disclaimer: settings.showDelayDisclaimer,
         show_greeting: settings.showGreeting,
         pre_notification_minutes: settings.preNotificationMinutes
+      }).then(result => {
+        if (result === null) {
+          console.warn('Sincronização de configurações desabilitada temporariamente devido a esquema de banco de dados desatualizado.');
+        }
       }).catch(err => console.error('Erro ao salvar preferências no banco:', err));
     }
   }, [settings, user]);
