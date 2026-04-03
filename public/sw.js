@@ -35,6 +35,7 @@ self.addEventListener('push', function(event) {
 
   event.waitUntil(
     self.registration.showNotification(data.title || 'Remédio em Dia', options)
+      .catch(err => console.error('[Service Worker] Error showing notification:', err))
   );
 });
 

@@ -26,19 +26,72 @@ serve(async (req) => {
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
+    
+    // 4. Lógica de Teste e Debug (para manter compatibilidade com o botão de teste)
+    const body = await req.json().catch(() => ({}))
+    
+    if (body.debug) {
+      return new Response(JSON.stringify({
+        success: true,
+        vapidPublicKey: vapidPublicKey.substring(0, 10) + '...',
+        envMatch: body.clientEnv?.VAPID_PUBLIC_KEY === vapidPublicKey,
+        serverTime: new Date().toISOString()
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
+    if (body.test && body.userId) {
+      const { data: subs } = await supabase
+        .from('push_subscriptions')
+        .select('*')
+        .eq('user_id', body.userId)
+      
+      if (!subs || subs.length === 0) {
+        return new Response(JSON.stringify({ error: 'No subscriptions found for user' }), {
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          status: 404,
+        })
+      }
+
+      for (const sub of subs) {
+        const pushSubscription = {
+          endpoint: sub.endpoint || (sub.subscription && sub.subscription.endpoint),
+          keys: {
+            p256dh: sub.p256dh || (sub.subscription && sub.subscription.keys && sub.subscription.keys.p256dh),
+            auth: sub.auth || (sub.subscription && sub.subscription.keys && sub.subscription.keys.auth)
+          }
+        };
+        await webpush.sendNotification(pushSubscription, JSON.stringify({
+          title: 'Teste de Notificação 🚀',
+          body: 'Se você recebeu isso, o backend está configurado corretamente!',
+          url: '/dashboard'
+        }))
+      }
+
+      return new Response(JSON.stringify({ success: true, message: 'Test notification sent' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        status: 200,
+      })
+    }
+
     const now = new Date()
     const oneMinuteAgo = new Date(now.getTime() - 60000)
 
     // 1. Buscar notificações agendadas (one-off) na fila
-    // Seguindo a lógica solicitada: scheduled_at entre um minuto atrás e agora
+    // Melhoria: Buscar todas as pendentes que já deveriam ter sido enviadas (lte now)
+    // Isso evita perder notificações se o cron atrasar ou falhar por um momento
     const { data: queuedNotifications, error: queueError } = await supabase
       .from('notification_queue')
       .select('*')
       .eq('sent', false)
-      .gte('scheduled_at', oneMinuteAgo.toISOString())
       .lte('scheduled_at', now.toISOString())
+      .order('scheduled_at', { ascending: true })
+      .limit(50)
 
     if (queueError) throw queueError
+    console.log(`[Cron] Found ${queuedNotifications?.length || 0} queued notifications due.`);
 
     // 2. Buscar lembretes de medicação recorrentes (para manter a funcionalidade atual)
     const { data: reminders, error: remindersError } = await supabase
@@ -51,6 +104,7 @@ serve(async (req) => {
       .neq('medications.usage_category', 'prn')
 
     if (remindersError) throw remindersError
+    console.log(`[Cron] Found ${reminders?.length || 0} active reminders to check.`);
 
     const userIds = [
       ...(reminders?.map(r => r.user_id) || []),
@@ -99,12 +153,14 @@ serve(async (req) => {
 
             if (!pushSubscription.endpoint || !pushSubscription.keys.p256dh || !pushSubscription.keys.auth) continue;
 
+            console.log(`[Push] Sending to user ${notification.user_id} (sub: ${sub.endpoint.substring(0, 30)}...)`);
             await webpush.sendNotification(pushSubscription, JSON.stringify({
               title: notification.title,
               body: notification.body,
               url: '/dashboard'
             }))
             results.push({ type: 'queue', id: notification.id })
+            console.log(`[Push] Success for user ${notification.user_id}`);
           } catch (err) {
             console.error(`Error sending queued push:`, err)
             if (err.statusCode === 410 || err.statusCode === 404) {
@@ -136,6 +192,7 @@ serve(async (req) => {
           const reminderTimeShort = reminder.reminder_time.substring(0, 5)
 
           if (userTime === reminderTimeShort) {
+            console.log(`[Reminder] Triggering for user ${reminder.user_id} at ${userTime} (matches ${reminderTimeShort})`);
             try {
               const pushSubscription = {
                 endpoint: sub.endpoint || (sub.subscription && sub.subscription.endpoint),
@@ -153,6 +210,7 @@ serve(async (req) => {
                 url: '/dashboard'
               }))
               results.push({ type: 'medication', id: reminder.id })
+              console.log(`[Reminder] Success for user ${reminder.user_id}`);
             } catch (err) {
               console.error(`Error sending push:`, err)
               if (err.statusCode === 410 || err.statusCode === 404) {

@@ -117,7 +117,7 @@ export const pushService = {
         throw new Error('Supabase URL não configurada');
       }
 
-      const { data, error } = await supabase.functions.invoke('send-reminder-notifications', {
+      const { data, error } = await supabase.functions.invoke('send-notifications', {
         body: { 
           debug: true, 
           clientEnv: { 
@@ -147,7 +147,7 @@ export const pushService = {
         throw new Error('Supabase não configurado. Configure as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
       }
 
-      const { data, error } = await supabase.functions.invoke('send-reminder-notifications', {
+      const { data, error } = await supabase.functions.invoke('send-notifications', {
         body: { test: true, userId }
       });
       
@@ -175,7 +175,7 @@ export const pushService = {
         return { error: 'Supabase não configurado' };
       }
 
-      const { data, error } = await supabase.functions.invoke('send-reminder-notifications', {
+      const { data, error } = await supabase.functions.invoke('send-notifications', {
         method: 'GET',
         headers: { 'x-debug-request': 'true' }
       });

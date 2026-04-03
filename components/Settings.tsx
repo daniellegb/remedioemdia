@@ -292,7 +292,7 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
                 </div>
                 <div>
                   <div className="font-bold text-slate-700">Notificações Push</div>
-                  <div className="text-xs text-slate-400">Receba lembretes neste dispositivo</div>
+                  <div className="text-xs text-slate-400">Receber lembretes</div>
                 </div>
               </div>
               <div className="flex items-center gap-3">
