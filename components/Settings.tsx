@@ -40,6 +40,7 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
   };
 
   const handleActivateLocalPush = async () => {
+    console.log("[Push] handleActivateLocalPush called");
     if (!user) return;
     
     // Check if notifications are supported
@@ -291,7 +292,7 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
                 </div>
                 <div>
                   <div className="font-bold text-slate-700">Notificações Push</div>
-                  <div className="text-xs text-slate-400">Ativa notificações no celular</div>
+                  <div className="text-xs text-slate-400">Receba lembretes neste dispositivo</div>
                 </div>
               </div>
               <div className="flex items-center gap-3">
@@ -328,16 +329,14 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
                 >
                   <RefreshCw size={18} className={isPushLoading ? 'animate-spin' : ''} />
                 </button>
-                {(!localSubscribed) && (
-                  <button 
-                    onClick={handleActivateLocalPush}
-                    disabled={isPushLoading}
-                    className="p-2 bg-blue-50 text-blue-600 rounded-xl hover:bg-blue-100 transition-colors text-[10px] font-bold"
-                    title="Ativar neste dispositivo"
-                  >
-                    {isPushLoading ? 'ATIVANDO...' : 'ATIVAR NESTE DISPOSITIVO'}
-                  </button>
-                )}
+                <button 
+                  onClick={handleActivateLocalPush}
+                  disabled={isPushLoading}
+                  className={`p-2 rounded-xl transition-colors text-[10px] font-bold ${localSubscribed ? 'bg-slate-100 text-slate-500 hover:bg-slate-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
+                  title={localSubscribed ? "Atualizar registro deste dispositivo" : "Ativar neste dispositivo"}
+                >
+                  {isPushLoading ? 'PROCESSANDO...' : localSubscribed ? 'REATIVAR DISPOSITIVO' : 'ATIVAR NESTE DISPOSITIVO'}
+                </button>
                 {localSubscribed && (
                   <button 
                     onClick={async () => {
