@@ -36,12 +36,14 @@ serve(async (req) => {
     const nowIso = now.toISOString()
     const results = []
 
-    // 1. NOTIFICAÇÕES DE MEDICAMENTOS
+    // 1. NOTIFICAÇÕES DE MEDICAMENTOS (Filtrando por categoria)
+    // REGRA: Medicamentos 'prn' (Se Necessário) não geram notificações agendadas
     const { data: meds, error: medsError } = await supabase
       .from('medications')
       .select('*')
       .lte('next_dose_at', nowIso)
       .not('next_dose_at', 'is', null)
+      .neq('usage_category', 'prn')
 
     if (medsError) throw medsError
 

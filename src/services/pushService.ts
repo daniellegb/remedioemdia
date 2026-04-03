@@ -50,6 +50,11 @@ export const pushService = {
     const reminders: any[] = [];
     
     medications.forEach(med => {
+      // REGRA: Medicamentos da categoria 'Se Necessário' (prn) não geram notificações agendadas
+      if (med.usageCategory === 'prn') {
+        return;
+      }
+
       if (med.times && Array.isArray(med.times)) {
         med.times.forEach((time: string) => {
           // Lembrete na hora exata

@@ -174,11 +174,16 @@ serve(async (req) => {
       })
     }
 
-    // 1. Buscar lembretes de medicação recorrentes
+    // 1. Buscar lembretes de medicação recorrentes (filtrando por categoria)
+    // REGRA: Medicamentos 'prn' (Se Necessário) não geram notificações agendadas
     const { data: reminders, error: remindersError } = await supabase
       .from('medication_reminders')
-      .select('*')
+      .select(`
+        *,
+        medications!inner(usage_category)
+      `)
       .eq('active', true)
+      .neq('medications.usage_category', 'prn')
 
     if (remindersError) throw remindersError
 
