@@ -176,6 +176,8 @@ serve(async (req) => {
 
     // 1. Buscar lembretes de medicação recorrentes (filtrando por categoria)
     // REGRA: Medicamentos 'prn' (Se Necessário) não geram notificações agendadas
+    // DESATIVADO: Esta lógica agora é tratada pela função 'send-notifications'
+    /*
     const { data: reminders, error: remindersError } = await supabase
       .from('medication_reminders')
       .select(`
@@ -186,8 +188,12 @@ serve(async (req) => {
       .neq('medications.usage_category', 'prn')
 
     if (remindersError) throw remindersError
+    */
+    const reminders: any[] = []
 
     // 2. Buscar notificações agendadas (one-off) na fila
+    // DESATIVADO: Esta lógica agora é tratada pela função 'send-notifications'
+    /*
     const { data: queuedNotifications, error: queueError } = await supabase
       .from('notification_queue')
       .select('*')
@@ -195,6 +201,8 @@ serve(async (req) => {
       .lte('trigger_at', now.toISOString())
 
     if (queueError) throw queueError
+    */
+    const queuedNotifications: any[] = []
 
     const userIds = [
       ...(reminders?.map(r => r.user_id) || []),

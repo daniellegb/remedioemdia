@@ -37,7 +37,8 @@ serve(async (req) => {
     const results = []
 
     // 1. NOTIFICAÇÕES DE MEDICAMENTOS (Filtrando por categoria)
-    // REGRA: Medicamentos 'prn' (Se Necessário) não geram notificações agendadas
+    // DESATIVADO: Esta lógica agora é tratada pela função 'send-notifications'
+    /*
     const { data: meds, error: medsError } = await supabase
       .from('medications')
       .select('*')
@@ -46,6 +47,8 @@ serve(async (req) => {
       .neq('usage_category', 'prn')
 
     if (medsError) throw medsError
+    */
+    const meds: any[] = []
 
     for (const med of meds) {
       const { data: subscriptions } = await supabase
@@ -74,6 +77,8 @@ serve(async (req) => {
     }
 
     // 2. NOTIFICAÇÕES DE CONSULTAS (Próximas 24 horas)
+    // DESATIVADO: Esta lógica agora é tratada pela função 'send-notifications' via 'notification_queue'
+    /*
     const tomorrow = new Date(now)
     tomorrow.setHours(tomorrow.getHours() + 24)
     const tomorrowIso = tomorrow.toISOString()
@@ -111,6 +116,8 @@ serve(async (req) => {
         }
       }
     }
+    */
+    const appointments: any[] = []
 
     return new Response(JSON.stringify({ success: true, results }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

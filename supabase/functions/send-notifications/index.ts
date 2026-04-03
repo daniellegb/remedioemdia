@@ -178,7 +178,12 @@ serve(async (req) => {
 
     // Processar lembretes recorrentes
     if (reminders && reminders.length > 0) {
-      for (const reminder of reminders) {
+      // De-duplicar lembretes em memória (mesma lógica da função antiga)
+      const uniqueReminders = Array.from(new Map(reminders.map(r => 
+        [`${r.user_id}-${r.medication_id}-${r.reminder_time}-${r.message_template}`, r]
+      )).values());
+
+      for (const reminder of uniqueReminders) {
         if (!enabledUserIds.has(reminder.user_id)) continue;
 
         const userSubs = allSubscriptions?.filter(s => s.user_id === reminder.user_id) || []

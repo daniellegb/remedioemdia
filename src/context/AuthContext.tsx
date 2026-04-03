@@ -47,7 +47,23 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        console.error('Error getting session:', error);
+        // If we get a refresh token error, it's best to sign out to clear local storage
+        const isRefreshTokenError = 
+          error.message?.includes('Refresh Token Not Found') || 
+          error.message?.includes('invalid_refresh_token') ||
+          error.message?.includes('Invalid Refresh Token') ||
+          error.status === 400 && error.message?.includes('refresh_token');
+          
+        if (isRefreshTokenError) {
+          supabase.auth.signOut();
+        }
+        setLoading(false);
+        return;
+      }
+      
       setSession(session);
       setUser(session?.user ?? null);
       if (session?.user) {
@@ -56,7 +72,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setLoading(false);
       }
     }).catch(err => {
-      console.error('Error getting session:', err);
+      console.error('Unexpected error getting session:', err);
       setLoading(false);
     });
 
