@@ -106,14 +106,14 @@ serve(async (req) => {
       console.log(`Sending test notification to user ${userId}`)
       const { data: subs, error: subsError } = await supabase
         .from('push_subscriptions')
-        .select('subscription, endpoint')
+        .select('subscription, endpoint, p256dh, auth')
         .eq('user_id', userId)
 
       if (subsError) throw subsError
       
       if (!subs || subs.length === 0) {
         console.log(`No subscriptions found for user ${userId}`)
-        return new Response(JSON.stringify({ message: 'No subscriptions found for this user', count: 0 }), {
+        return new Response(JSON.stringify({ message: 'No subscriptions found for this user', count: 0, totalFound: 0 }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 200,
         })
@@ -121,21 +121,43 @@ serve(async (req) => {
 
       let successCount = 0;
       let errorCount = 0;
+      const details = [];
 
       for (const sub of subs) {
         try {
-          await webpush.sendNotification(sub.subscription, JSON.stringify({
+          // Reconstruir o objeto de assinatura para garantir compatibilidade máxima
+          const pushSubscription = {
+            endpoint: sub.endpoint || (sub.subscription && sub.subscription.endpoint),
+            keys: {
+              p256dh: sub.p256dh || (sub.subscription && sub.subscription.keys && sub.subscription.keys.p256dh),
+              auth: sub.auth || (sub.subscription && sub.subscription.keys && sub.subscription.keys.auth)
+            }
+          };
+
+          if (!pushSubscription.endpoint || !pushSubscription.keys.p256dh || !pushSubscription.keys.auth) {
+            console.error('Incomplete subscription data:', sub);
+            errorCount++;
+            details.push({ endpoint: sub.endpoint, status: 'error', message: 'Incomplete subscription data' });
+            continue;
+          }
+
+          const result = await webpush.sendNotification(pushSubscription, JSON.stringify({
             title: 'Teste de Notificação ✅',
             body: 'Seu sistema de lembretes está funcionando corretamente!',
             url: '/dashboard'
           }))
+          
+          console.log(`Push sent successfully to ${pushSubscription.endpoint}. Status: ${result.statusCode}`);
           successCount++;
+          details.push({ endpoint: sub.endpoint, status: 'success', statusCode: result.statusCode });
         } catch (err) {
           console.error('Error sending test push:', err)
           errorCount++;
+          details.push({ endpoint: sub.endpoint, status: 'failed', error: err.message, statusCode: err.statusCode });
+          
           // Se a assinatura expirou ou é inválida, removemos do banco
           if (err.statusCode === 410 || err.statusCode === 404) {
-            await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint || sub.subscription.endpoint)
+            await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint || (sub.subscription && sub.subscription.endpoint))
           }
         }
       }
@@ -144,7 +166,8 @@ serve(async (req) => {
         message: `Test notifications processed: ${successCount} success, ${errorCount} failed`,
         successCount,
         errorCount,
-        totalFound: subs.length
+        totalFound: subs.length,
+        details
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
@@ -194,7 +217,7 @@ serve(async (req) => {
     if (enabledUserIds.size > 0) {
       const { data: subs, error: subsError } = await supabase
         .from('push_subscriptions')
-        .select('user_id, subscription, timezone, endpoint')
+        .select('user_id, subscription, timezone, endpoint, p256dh, auth')
         .in('user_id', Array.from(enabledUserIds))
       
       if (subsError) throw subsError
@@ -225,7 +248,20 @@ serve(async (req) => {
           if (userTime === reminderTimeShort) {
             try {
               const bodyMessage = reminder.message_template || `Lembrete: Tomar ${reminder.medication_name}`;
-              await webpush.sendNotification(sub.subscription, JSON.stringify({
+              
+              const pushSubscription = {
+                endpoint: sub.endpoint || (sub.subscription && sub.subscription.endpoint),
+                keys: {
+                  p256dh: sub.p256dh || (sub.subscription && sub.subscription.keys && sub.subscription.keys.p256dh),
+                  auth: sub.auth || (sub.subscription && sub.subscription.keys && sub.subscription.keys.auth)
+                }
+              };
+
+              if (!pushSubscription.endpoint || !pushSubscription.keys.p256dh || !pushSubscription.keys.auth) {
+                continue;
+              }
+
+              await webpush.sendNotification(pushSubscription, JSON.stringify({
                 title: 'Hora do Medicamento 💊',
                 body: bodyMessage,
                 url: '/dashboard'
@@ -234,7 +270,7 @@ serve(async (req) => {
             } catch (err) {
               console.error(`Error sending push:`, err)
               if (err.statusCode === 410 || err.statusCode === 404) {
-                await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint || sub.subscription.endpoint)
+                await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint || (sub.subscription && sub.subscription.endpoint))
               }
             }
           }
@@ -248,7 +284,19 @@ serve(async (req) => {
         const userSubs = allSubscriptions.filter(s => s.user_id === notification.user_id)
         for (const sub of userSubs) {
           try {
-            await webpush.sendNotification(sub.subscription, JSON.stringify({
+            const pushSubscription = {
+              endpoint: sub.endpoint || (sub.subscription && sub.subscription.endpoint),
+              keys: {
+                p256dh: sub.p256dh || (sub.subscription && sub.subscription.keys && sub.subscription.keys.p256dh),
+                auth: sub.auth || (sub.subscription && sub.subscription.keys && sub.subscription.keys.auth)
+              }
+            };
+
+            if (!pushSubscription.endpoint || !pushSubscription.keys.p256dh || !pushSubscription.keys.auth) {
+              continue;
+            }
+
+            await webpush.sendNotification(pushSubscription, JSON.stringify({
               title: notification.title,
               body: notification.body,
               url: '/dashboard'
@@ -257,7 +305,7 @@ serve(async (req) => {
           } catch (err) {
             console.error(`Error sending queued push:`, err)
             if (err.statusCode === 410 || err.statusCode === 404) {
-              await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint || sub.subscription.endpoint)
+              await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint || (sub.subscription && sub.subscription.endpoint))
             }
           }
         }

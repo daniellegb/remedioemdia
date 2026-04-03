@@ -350,9 +350,10 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
                         if (result.totalFound === 0) {
                           alert("Atenção: Nenhuma assinatura de notificação encontrada para este navegador. Tente desativar e ativar as notificações novamente.");
                         } else if (result.errorCount > 0) {
-                          alert(`Enviado com problemas: ${result.successCount} sucesso, ${result.errorCount} falha(s). Verifique se o navegador está bloqueando as notificações.`);
+                          const errorDetails = result.details?.filter((d: any) => d.status === 'failed').map((d: any) => d.error).join(', ');
+                          alert(`Enviado com problemas: ${result.successCount} sucesso, ${result.errorCount} falha(s).\n\nErros: ${errorDetails || "Verifique se o navegador está bloqueando as notificações."}`);
                         } else {
-                          alert("Notificação de teste enviada com sucesso! Verifique seu dispositivo.");
+                          alert(`Notificação de teste enviada com sucesso para ${result.successCount} dispositivo(s)! Verifique seu dispositivo.`);
                         }
                       } catch (error: any) {
                         console.error("Erro ao enviar teste:", error);

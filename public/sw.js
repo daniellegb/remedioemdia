@@ -1,23 +1,41 @@
 
 self.addEventListener('push', function(event) {
-  if (event.data) {
-    const data = event.data.json();
-    const options = {
-      body: data.body,
-      icon: 'https://cdn-icons-png.flaticon.com/512/1048/1048953.png', // Generic medical icon
-      badge: 'https://cdn-icons-png.flaticon.com/512/1048/1048953.png',
-      data: {
-        url: data.url || '/'
-      },
-      actions: [
-        { action: 'open', title: 'Ver Agora' }
-      ]
-    };
+  console.log('[Service Worker] Push Received.');
+  
+  let data = { 
+    title: 'Lembrete de Medicamento', 
+    body: 'Você tem um novo lembrete do Remédio em Dia.' 
+  };
 
-    event.waitUntil(
-      self.registration.showNotification(data.title, options)
-    );
+  if (event.data) {
+    try {
+      data = event.data.json();
+      console.log('[Service Worker] Push Data:', data);
+    } catch (e) {
+      console.warn('[Service Worker] Push data is not JSON:', event.data.text());
+      data = { 
+        title: 'Lembrete', 
+        body: event.data.text() 
+      };
+    }
   }
+
+  const options = {
+    body: data.body || 'Hora de tomar seu medicamento.',
+    icon: 'https://cdn-icons-png.flaticon.com/512/1048/1048953.png',
+    badge: 'https://cdn-icons-png.flaticon.com/512/1048/1048953.png',
+    vibrate: [100, 50, 100],
+    data: {
+      url: data.url || '/dashboard'
+    },
+    actions: [
+      { action: 'open', title: 'Ver Agora' }
+    ]
+  };
+
+  event.waitUntil(
+    self.registration.showNotification(data.title || 'Remédio em Dia', options)
+  );
 });
 
 self.addEventListener('notificationclick', function(event) {
