@@ -77,21 +77,23 @@ serve(async (req) => {
     }
 
     const now = new Date()
+    const minuteKey = now.toISOString().substring(0, 16) // YYYY-MM-DDTHH:mm
     const oneMinuteAgo = new Date(now.getTime() - 60000)
 
-    // 1. Buscar notificações agendadas (one-off) na fila
-    // Melhoria: Buscar todas as pendentes que já deveriam ter sido enviadas (lte now)
-    // Isso evita perder notificações se o cron atrasar ou falhar por um momento
+    // 1. Lock atômico: Marcar como enviada ANTES de processar para evitar duplicação por concorrência
     const { data: queuedNotifications, error: queueError } = await supabase
       .from('notification_queue')
-      .select('*')
+      .update({
+        sent: true,
+        sent_at: now.toISOString()
+      })
       .eq('sent', false)
       .lte('scheduled_at', now.toISOString())
-      .order('scheduled_at', { ascending: true })
+      .select('*')
       .limit(50)
 
     if (queueError) throw queueError
-    console.log(`[Cron] Found ${queuedNotifications?.length || 0} queued notifications due.`);
+    console.log(`[Cron] Claimed ${queuedNotifications?.length || 0} queued notifications.`);
 
     // 2. Buscar lembretes de medicação recorrentes (para manter a funcionalidade atual)
     const { data: reminders, error: remindersError } = await supabase
@@ -134,6 +136,7 @@ serve(async (req) => {
       .in('user_id', Array.from(enabledUserIds))
 
     const results = []
+    const sentEndpoints = new Set<string>()
 
     // Processar notificações da fila (one-off) - PRIORIDADE
     if (queuedNotifications && queuedNotifications.length > 0) {
@@ -142,43 +145,41 @@ serve(async (req) => {
 
         const userSubs = allSubscriptions?.filter(s => s.user_id === notification.user_id) || []
         for (const sub of userSubs) {
+          const endpoint = sub.endpoint || (sub.subscription && sub.subscription.endpoint);
+          if (!endpoint || sentEndpoints.has(endpoint)) continue;
+
           try {
             const pushSubscription = {
-              endpoint: sub.endpoint || (sub.subscription && sub.subscription.endpoint),
+              endpoint: endpoint,
               keys: {
                 p256dh: sub.p256dh || (sub.subscription && sub.subscription.keys && sub.subscription.keys.p256dh),
                 auth: sub.auth || (sub.subscription && sub.subscription.keys && sub.subscription.keys.auth)
               }
             };
 
-            if (!pushSubscription.endpoint || !pushSubscription.keys.p256dh || !pushSubscription.keys.auth) continue;
+            if (!pushSubscription.keys.p256dh || !pushSubscription.keys.auth) continue;
 
-            console.log(`[Push] Sending to user ${notification.user_id} (sub: ${sub.endpoint.substring(0, 30)}...)`);
+            console.log(`[Push] Sending to user ${notification.user_id} (sub: ${endpoint.substring(0, 30)}...)`);
             await webpush.sendNotification(pushSubscription, JSON.stringify({
               title: notification.title,
               body: notification.body,
               url: '/dashboard'
             }))
+            sentEndpoints.add(endpoint);
             results.push({ type: 'queue', id: notification.id })
-            console.log(`[Push] Success for user ${notification.user_id}`);
           } catch (err) {
             console.error(`Error sending queued push:`, err)
             if (err.statusCode === 410 || err.statusCode === 404) {
-              await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint || (sub.subscription && sub.subscription.endpoint))
+              await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
             }
           }
         }
-        // Marcar como enviada IMEDIATAMENTE após o loop de assinaturas
-        await supabase.from('notification_queue').update({ 
-          sent: true,
-          sent_at: new Date().toISOString()
-        }).eq('id', notification.id)
       }
     }
 
     // Processar lembretes recorrentes
     if (reminders && reminders.length > 0) {
-      // De-duplicar lembretes em memória (mesma lógica da função antiga)
+      // De-duplicar lembretes em memória
       const uniqueReminders = Array.from(new Map(reminders.map(r => 
         [`${r.user_id}-${r.medication_id}-${r.reminder_time}-${r.message_template}`, r]
       )).values());
@@ -187,7 +188,12 @@ serve(async (req) => {
         if (!enabledUserIds.has(reminder.user_id)) continue;
 
         const userSubs = allSubscriptions?.filter(s => s.user_id === reminder.user_id) || []
+        let reminderClaimed = false; // Track if this process claimed the reminder for this minute
+
         for (const sub of userSubs) {
+          const endpoint = sub.endpoint || (sub.subscription && sub.subscription.endpoint);
+          if (!endpoint || sentEndpoints.has(endpoint)) continue;
+
           const userTime = now.toLocaleTimeString('pt-BR', {
             timeZone: sub.timezone || 'UTC',
             hour12: false,
@@ -197,29 +203,52 @@ serve(async (req) => {
           const reminderTimeShort = reminder.reminder_time.substring(0, 5)
 
           if (userTime === reminderTimeShort) {
-            console.log(`[Reminder] Triggering for user ${reminder.user_id} at ${userTime} (matches ${reminderTimeShort})`);
+            // Lock atômico no banco: Apenas uma execução do cron consegue atualizar last_sent_at
+            if (!reminderClaimed) {
+              const { data: lockedReminder } = await supabase
+                .from('medication_reminders')
+                .update({
+                  last_sent_at: now.toISOString()
+                })
+                .eq('id', reminder.id)
+                .or(`last_sent_at.is.null,last_sent_at.lt.${minuteKey}:00`)
+                .select()
+                .maybeSingle()
+
+              if (lockedReminder) {
+                reminderClaimed = true;
+                console.log(`[Reminder] Claimed lock for reminder ${reminder.id} at ${userTime}`);
+              } else {
+                // Outro processo já enviou ou está enviando este lembrete neste minuto
+                console.log(`[Reminder] Lock already taken for reminder ${reminder.id} at ${userTime}`);
+                break; 
+              }
+            }
+
+            console.log(`[Reminder] Triggering push for user ${reminder.user_id} at ${userTime} (matches ${reminderTimeShort})`);
             try {
               const pushSubscription = {
-                endpoint: sub.endpoint || (sub.subscription && sub.subscription.endpoint),
+                endpoint: endpoint,
                 keys: {
                   p256dh: sub.p256dh || (sub.subscription && sub.subscription.keys && sub.subscription.keys.p256dh),
                   auth: sub.auth || (sub.subscription && sub.subscription.keys && sub.subscription.keys.auth)
                 }
               };
 
-              if (!pushSubscription.endpoint || !pushSubscription.keys.p256dh || !pushSubscription.keys.auth) continue;
+              if (!pushSubscription.keys.p256dh || !pushSubscription.keys.auth) continue;
 
               await webpush.sendNotification(pushSubscription, JSON.stringify({
                 title: 'Hora do Medicamento 💊',
                 body: reminder.message_template || `Lembrete: Tomar ${reminder.medication_name}`,
                 url: '/dashboard'
               }))
+              sentEndpoints.add(endpoint);
               results.push({ type: 'medication', id: reminder.id })
               console.log(`[Reminder] Success for user ${reminder.user_id}`);
             } catch (err) {
               console.error(`Error sending push:`, err)
               if (err.statusCode === 410 || err.statusCode === 404) {
-                await supabase.from('push_subscriptions').delete().eq('endpoint', sub.endpoint || (sub.subscription && sub.subscription.endpoint))
+                await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
               }
             }
           }

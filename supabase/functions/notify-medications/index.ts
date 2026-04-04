@@ -28,104 +28,15 @@ serve(async (req) => {
     return new Response('ok', { headers: corsHeaders })
   }
 
-  try {
-    if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
-      throw new Error('VAPID keys are missing in environment variables (VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY)')
-    }
-    const now = new Date()
-    const nowIso = now.toISOString()
-    const results = []
-
-    // 1. NOTIFICAÇÕES DE MEDICAMENTOS (Filtrando por categoria)
-    // DESATIVADO: Esta lógica agora é tratada pela função 'send-notifications'
-    /*
-    const { data: meds, error: medsError } = await supabase
-      .from('medications')
-      .select('*')
-      .lte('next_dose_at', nowIso)
-      .not('next_dose_at', 'is', null)
-      .neq('usage_category', 'prn')
-
-    if (medsError) throw medsError
-    */
-    const meds: any[] = []
-
-    for (const med of meds) {
-      const { data: subscriptions } = await supabase
-        .from('push_subscriptions')
-        .select('*')
-        .eq('user_id', med.user_id)
-      
-      if (!subscriptions) continue;
-
-      for (const sub of subscriptions) {
-        const payload = JSON.stringify({
-          title: 'Hora do Medicamento 💊',
-          body: `Lembrete: Tomar ${med.name} (${med.dosage})`,
-          url: '/dashboard'
-        })
-
-        try {
-          await webpush.sendNotification(sub.subscription, payload)
-          results.push({ type: 'medication', medId: med.id, status: 'sent' })
-        } catch (err) {
-          if (err.statusCode === 410 || err.statusCode === 404) {
-            await supabase.from('push_subscriptions').delete().eq('id', sub.id)
-          }
-        }
-      }
-    }
-
-    // 2. NOTIFICAÇÕES DE CONSULTAS (Próximas 24 horas)
-    // DESATIVADO: Esta lógica agora é tratada pela função 'send-notifications' via 'notification_queue'
-    /*
-    const tomorrow = new Date(now)
-    tomorrow.setHours(tomorrow.getHours() + 24)
-    const tomorrowIso = tomorrow.toISOString()
-
-    const { data: appointments, error: apptError } = await supabase
-      .from('appointments')
-      .select('*')
-      .gte('date', nowIso)
-      .lte('date', tomorrowIso)
-    
-    if (!apptError && appointments) {
-      for (const appt of appointments) {
-        const { data: subscriptions } = await supabase
-          .from('push_subscriptions')
-          .select('*')
-          .eq('user_id', appt.user_id)
-
-        if (!subscriptions) continue;
-
-        for (const sub of subscriptions) {
-          const payload = JSON.stringify({
-            title: `Lembrete de ${appt.type} 🏥`,
-            body: `${appt.title} agendado para amanhã às ${appt.time}`,
-            url: '/appointments'
-          })
-
-          try {
-            await webpush.sendNotification(sub.subscription, payload)
-            results.push({ type: 'appointment', apptId: appt.id, status: 'sent' })
-          } catch (err) {
-            if (err.statusCode === 410 || err.statusCode === 404) {
-              await supabase.from('push_subscriptions').delete().eq('id', sub.id)
-            }
-          }
-        }
-      }
-    }
-    */
-    const appointments: any[] = []
-
-    return new Response(JSON.stringify({ success: true, results }), {
+  return new Response(
+    JSON.stringify({ 
+      success: true, 
+      message: 'This function is deprecated. Please use send-notifications instead.',
+      results: [] 
+    }),
+    {
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-  } catch (err) {
-    return new Response(JSON.stringify({ error: err.message }), {
-      status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-  }
+    }
+  );
 })
