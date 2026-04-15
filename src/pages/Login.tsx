@@ -12,7 +12,14 @@ const Login: React.FC = () => {
   const [isSignUp, setIsSignUp] = useState(false);
 
   const navigate = useNavigate();
-  const { signIn, signUp, signInWithGoogle, isConfigured } = useAuth();
+  const { user, isAuthenticated, loading: authLoading, signIn, signUp, signInWithGoogle, isConfigured } = useAuth();
+
+  // Redirecionar se já estiver autenticado
+  React.useEffect(() => {
+    if (!authLoading && isAuthenticated) {
+      navigate('/dashboard');
+    }
+  }, [isAuthenticated, authLoading, navigate]);
 
   // Implementar função handleLogin
   const handleLogin = async (e: React.FormEvent) => {

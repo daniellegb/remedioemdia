@@ -9,22 +9,8 @@ import { useAuth } from './src/hooks/useAuth';
 import { supabase } from './src/lib/supabase';
 
 const AppRoutes: React.FC = () => {
-  const { refreshProfile, isConfigured } = useAuth();
+  const { refreshProfile } = useAuth();
   const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!isConfigured) return;
-
-    const handleOAuthRedirect = async () => {
-      const { data, error } = await supabase.auth.getSession();
-      if (data?.session) {
-        // Session is handled by AuthContext's onAuthStateChange
-        console.log('OAuth session detected');
-      }
-    };
-
-    handleOAuthRedirect();
-  }, [isConfigured]);
 
   const handleOnboardingComplete = async (skipMedication?: boolean) => {
     await refreshProfile();
