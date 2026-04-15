@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Profile } from '../../types';
+import { authService } from '../services/authService';
 
 interface AuthContextType {
   user: User | null;
@@ -9,8 +10,13 @@ interface AuthContextType {
   profile: Profile | null;
   loading: boolean;
   signOut: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<any>;
+  signUp: (email: string, password: string) => Promise<any>;
+  signInWithGoogle: () => Promise<any>;
   isConfigured: boolean;
   refreshProfile: () => Promise<void>;
+  isAdmin: boolean;
+  isPremium: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -21,6 +27,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [profile, setProfile] = useState<Profile | null>(null);
   const [loading, setLoading] = useState(true);
   const isConfigured = isSupabaseConfigured();
+
+  const isAdmin = profile?.role === 'admin';
+  const isPremium = profile?.plan === 'premium' || profile?.lifetime_access === true;
 
   const fetchProfile = async (userId: string) => {
     try {
@@ -58,7 +67,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           error.status === 400 && error.message?.includes('refresh_token');
           
         if (isRefreshTokenError) {
-          supabase.auth.signOut();
+          authService.signOut();
         }
         setLoading(false);
         return;
@@ -94,10 +103,40 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, [isConfigured]);
 
+  const signIn = async (email: string, password: string) => {
+    const { data, error } = await authService.signIn(email, password);
+    if (error) throw error;
+    return data;
+  };
+
+  const signUp = async (email: string, password: string) => {
+    const { data, error } = await authService.signUp(email, password);
+    if (error) throw error;
+    return data;
+  };
+
+  const signInWithGoogle = async () => {
+    const { data, error } = await authService.signInWithGoogle();
+    if (error) throw error;
+    return data;
+  };
+
   const signOut = async () => {
-    if (isConfigured) {
-      await supabase.auth.signOut();
+    if (!isConfigured) return;
+
+    try {
+      await authService.signOut();
+      
+      // Placeholder for local notification service cleanup
+      // if (localNotificationService?.cancelAll) {
+      //   await localNotificationService.cancelAll();
+      // }
+
       setProfile(null);
+      setUser(null);
+      setSession(null);
+    } catch (err) {
+      console.error('Error during sign out:', err);
     }
   };
 
@@ -113,8 +152,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     profile,
     loading,
     signOut,
+    signIn,
+    signUp,
+    signInWithGoogle,
     isConfigured,
-    refreshProfile
+    refreshProfile,
+    isAdmin,
+    isPremium
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

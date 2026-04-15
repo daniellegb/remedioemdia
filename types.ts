@@ -69,12 +69,17 @@ export interface AppSettings {
 
 export interface Profile {
   id: string;
+  email?: string;
   name?: string;
   mode?: 'self' | 'caregiver';
   caregiver_name?: string;
   patient_name?: string;
   relationship?: string;
   onboarding_completed: boolean;
+  role: 'user' | 'admin';
+  plan: 'free' | 'premium';
+  lifetime_access: boolean;
+  created_at?: string;
 }
 
 export interface UserPreferences {
