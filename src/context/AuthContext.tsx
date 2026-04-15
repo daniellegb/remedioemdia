@@ -55,6 +55,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
+    console.log('AuthContext: Current URL:', window.location.href);
+    console.log('AuthContext: Current Hash:', window.location.hash ? 'Hash present' : 'No hash');
+
     // Check active sessions and sets the user
     supabase.auth.getSession().then(({ data: { session }, error }) => {
       if (error) {
