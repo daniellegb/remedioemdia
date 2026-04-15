@@ -20,13 +20,16 @@ export const authService = {
 
   async signInWithGoogle() {
     const isNative = !!(window as any).Capacitor;
-    
+
+    // Redirecionar diretamente para o dashboard para evitar perda do hash no redirecionamento da raiz (/)
+    const redirectUrl = isNative
+      ? 'myapp://auth/callback'
+      : `${window.location.origin}/dashboard`;
+
     return await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: isNative 
-          ? 'myapp://auth/callback' 
-          : window.location.origin
+        redirectTo: redirectUrl
       }
     });
   }
