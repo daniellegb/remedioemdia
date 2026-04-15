@@ -329,15 +329,39 @@ const MainApp: React.FC = () => {
   }, []);
 
   const handleClearData = useCallback(() => {
+    if (!user) return;
+    
     openConfirm(
       'Limpar Dados',
       'Isso apagará todos os seus remédios e consultas. Esta ação não pode ser desfeita. Continuar?',
-      () => {
-        localStorage.clear();
-        window.location.reload();
+      async () => {
+        try {
+          setLoading(true);
+          
+          // Deletar tudo do banco para este usuário
+          await Promise.all([
+            supabase.from('consumption_records').delete().eq('user_id', user.id),
+            supabase.from('appointments').delete().eq('user_id', user.id),
+            supabase.from('medications').delete().eq('user_id', user.id)
+          ]);
+          
+          // Limpar estados locais
+          setMeds([]);
+          setDoses([]);
+          setAppointments([]);
+          
+          // Sincronizar lembretes (limpar fila de push)
+          await pushService.syncMedicationReminders(user.id, []);
+          
+          alert('Dados excluídos com sucesso.');
+        } catch (error) {
+          console.error('Erro ao limpar dados:', error);
+        } finally {
+          setLoading(false);
+        }
       }
     );
-  }, []);
+  }, [user]);
 
   const handleSaveAppointment = useCallback(async (newApp: Appointment) => {
     if (!user) return;
