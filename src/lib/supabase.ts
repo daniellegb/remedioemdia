@@ -1,13 +1,34 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
+import { Preferences } from '@capacitor/preferences';
 
 const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : undefined);
 const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_ANON_KEY : undefined);
+
+// Adaptador de storage para Capacitor (Web + Mobile)
+const capacitorStorageAdapter = {
+  getItem: (key: string) => {
+    return Preferences.get({ key }).then(result => result.value);
+  },
+  setItem: (key: string, value: string) => {
+    return Preferences.set({ key, value });
+  },
+  removeItem: (key: string) => {
+    return Preferences.remove({ key });
+  },
+};
 
 let supabaseInstance: SupabaseClient | null = null;
 
 if (supabaseUrl && supabaseAnonKey) {
   try {
-    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey);
+    supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
+      auth: {
+        storage: capacitorStorageAdapter,
+        autoRefreshToken: true,
+        persistSession: true,
+        detectSessionInUrl: false // Desativamos pois cuidamos disso manualmente no callback/mobile
+      }
+    });
   } catch (error) {
     console.error('Error initializing Supabase client:', error);
   }

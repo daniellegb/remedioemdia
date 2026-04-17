@@ -13,13 +13,23 @@ const Login: React.FC = () => {
 
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading, signIn, signUp, signInWithGoogle, isConfigured } = useAuth();
+  const [isAuthenticating, setIsAuthenticating] = useState(false);
 
   // Redirecionar se já estiver autenticado
   React.useEffect(() => {
-    if (!authLoading && isAuthenticated) {
-      navigate('/dashboard');
+    if (!authLoading && isAuthenticated && !isAuthenticating) {
+      console.log('[AUTH] Usuário já autenticado detectado no Login. Redirecionando...');
+      navigate('/dashboard', { replace: true });
     }
-  }, [isAuthenticated, authLoading, navigate]);
+  }, [isAuthenticated, authLoading, navigate, isAuthenticating]);
+
+  if (authLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Loader2 className="animate-spin text-blue-600" size={48} />
+      </div>
+    );
+  }
 
   // Implementar função handleLogin
   const handleLogin = async (e: React.FormEvent) => {
@@ -52,13 +62,17 @@ const Login: React.FC = () => {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
+    setIsAuthenticating(true);
     setError(null);
     try {
+      console.log('[AUTH] Iniciando fluxo Google OAuth...');
       await signInWithGoogle();
+      // O redirecionamento é controlado pelo provider ou pelo callback manual
     } catch (err: any) {
-      console.error('Google login error:', err);
+      console.error('[AUTH] Erro no login com Google:', err);
       setError(err.message || 'Erro ao entrar com Google.');
       setLoading(false);
+      setIsAuthenticating(false);
     }
   };
 

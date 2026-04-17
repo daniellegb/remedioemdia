@@ -1,4 +1,5 @@
 import { supabase } from '../lib/supabase';
+import { platformService } from './platformService';
 
 export const authService = {
   async signUp(email: string, password: string) {
@@ -19,17 +20,13 @@ export const authService = {
   },
 
   async signInWithGoogle() {
-    const isNative = !!(window as any).Capacitor;
-    
-    // Redirecionar diretamente para o dashboard para evitar perda do hash no redirecionamento da raiz (/)
-    const redirectUrl = isNative 
-      ? 'myapp://auth/callback' 
-      : `${window.location.origin}/dashboard`;
+    const redirectUrl = platformService.getRedirectUrl();
     
     return await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: redirectUrl
+        redirectTo: redirectUrl,
+        skipBrowserRedirect: false // Garante o fluxo padrão
       }
     });
   }

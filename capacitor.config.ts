@@ -8,9 +8,6 @@ const config: CapacitorConfig = {
     androidScheme: 'https',
   },
   plugins: {
-    App: {
-      urlScheme: 'myapp'
-    }
   }
 };
 

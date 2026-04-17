@@ -31,7 +31,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAdmin = profile?.role === 'admin';
   const isPremium = profile?.plan === 'premium' || profile?.lifetime_access === true;
 
+  const lastProfileFetchId = React.useRef<string | null>(null);
+
   const fetchProfile = async (userId: string) => {
+    // Evita múltiplas chamadas consecutivas para o mesmo ID se já tivermos os dados
+    if (lastProfileFetchId.current === userId && profile && profile.id === userId) {
+      return;
+    }
+
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -40,12 +47,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
       
       if (error) {
-        console.error('Error fetching profile:', error);
+        console.error('[AUTH] Erro ao buscar perfil:', error.message);
         return;
       }
-      setProfile(data as Profile);
+      
+      if (data) {
+        lastProfileFetchId.current = userId;
+        setProfile(data as Profile);
+      }
     } catch (err) {
-      console.error('Unexpected error fetching profile:', err);
+      console.error('[AUTH] Erro inesperado ao buscar perfil:', err);
     }
   };
 
@@ -55,54 +66,58 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       return;
     }
 
-    console.log('AuthContext: Current URL:', window.location.href);
-    console.log('AuthContext: Current Hash:', window.location.hash ? 'Hash present' : 'No hash');
-
     // Check active sessions and sets the user
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
+    supabase.auth.getSession().then(({ data: { session: initialSession }, error }) => {
       if (error) {
-        console.error('Error getting session:', error);
-        // If we get a refresh token error, it's best to sign out to clear local storage
-        const isRefreshTokenError = 
-          error.message?.includes('Refresh Token Not Found') || 
-          error.message?.includes('invalid_refresh_token') ||
-          error.message?.includes('Invalid Refresh Token') ||
-          error.status === 400 && error.message?.includes('refresh_token');
+        // Diferenciamos erro de rede vs erro de credencial
+        const isNetworkError = error.message?.toLowerCase().includes('network') || error.message?.toLowerCase().includes('fetch');
+        const isCriticalError = error.status === 400 && error.message?.toLowerCase().includes('refresh_token');
+        
+        console.error('[AUTH] Erro ao recuperar sessão inicial:', error.message);
           
-        if (isRefreshTokenError) {
+        if (isCriticalError && !isNetworkError) {
+          console.warn('[AUTH] Erro de refresh token detectado. Forçando logout.');
           authService.signOut();
         }
+        
         setLoading(false);
         return;
       }
       
-      console.log('Initial session check:', session ? 'User logged in' : 'No session');
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id).finally(() => setLoading(false));
+      if (initialSession) {
+        console.log('[AUTH] Sessão inicial detectada para:', initialSession.user.email);
+        setSession(initialSession);
+        setUser(initialSession.user);
+        fetchProfile(initialSession.user.id);
       } else {
-        setLoading(false);
+        console.log('[AUTH] Nenhuma sessão ativa no boot.');
       }
+      
+      // DESACOPLADO: O loading de autenticação termina aqui, independentemente do perfil
+      setLoading(false);
     }).catch(err => {
-      console.error('Unexpected error getting session:', err);
+      console.error('[AUTH] Erro inesperado no boot de autenticação:', err);
       setLoading(false);
     });
 
     // Listen for changes on auth state (logged in, signed out, etc.)
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state change event:', event);
-      setSession(session);
-      const newUser = session?.user ?? null;
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, newSession) => {
+      console.log(`[AUTH] Evento de estado: ${event}`);
+      
+      const newUser = newSession?.user ?? null;
+      
+      setSession(newSession);
       setUser(newUser);
       
       if (newUser) {
-        setLoading(true);
-        fetchProfile(newUser.id).finally(() => setLoading(false));
-      } else {
+        fetchProfile(newUser.id);
+      } else if (event === 'SIGNED_OUT') {
         setProfile(null);
-        setLoading(false);
+        lastProfileFetchId.current = null;
       }
+      
+      // Garante que o loading pare no primeiro evento de auth se ainda estiver ativo
+      setLoading(false);
     });
 
     return () => subscription.unsubscribe();
