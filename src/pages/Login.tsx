@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Pill, Mail, Lock, Loader2, AlertTriangle } from 'lucide-react';
+import { Pill, Mail, Lock, Loader2, AlertTriangle, RefreshCcw, Info } from 'lucide-react';
+import { clearAppCache, getIsDemoMode } from '../lib/supabase';
 
 const Login: React.FC = () => {
   // Estados locais controlados
@@ -10,10 +11,22 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
+  const [clearingCache, setClearingCache] = useState(false);
 
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading, signIn, signUp, signInWithGoogle, isConfigured } = useAuth();
   const [isAuthenticating, setIsAuthenticating] = useState(false);
+  const isDemoMode = getIsDemoMode();
+
+  const handleClearCache = async () => {
+    setClearingCache(true);
+    try {
+      await clearAppCache();
+    } catch (err) {
+      console.error('Failed to clear cache:', err);
+      setClearingCache(false);
+    }
+  };
 
   // Redirecionar se já estiver autenticado
   React.useEffect(() => {
@@ -97,17 +110,50 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-[40px] shadow-xl border border-slate-100 p-8 md:p-12">
-        {/* Aviso de configuração do Supabase (Mantido conforme layout anterior) */}
-        {!isConfigured && (
-          <div className="mb-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-start gap-3">
-            <AlertTriangle className="text-amber-500 shrink-0" size={20} />
-            <div>
-              <p className="text-amber-800 text-sm font-bold">Configuração Pendente</p>
-              <p className="text-amber-700 text-xs mt-1">
-                As variáveis de ambiente do Supabase não foram encontradas. 
-                Configure <b>VITE_SUPABASE_URL</b> e <b>VITE_SUPABASE_ANON_KEY</b> no painel do AI Studio.
-              </p>
+        {/* Aviso de Modo Demo / Configuração Pendente */}
+        {isDemoMode && (
+          <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <Info className="text-blue-500 shrink-0" size={20} />
+              <div>
+                <p className="text-blue-800 text-sm font-bold">Modo de Demonstração Ativo</p>
+                <p className="text-blue-700 text-xs mt-1">
+                  O Supabase não está configurado ou usa placeholders. Você pode testar todas as funcionalidades localmente.
+                </p>
+              </div>
             </div>
+            
+            <button
+              onClick={handleClearCache}
+              disabled={clearingCache}
+              className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-blue-100 hover:bg-blue-200 text-amber-900 rounded-xl text-xs font-black transition-all disabled:opacity-50"
+            >
+              <RefreshCcw size={14} className={clearingCache ? 'animate-spin' : ''} />
+              {clearingCache ? 'Limpando...' : 'Re-verificar Configuração e Limpar Cache'}
+            </button>
+          </div>
+        )}
+
+        {!isConfigured && !isDemoMode && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl flex flex-col gap-3">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="text-amber-500 shrink-0" size={20} />
+              <div>
+                <p className="text-amber-800 text-sm font-bold">Erro de Configuração</p>
+                <p className="text-amber-700 text-xs mt-1">
+                  As variáveis de ambiente do Supabase não foram encontradas.
+                </p>
+              </div>
+            </div>
+            
+            <button
+              onClick={handleClearCache}
+              disabled={clearingCache}
+              className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-black transition-all disabled:opacity-50"
+            >
+              <RefreshCcw size={14} className={clearingCache ? 'animate-spin' : ''} />
+              {clearingCache ? 'Limpando...' : 'Limpar Cache e Recarregar'}
+            </button>
           </div>
         )}
 
@@ -133,10 +179,10 @@ const Login: React.FC = () => {
                 id="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
                 placeholder="seu@email.com"
                 required
-                disabled={!isConfigured || loading}
+                disabled={loading}
               />
             </div>
           </div>
@@ -151,10 +197,10 @@ const Login: React.FC = () => {
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
                 placeholder="••••••••"
                 required
-                disabled={!isConfigured || loading}
+                disabled={loading}
               />
             </div>
           </div>
@@ -169,7 +215,7 @@ const Login: React.FC = () => {
           {/* Botão "Entrar" / "Cadastrar" */}
           <button
             type="submit"
-            disabled={loading || !isConfigured}
+            disabled={loading}
             className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="animate-spin" size={24} /> : (isSignUp ? 'Cadastrar' : 'Entrar')}
@@ -184,7 +230,7 @@ const Login: React.FC = () => {
 
         <button
           onClick={handleGoogleLogin}
-          disabled={loading || !isConfigured}
+          disabled={loading}
           className="mt-6 w-full bg-white border-2 border-slate-100 text-slate-700 py-4 rounded-2xl font-black text-lg hover:bg-slate-50 transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-3"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -203,7 +249,7 @@ const Login: React.FC = () => {
               setError(null);
             }}
             className="text-slate-500 font-bold hover:text-blue-600 transition-colors"
-            disabled={loading || !isConfigured}
+            disabled={loading}
           >
             {isSignUp ? 'Já tem uma conta? Entre aqui' : 'Não tem conta? Cadastre-se'}
           </button>
