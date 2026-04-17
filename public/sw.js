@@ -1,4 +1,10 @@
 
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
 self.addEventListener('push', function(event) {
   console.log('[Service Worker] Push Received.');
   
