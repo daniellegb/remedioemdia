@@ -51,13 +51,19 @@ const Login: React.FC = () => {
   };
 
   const handleGoogleLogin = async () => {
+    if (!isConfigured) return;
+    
     setLoading(true);
     setError(null);
+    
     try {
+      console.log('Starting Google Login...');
       await signInWithGoogle();
+      // Nota: O signInWithOAuth em ambiente web causa um redirect,
+      // então o código abaixo pode não ser executado se o redirect for bem-sucedido.
     } catch (err: any) {
-      console.error('Google login error:', err);
-      setError(err.message || 'Erro ao entrar com Google.');
+      console.error('Google login error (catch):', err);
+      setError(err.message || 'Erro ao entrar com Google. Tente novamente.');
       setLoading(false);
     }
   };

@@ -1,10 +1,15 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : undefined);
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY || (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_ANON_KEY : undefined);
+const getEnv = (key: string) => {
+  const val = import.meta.env[key] || (typeof process !== 'undefined' ? process.env[key] : undefined);
+  return typeof val === 'string' ? val.trim() : undefined;
+};
+
+const supabaseUrl = getEnv('VITE_SUPABASE_URL');
+const supabaseAnonKey = getEnv('VITE_SUPABASE_ANON_KEY');
 
 let supabaseInstance: SupabaseClient | null = null;
-const isPlaceholder = (val: string | undefined) => !val || val.includes('your-supabase') || val.includes('TODO');
+const isPlaceholder = (val: string | undefined) => !val || val.includes('your-supabase') || val.includes('TODO') || val === 'undefined';
 
 if (supabaseUrl && supabaseAnonKey && !isPlaceholder(supabaseUrl) && !isPlaceholder(supabaseAnonKey)) {
   console.log('Initializing Supabase client with URL:', supabaseUrl);

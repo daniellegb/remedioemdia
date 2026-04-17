@@ -2,35 +2,71 @@ import { supabase } from '../lib/supabase';
 
 export const authService = {
   async signUp(email: string, password: string) {
-    return await supabase.auth.signUp({ email, password });
+    try {
+      return await supabase.auth.signUp({ 
+        email, 
+        password,
+        options: {
+          emailRedirectTo: `${window.location.origin}/dashboard`
+        }
+      });
+    } catch (error) {
+      console.error('authService.signUp error:', error);
+      throw error;
+    }
   },
 
   async signIn(email: string, password: string) {
-    return await supabase.auth.signInWithPassword({ email, password });
+    try {
+      return await supabase.auth.signInWithPassword({ email, password });
+    } catch (error) {
+      console.error('authService.signIn error:', error);
+      throw error;
+    }
   },
 
   async signOut() {
-    await supabase.auth.signOut();
+    try {
+      await supabase.auth.signOut();
+    } catch (error) {
+      console.error('authService.signOut error:', error);
+    }
   },
 
   async getUser() {
-    const { data } = await supabase.auth.getUser();
-    return data.user;
+    try {
+      const { data } = await supabase.auth.getUser();
+      return data.user;
+    } catch (error) {
+      console.error('authService.getUser error:', error);
+      return null;
+    }
   },
 
   async signInWithGoogle() {
-    const isNative = !!(window as any).Capacitor;
+    const isNative = !!(window as any).Capacitor?.isNative;
     
-    // Redirecionar diretamente para o dashboard para evitar perda do hash no redirecionamento da raiz (/)
+    // Configuração para Capacitor (futura implementação mobile)
     const redirectUrl = isNative 
-      ? 'myapp://auth/callback' 
+      ? 'io.medmanager.app://auth/callback' 
       : `${window.location.origin}/dashboard`;
     
-    return await supabase.auth.signInWithOAuth({
-      provider: 'google',
-      options: {
-        redirectTo: redirectUrl
-      }
-    });
+    console.log('Google login redirectUrl:', redirectUrl);
+
+    try {
+      return await supabase.auth.signInWithOAuth({
+        provider: 'google',
+        options: {
+          redirectTo: redirectUrl,
+          queryParams: {
+            access_type: 'offline',
+            prompt: 'consent',
+          },
+        }
+      });
+    } catch (error) {
+      console.error('authService.signInWithGoogle error:', error);
+      throw error;
+    }
   }
 };
