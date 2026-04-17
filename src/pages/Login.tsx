@@ -1,8 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Pill, Mail, Lock, Loader2, AlertTriangle, RefreshCcw, Info, Hash } from 'lucide-react';
-import { clearAppCache, getIsDemoMode } from '../lib/supabase';
+import { Pill, Mail, Lock, Loader2, AlertTriangle } from 'lucide-react';
 
 const Login: React.FC = () => {
   // Estados locais controlados
@@ -11,38 +10,16 @@ const Login: React.FC = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
-  const [clearingCache, setClearingCache] = useState(false);
 
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading, signIn, signUp, signInWithGoogle, isConfigured } = useAuth();
-  const [isAuthenticating, setIsAuthenticating] = useState(false);
-  const isDemoMode = getIsDemoMode();
-
-  const handleClearCache = async () => {
-    setClearingCache(true);
-    try {
-      await clearAppCache();
-    } catch (err) {
-      console.error('Failed to clear cache:', err);
-      setClearingCache(false);
-    }
-  };
 
   // Redirecionar se já estiver autenticado
   React.useEffect(() => {
-    if (!authLoading && isAuthenticated && !isAuthenticating) {
-      console.log('[AUTH] Usuário já autenticado detectado no Login. Redirecionando...');
-      navigate('/dashboard', { replace: true });
+    if (!authLoading && isAuthenticated) {
+      navigate('/dashboard');
     }
-  }, [isAuthenticated, authLoading, navigate, isAuthenticating]);
-
-  if (authLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-slate-50">
-        <Loader2 className="animate-spin text-blue-600" size={48} />
-      </div>
-    );
-  }
+  }, [isAuthenticated, authLoading, navigate]);
 
   // Implementar função handleLogin
   const handleLogin = async (e: React.FormEvent) => {
@@ -75,17 +52,13 @@ const Login: React.FC = () => {
 
   const handleGoogleLogin = async () => {
     setLoading(true);
-    setIsAuthenticating(true);
     setError(null);
     try {
-      console.log('[AUTH] Iniciando fluxo Google OAuth...');
       await signInWithGoogle();
-      // O redirecionamento é controlado pelo provider ou pelo callback manual
     } catch (err: any) {
-      console.error('[AUTH] Erro no login com Google:', err);
+      console.error('Google login error:', err);
       setError(err.message || 'Erro ao entrar com Google.');
       setLoading(false);
-      setIsAuthenticating(false);
     }
   };
 
@@ -110,57 +83,17 @@ const Login: React.FC = () => {
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
       <div className="max-w-md w-full bg-white rounded-[40px] shadow-xl border border-slate-100 p-8 md:p-12">
-        {/* Aviso de Modo Demo / Configuração Pendente */}
-        {isDemoMode && (
-          <div className="mb-6 p-4 bg-blue-50 border border-blue-100 rounded-2xl flex flex-col gap-3">
-            <div className="flex items-start gap-3">
-              <Info className="text-blue-500 shrink-0" size={20} />
-              <div>
-                <p className="text-blue-800 text-sm font-bold">Modo de Demonstração Ativo</p>
-                <p className="text-blue-700 text-xs mt-1">
-                  O Supabase não está configurado ou usa placeholders. O login funcionará localmente para testes.
-                </p>
-              </div>
+        {/* Aviso de configuração do Supabase (Mantido conforme layout anterior) */}
+        {!isConfigured && (
+          <div className="mb-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl flex items-start gap-3">
+            <AlertTriangle className="text-amber-500 shrink-0" size={20} />
+            <div>
+              <p className="text-amber-800 text-sm font-bold">Configuração Pendente</p>
+              <p className="text-amber-700 text-xs mt-1">
+                As variáveis de ambiente do Supabase não foram encontradas. 
+                Configure <b>VITE_SUPABASE_URL</b> e <b>VITE_SUPABASE_ANON_KEY</b> no painel do AI Studio.
+              </p>
             </div>
-            
-            <div className="flex flex-col gap-2">
-              <div className="bg-blue-100/50 p-2 rounded-xl flex items-center gap-2 text-[10px] font-mono text-blue-800 break-all">
-                <Hash size={12} />
-                <span>URL: {import.meta.env.VITE_SUPABASE_URL || 'ausente'}</span>
-              </div>
-              
-              <button
-                onClick={handleClearCache}
-                disabled={clearingCache}
-                className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-blue-100 hover:bg-blue-200 text-blue-900 rounded-xl text-xs font-black transition-all disabled:opacity-50"
-              >
-                <RefreshCcw size={14} className={clearingCache ? 'animate-spin' : ''} />
-                {clearingCache ? 'Limpando...' : 'Limpar Cache e Sincronizar'}
-              </button>
-            </div>
-          </div>
-        )}
-
-        {!isConfigured && !isDemoMode && (
-          <div className="mb-6 p-4 bg-amber-50 border border-amber-100 rounded-2xl flex flex-col gap-3">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="text-amber-500 shrink-0" size={20} />
-              <div>
-                <p className="text-amber-800 text-sm font-bold">Erro de Configuração</p>
-                <p className="text-amber-700 text-xs mt-1">
-                  As variáveis de ambiente do Supabase não foram encontradas.
-                </p>
-              </div>
-            </div>
-            
-            <button
-              onClick={handleClearCache}
-              disabled={clearingCache}
-              className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-black transition-all disabled:opacity-50"
-            >
-              <RefreshCcw size={14} className={clearingCache ? 'animate-spin' : ''} />
-              {clearingCache ? 'Limpando...' : 'Limpar Cache e Recarregar'}
-            </button>
           </div>
         )}
 
@@ -186,10 +119,10 @@ const Login: React.FC = () => {
                 id="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 placeholder="seu@email.com"
                 required
-                disabled={loading}
+                disabled={!isConfigured || loading}
               />
             </div>
           </div>
@@ -204,10 +137,10 @@ const Login: React.FC = () => {
                 id="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all font-medium"
+                className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 placeholder="••••••••"
                 required
-                disabled={loading}
+                disabled={!isConfigured || loading}
               />
             </div>
           </div>
@@ -222,7 +155,7 @@ const Login: React.FC = () => {
           {/* Botão "Entrar" / "Cadastrar" */}
           <button
             type="submit"
-            disabled={loading}
+            disabled={loading || !isConfigured}
             className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2"
           >
             {loading ? <Loader2 className="animate-spin" size={24} /> : (isSignUp ? 'Cadastrar' : 'Entrar')}
@@ -237,7 +170,7 @@ const Login: React.FC = () => {
 
         <button
           onClick={handleGoogleLogin}
-          disabled={loading}
+          disabled={loading || !isConfigured}
           className="mt-6 w-full bg-white border-2 border-slate-100 text-slate-700 py-4 rounded-2xl font-black text-lg hover:bg-slate-50 transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-3"
         >
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -256,7 +189,7 @@ const Login: React.FC = () => {
               setError(null);
             }}
             className="text-slate-500 font-bold hover:text-blue-600 transition-colors"
-            disabled={loading}
+            disabled={loading || !isConfigured}
           >
             {isSignUp ? 'Já tem uma conta? Entre aqui' : 'Não tem conta? Cadastre-se'}
           </button>

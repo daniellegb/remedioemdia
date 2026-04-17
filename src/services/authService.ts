@@ -1,75 +1,36 @@
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { platformService } from './platformService';
+import { supabase } from '../lib/supabase';
 
 export const authService = {
   async signUp(email: string, password: string) {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Supabase is not configured. Please check your environment variables.');
-    }
-    try {
-      return await supabase.auth.signUp({ email, password });
-    } catch (err: any) {
-      this.handleAuthError(err);
-      throw err;
-    }
+    return await supabase.auth.signUp({ email, password });
   },
 
   async signIn(email: string, password: string) {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Supabase is not configured. Please check your environment variables.');
-    }
-    try {
-      return await supabase.auth.signInWithPassword({ email, password });
-    } catch (err: any) {
-      this.handleAuthError(err);
-      throw err;
-    }
+    return await supabase.auth.signInWithPassword({ email, password });
   },
 
   async signOut() {
-    if (!isSupabaseConfigured()) return;
-    try {
-      await supabase.auth.signOut();
-    } catch (err) {
-      console.error('[AUTH] Sign out error:', err);
-    }
+    await supabase.auth.signOut();
   },
 
   async getUser() {
-    if (!isSupabaseConfigured()) return null;
-    try {
-      const { data } = await supabase.auth.getUser();
-      return data.user;
-    } catch (err) {
-      console.error('[AUTH] Get user error:', err);
-      return null;
-    }
+    const { data } = await supabase.auth.getUser();
+    return data.user;
   },
 
   async signInWithGoogle() {
-    if (!isSupabaseConfigured()) {
-      throw new Error('Supabase is not configured. Please check your environment variables.');
-    }
-    const redirectUrl = platformService.getRedirectUrl();
+    const isNative = !!(window as any).Capacitor;
     
-    try {
-      return await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: redirectUrl,
-          skipBrowserRedirect: false
-        }
-      });
-    } catch (err: any) {
-      this.handleAuthError(err);
-      throw err;
-    }
-  },
-
-  handleAuthError(err: any) {
-    console.error('[AUTH SERVICE ERROR]', err);
-    if (err.message?.includes('Failed to fetch') || err.name === 'AuthRetryableFetchError') {
-      console.error('[AUTH] Erro de rede detectado. Verifique sua conexão e a URL do Supabase.');
-    }
+    // Redirecionar diretamente para o dashboard para evitar perda do hash no redirecionamento da raiz (/)
+    const redirectUrl = isNative 
+      ? 'myapp://auth/callback' 
+      : `${window.location.origin}/dashboard`;
+    
+    return await supabase.auth.signInWithOAuth({
+      provider: 'google',
+      options: {
+        redirectTo: redirectUrl
+      }
+    });
   }
 };
