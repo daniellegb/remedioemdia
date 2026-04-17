@@ -3,25 +3,29 @@ import { supabase } from '../lib/supabase';
 export const authService = {
   async signUp(email: string, password: string) {
     try {
-      return await supabase.auth.signUp({ 
+      const { data, error } = await supabase.auth.signUp({ 
         email, 
         password,
         options: {
           emailRedirectTo: `${window.location.origin}/dashboard`
         }
       });
-    } catch (error) {
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error: any) {
       console.error('authService.signUp error:', error);
-      throw error;
+      return { data: null, error: this.handleAuthError(error) };
     }
   },
 
   async signIn(email: string, password: string) {
     try {
-      return await supabase.auth.signInWithPassword({ email, password });
-    } catch (error) {
+      const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error: any) {
       console.error('authService.signIn error:', error);
-      throw error;
+      return { data: null, error: this.handleAuthError(error) };
     }
   },
 
@@ -45,8 +49,6 @@ export const authService = {
 
   async signInWithGoogle() {
     const isNative = !!(window as any).Capacitor?.isNative;
-    
-    // Configuração para Capacitor (futura implementação mobile)
     const redirectUrl = isNative 
       ? 'io.medmanager.app://auth/callback' 
       : `${window.location.origin}/dashboard`;
@@ -54,7 +56,7 @@ export const authService = {
     console.log('Google login redirectUrl:', redirectUrl);
 
     try {
-      return await supabase.auth.signInWithOAuth({
+      const { data, error } = await supabase.auth.signInWithOAuth({
         provider: 'google',
         options: {
           redirectTo: redirectUrl,
@@ -64,9 +66,35 @@ export const authService = {
           },
         }
       });
-    } catch (error) {
+      if (error) throw error;
+      return { data, error: null };
+    } catch (error: any) {
       console.error('authService.signInWithGoogle error:', error);
-      throw error;
+      return { data: null, error: this.handleAuthError(error) };
     }
+  },
+
+  /**
+   * Identifies specific network and DNS failures.
+   */
+  handleAuthError(error: any): Error {
+    const message = error.message || String(error);
+    
+    if (
+      message.includes('Failed to fetch') || 
+      message.includes('NetworkError') || 
+      message.includes('TypeError') ||
+      message.includes('Aborted')
+    ) {
+      return new Error(
+        'Erro Crítico: Não foi possível alcançar o servidor do Supabase. O domínio DNS não foi resolvido. Verifique se o seu projeto no Supabase foi PAUSADO ou EXCLUÍDO, e confirme se o ID do projeto nas variáveis de ambiente da Vercel está correto.'
+      );
+    }
+
+    if (message.includes('Invalid login credentials')) {
+      return new Error('E-mail ou senha incorretos.');
+    }
+
+    return error instanceof Error ? error : new Error(message);
   }
 };
