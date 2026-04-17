@@ -50,59 +50,46 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
-    // Diagnostic log on mount to verify environment variables
+    // Diagnostics
     const status = getSupabaseStatus();
-    console.log('[Auth] Supabase Configuration:', {
-      isConfigured: status.isConfigured,
-      url: status.url,
-      hasKey: status.isConfigured
-    });
+    console.log('[Auth] Supabase Status:', status);
+    console.log('[Auth] Current Hash:', window.location.hash ? 'Has hash' : 'None');
 
     if (!isConfigured) {
-      console.error('[Auth] Supabase IS NOT CONFIGURED. Requests will fail.');
       setLoading(false);
       return;
     }
 
-    console.log('[Auth] Current Hash:', window.location.hash ? 'Present' : 'None');
-
-    // Check active sessions and sets the user
-    try {
-      supabase.auth.getSession().then(({ data: { session }, error }) => {
+    // Wrap initialization in a safe block
+    const initAuth = async () => {
+      try {
+        const { data: { session }, error } = await supabase.auth.getSession();
         if (error) {
-          console.error('Error getting session:', error);
-          // If we get a refresh token error, it's best to sign out to clear local storage
-          const isRefreshTokenError = 
-            error.message?.includes('Refresh Token Not Found') || 
-            error.message?.includes('invalid_refresh_token') ||
-            error.message?.includes('Invalid Refresh Token') ||
-            (error as any).status === 400 && error.message?.includes('refresh_token');
-            
-          if (isRefreshTokenError) {
-            authService.signOut();
+          console.error('Session error:', error);
+          if (error.message?.toLowerCase().includes('refresh token')) {
+            await authService.signOut();
           }
           setLoading(false);
           return;
         }
-        
-        console.log('Initial session check:', session ? 'User logged in' : 'No session');
-        setSession(session);
-        setUser(session?.user ?? null);
-        if (session?.user) {
-          fetchProfile(session.user.id).finally(() => setLoading(false));
-        } else {
-          setLoading(false);
-        }
-      }).catch(err => {
-        console.error('Unexpected error getting session (promise catch):', err);
-        setLoading(false);
-      });
-    } catch (proxyError) {
-      console.error('Supabase client error (Proxy access):', proxyError);
-      setLoading(false);
-    }
 
-    // Listen for changes on auth state (logged in, signed out, etc.)
+        setSession(session);
+        const currentUser = session?.user ?? null;
+        setUser(currentUser);
+
+        if (currentUser) {
+          await fetchProfile(currentUser.id);
+        }
+      } catch (err) {
+        console.error('Initial session check error:', err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    initAuth();
+
+    // Listen for changes on auth state
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
       console.log('Auth state change event:', event);
       setSession(session);
@@ -111,14 +98,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (newUser) {
         setLoading(true);
-        console.log('User detected, fetching profile...');
         await fetchProfile(newUser.id);
         setLoading(false);
       } else {
         setProfile(null);
-        if (event !== 'INITIAL_SESSION') {
-          setLoading(false);
-        }
+        setLoading(false);
       }
     });
 
