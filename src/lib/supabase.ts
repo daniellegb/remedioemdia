@@ -7,6 +7,7 @@ let supabaseInstance: SupabaseClient | null = null;
 const isPlaceholder = (val: string | undefined) => !val || val.includes('your-supabase') || val.includes('TODO');
 
 if (supabaseUrl && supabaseAnonKey && !isPlaceholder(supabaseUrl) && !isPlaceholder(supabaseAnonKey)) {
+  console.log('Initializing Supabase client with URL:', supabaseUrl);
   try {
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
@@ -24,6 +25,18 @@ if (supabaseUrl && supabaseAnonKey && !isPlaceholder(supabaseUrl) && !isPlacehol
             console.error('Supabase lock error:', e);
             throw e;
           }
+        }
+      },
+      global: {
+        fetch: (url, options) => {
+          return fetch(url, options).catch(err => {
+            if (err instanceof Error && (err.message === 'Failed to fetch' || err.name === 'TypeError')) {
+              console.error('Network error detected in Supabase client:', err);
+              // Provide a more descriptive error for the user
+              throw new Error('Erro de conexão ao Supabase (Failed to fetch). Verifique se a URL do projeto está correta e se você tem conexão com a internet.');
+            }
+            throw err;
+          });
         }
       }
     });
