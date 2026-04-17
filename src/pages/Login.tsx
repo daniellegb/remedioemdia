@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Pill, Mail, Lock, Loader2, AlertTriangle, RefreshCcw, Info } from 'lucide-react';
+import { Pill, Mail, Lock, Loader2, AlertTriangle, RefreshCcw, Info, Hash } from 'lucide-react';
 import { clearAppCache, getIsDemoMode } from '../lib/supabase';
 
 const Login: React.FC = () => {
@@ -118,19 +118,26 @@ const Login: React.FC = () => {
               <div>
                 <p className="text-blue-800 text-sm font-bold">Modo de Demonstração Ativo</p>
                 <p className="text-blue-700 text-xs mt-1">
-                  O Supabase não está configurado ou usa placeholders. Você pode testar todas as funcionalidades localmente.
+                  O Supabase não está configurado ou usa placeholders. O login funcionará localmente para testes.
                 </p>
               </div>
             </div>
             
-            <button
-              onClick={handleClearCache}
-              disabled={clearingCache}
-              className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-blue-100 hover:bg-blue-200 text-amber-900 rounded-xl text-xs font-black transition-all disabled:opacity-50"
-            >
-              <RefreshCcw size={14} className={clearingCache ? 'animate-spin' : ''} />
-              {clearingCache ? 'Limpando...' : 'Re-verificar Configuração e Limpar Cache'}
-            </button>
+            <div className="flex flex-col gap-2">
+              <div className="bg-blue-100/50 p-2 rounded-xl flex items-center gap-2 text-[10px] font-mono text-blue-800 break-all">
+                <Hash size={12} />
+                <span>URL: {import.meta.env.VITE_SUPABASE_URL || 'ausente'}</span>
+              </div>
+              
+              <button
+                onClick={handleClearCache}
+                disabled={clearingCache}
+                className="w-full flex items-center justify-center gap-2 py-2 px-4 bg-blue-100 hover:bg-blue-200 text-blue-900 rounded-xl text-xs font-black transition-all disabled:opacity-50"
+              >
+                <RefreshCcw size={14} className={clearingCache ? 'animate-spin' : ''} />
+                {clearingCache ? 'Limpando...' : 'Limpar Cache e Sincronizar'}
+              </button>
+            </div>
           </div>
         )}
 

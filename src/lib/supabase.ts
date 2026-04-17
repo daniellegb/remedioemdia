@@ -17,17 +17,26 @@ const capacitorStorageAdapter = {
   },
 };
 
-// Debug rigoroso no console para identificar se a URL está sendo injetada incorretamente no build
+// Debug no console (máscara para segurança)
 if (import.meta.env.DEV) {
-  console.log('[SUPABASE_DEBUG] URL detectada:', supabaseUrl);
+  const maskedKey = supabaseAnonKey ? `${supabaseAnonKey.substring(0, 10)}...` : 'ausente';
+  console.log('[SUPABASE_DEBUG] Inicializando...', { 
+    url: supabaseUrl, 
+    key: maskedKey,
+    hasUrl: !!supabaseUrl,
+    hasKey: !!supabaseAnonKey
+  });
 }
 
-// Bloqueio de inicialização se a URL for o placeholder conhecido ou inválida
-const PLACEHOLDER_ID = 'zugmjotqqoineafwzkpf';
-const isPlaceholder = !supabaseUrl || 
-                      supabaseUrl.includes(PLACEHOLDER_ID) || 
-                      supabaseUrl === 'your-supabase-url' ||
-                      !supabaseUrl.startsWith('https://');
+// Bloqueio apenas se as variáveis estiverem realmente ausentes ou forem o valor padrão do template generic
+const isMissingConfig = !supabaseUrl || 
+                        supabaseUrl === 'your-supabase-url' || 
+                        supabaseUrl === '' ||
+                        !supabaseUrl.startsWith('https://');
+
+// Verificamos se é o placeholder conhecido, mas apenas avisamos (não bloqueamos mais, se o usuário disser que funciona)
+const knownPlaceholder = 'zugmjotqqoineafwzkpf';
+const isKnownPlaceholder = supabaseUrl?.includes(knownPlaceholder);
 
 // MOCK CLIENT FOR DEMO MODE
 // Implementamos uma versão mínima do SupabaseClient para permitir que o app funcione sem backend real
@@ -110,7 +119,7 @@ const createMockClient = (): any => {
 let supabaseInstance: SupabaseClient | null = null;
 let isDemoMode = false;
 
-if (supabaseUrl && supabaseAnonKey && !isPlaceholder) {
+if (!isMissingConfig && supabaseUrl && supabaseAnonKey) {
   try {
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
@@ -120,6 +129,11 @@ if (supabaseUrl && supabaseAnonKey && !isPlaceholder) {
         detectSessionInUrl: false
       }
     });
+    
+    if (isKnownPlaceholder) {
+      console.warn(`[SUPABASE] Aviso: Você está usando a URL '${knownPlaceholder}', que é frequentemente um placeholder. Se o login falhar com DNS error, atualize suas credenciais.`);
+    }
+    
     isDemoMode = false;
   } catch (error) {
     console.error('[SUPABASE] Erro crítico na inicialização:', error);
@@ -127,8 +141,8 @@ if (supabaseUrl && supabaseAnonKey && !isPlaceholder) {
 }
 
 if (!supabaseInstance) {
-  const reason = isPlaceholder ? 'URL detectada como PLACEHOLDER incorreto. Entrando em MODO DEMO.' : 'Variáveis ausentes. Entrando em MODO DEMO.';
-  console.warn(`[SUPABASE] ${reason}`);
+  const reason = isMissingConfig ? 'VITE_SUPABASE_URL ausente ou inválida.' : 'Falha na criação do cliente.';
+  console.warn(`[SUPABASE] ${reason} Entrando em MODO DEMO.`);
   supabaseInstance = createMockClient() as SupabaseClient;
   isDemoMode = true;
 }
