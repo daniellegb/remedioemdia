@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
-import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, isSupabaseConfigured, getSupabaseStatus } from '../lib/supabase';
 import { Profile } from '../../types';
 import { authService } from '../services/authService';
 
@@ -50,22 +50,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    // Diagnostic log on mount to verify environment variables
+    const status = getSupabaseStatus();
+    console.log('[Auth] Supabase Configuration:', {
+      isConfigured: status.isConfigured,
+      url: status.url,
+      hasKey: status.isConfigured
+    });
+
     if (!isConfigured) {
+      console.error('[Auth] Supabase IS NOT CONFIGURED. Requests will fail.');
       setLoading(false);
       return;
     }
 
-    console.log('AuthContext: Current URL:', window.location.href);
-    console.log('AuthContext: Current Hash:', window.location.hash ? 'Hash present' : 'No hash');
+    console.log('[Auth] Current Hash:', window.location.hash ? 'Present' : 'None');
 
     // Check active sessions and sets the user
     try {
-      if (!isSupabaseConfigured()) {
-        console.warn('Supabase is not configured. Redirecting to setup state.');
-        setLoading(false);
-        return;
-      }
-
       supabase.auth.getSession().then(({ data: { session }, error }) => {
         if (error) {
           console.error('Error getting session:', error);

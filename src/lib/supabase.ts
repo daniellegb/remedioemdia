@@ -1,43 +1,77 @@
 import { createClient, SupabaseClient } from '@supabase/supabase-js';
 
-// Access variables statically for Vite compatibility
-const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-const supabaseAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+/**
+ * STRICT ENVIRONMENT VALIDATION
+ * No silent fallbacks allowed. The app must fail fast if configuration is missing.
+ */
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
-// Check for placeholders or undefined
-const isInvalid = (val: string | undefined) => 
-  !val || val === 'undefined' || val.includes('your-supabase') || val.includes('TODO');
+const isPlaceholder = (val: string | undefined) => 
+  !val || 
+  val === 'undefined' || 
+  val === '' ||
+  val.includes('your-supabase') || 
+  val.includes('TODO');
 
-let supabaseInstance: SupabaseClient;
+// Validation Logic - Run during module initialization
+const validateConfig = () => {
+  const errors: string[] = [];
+  
+  if (isPlaceholder(SUPABASE_URL)) {
+    errors.push('VITE_SUPABASE_URL is missing or contains a placeholder value.');
+  } else {
+    try {
+      new URL(SUPABASE_URL!);
+    } catch (e) {
+      errors.push(`VITE_SUPABASE_URL is not a valid URL: ${SUPABASE_URL}`);
+    }
+  }
 
-if (!isInvalid(supabaseUrl) && !isInvalid(supabaseAnonKey)) {
-  console.log('Initializing Supabase client with URL:', supabaseUrl);
-  supabaseInstance = createClient(supabaseUrl!, supabaseAnonKey!, {
-    auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      storageKey: 'medmanager-v2-auth-token',
-      // Custom lock function for sandbox environment
-      lock: async (_name: string, _acquireTimeout: number, callback: () => Promise<any>) => {
-        try {
+  if (isPlaceholder(SUPABASE_ANON_KEY)) {
+    errors.push('VITE_SUPABASE_ANON_KEY is missing or contains a placeholder value.');
+  }
+
+  if (errors.length > 0) {
+    console.error('❌ SUPABASE CONFIGURATION ERROR:\n' + errors.join('\n'));
+    return false;
+  }
+  return true;
+};
+
+const IS_CONFIGURED = validateConfig();
+
+// Initialize client only if valid
+export const supabase = IS_CONFIGURED 
+  ? createClient(SUPABASE_URL!, SUPABASE_ANON_KEY!, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        storageKey: 'medmanager-v2-auth-token',
+        lock: async (_name, _acquireTimeout, callback) => {
+          // No-op lock for restrictive environments (iframes/sandboxes)
           return await callback();
-        } catch (e) {
-          console.error('Supabase lock error:', e);
-          throw e;
         }
       }
-    }
-  });
-} else {
-  console.warn('Supabase credentials missing or invalid. Using a dummy client.');
-  // Create a dummy client to avoid null checks everywhere, it will fail on actual requests
-  supabaseInstance = createClient('https://placeholder.supabase.co', 'placeholder', {
-    auth: { persistSession: false }
-  });
-}
+    })
+  : new Proxy({} as SupabaseClient, {
+      get() {
+        throw new Error(
+          'Supabase client accessed but NOT configured. Check your environment variables (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY).'
+        );
+      }
+    });
 
-export const supabase = supabaseInstance;
+export const isSupabaseConfigured = () => IS_CONFIGURED;
 
-export const isSupabaseConfigured = () => 
-  !isInvalid(supabaseUrl) && !isInvalid(supabaseAnonKey);
+/**
+ * Diagnostic helper to verify Supabase connection
+ * Does NOT leak the full anon key for security.
+ */
+export const getSupabaseStatus = () => ({
+  isConfigured: IS_CONFIGURED,
+  url: SUPABASE_URL || 'MISSING',
+  keyPrefix: SUPABASE_ANON_KEY ? `${SUPABASE_ANON_KEY.substring(0, 8)}...` : 'MISSING',
+  timestamp: new Date().toISOString()
+});
