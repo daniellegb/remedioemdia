@@ -17,23 +17,32 @@ const capacitorStorageAdapter = {
   },
 };
 
+// Debug rigoroso no console para identificar se a URL está sendo injetada incorretamente no build
+if (import.meta.env.DEV) {
+  console.log('[SUPABASE_DEBUG] URL detectada:', supabaseUrl);
+}
+
+// Bloqueio de inicialização se a URL for o placeholder conhecido ou inválida
+const isPlaceholder = supabaseUrl?.includes('zugmjotqqoineafwzkpf') || !supabaseUrl?.startsWith('https://');
+
 let supabaseInstance: SupabaseClient | null = null;
 
-if (supabaseUrl && supabaseAnonKey) {
+if (supabaseUrl && supabaseAnonKey && !isPlaceholder) {
   try {
     supabaseInstance = createClient(supabaseUrl, supabaseAnonKey, {
       auth: {
         storage: capacitorStorageAdapter,
         autoRefreshToken: true,
         persistSession: true,
-        detectSessionInUrl: false // Desativamos pois cuidamos disso manualmente no callback/mobile
+        detectSessionInUrl: false
       }
     });
   } catch (error) {
-    console.error('Error initializing Supabase client:', error);
+    console.error('[SUPABASE] Erro crítico na inicialização:', error);
   }
 } else {
-  console.warn('Supabase credentials missing. Please set VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY in your environment.');
+  const reason = isPlaceholder ? 'URL detectada como PLACEHOLDER incorreto.' : 'Variáveis ausentes no ambiente.';
+  console.error(`[SUPABASE] Falha de Configuração: ${reason}`);
 }
 
 // Export a proxy or a getter to handle missing instance gracefully
