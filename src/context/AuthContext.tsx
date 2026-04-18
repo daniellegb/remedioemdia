@@ -25,6 +25,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const profileRef = React.useRef<Profile | null>(null);
+
+  useEffect(() => {
+    profileRef.current = profile;
+  }, [profile]);
   const [loading, setLoading] = useState(true);
   const isConfigured = isSupabaseConfigured();
 
@@ -90,19 +95,24 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
 
     // Listen for changes on auth state
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
       console.log('Auth state change event:', event);
-      setSession(session);
-      const newUser = session?.user ?? null;
-      setUser(newUser);
+      
+      const newUser = currentSession?.user ?? null;
+      const isInitialOrTransition = event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED';
+      
+      // Update session/user and fetch profile
+      // We use a functional update or comparison to avoid redundant renders if the user is the same
+      setSession(prev => (prev?.access_token === currentSession?.access_token ? prev : currentSession));
+      setUser(prev => (prev?.id === newUser?.id ? prev : newUser));
       
       if (newUser) {
-        setLoading(true);
-        await fetchProfile(newUser.id);
-        setLoading(false);
+        // Only trigger profile fetch if it is a major transition or if we don't have a profile yet
+        if (isInitialOrTransition || !profileRef.current) {
+          await fetchProfile(newUser.id);
+        }
       } else {
         setProfile(null);
-        setLoading(false);
       }
     });
 
