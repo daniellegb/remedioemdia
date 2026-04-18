@@ -1,39 +1,52 @@
 import { createClient } from '@supabase/supabase-js';
 
-const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
-const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
+// Deep clean of environment variables (removing invisible characters)
+const clean = (val: any) => typeof val === 'string' ? val.replace(/[\u200B-\u200D\uFEFF]/g, '').trim() : '';
+
+const URL = clean(import.meta.env.VITE_SUPABASE_URL);
+const KEY = clean(import.meta.env.VITE_SUPABASE_ANON_KEY);
+
+console.log('[Supabase Debug] URL detectada:', `"${URL}"`);
 
 export const supabase = createClient(
-  SUPABASE_URL || 'https://placeholder.supabase.co',
-  SUPABASE_ANON_KEY || 'placeholder',
+  URL || 'https://placeholder.supabase.co',
+  KEY || 'placeholder',
   {
     auth: {
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      storageKey: 'medmanager-auth'
+      storageKey: 'med-clean-v3'
     }
   }
 );
 
-export const isSupabaseConfigured = () => {
-  return SUPABASE_URL && SUPABASE_URL !== 'undefined' && SUPABASE_ANON_KEY && SUPABASE_ANON_KEY !== 'undefined';
-};
+// Global debug tool for the user
+if (typeof window !== 'undefined') {
+  (window as any).supabaseStatus = () => {
+    return {
+      url: URL,
+      keyLength: KEY.length,
+      isConfigured: !!URL && URL.includes('supabase.co'),
+      origin: window.location.origin
+    };
+  };
+}
+
+export const isSupabaseConfigured = () => !!URL && URL.includes('supabase.co');
 
 export const testSupabaseConnection = async () => {
   try {
-    const { data, error } = await supabase.from('medications').select('count', { count: 'exact', head: true });
+    const { error } = await supabase.from('medications').select('count', { count: 'exact', head: true });
     if (error) throw error;
-    return { ok: true, message: 'Conectado.' };
+    return { ok: true, message: 'Conexão restabelecida!' };
   } catch (err: any) {
-    if (err.message?.includes('fetch')) {
-      return { ok: false, message: 'Erro de conexão/CORS. Verifique o status do Supabase.' };
-    }
-    return { ok: false, message: err.message };
+    console.error('[Supabase Test Error]', err);
+    return { ok: false, message: err.message || 'Falha na rede' };
   }
 };
 
 export const getSupabaseStatus = () => ({
   isConfigured: isSupabaseConfigured(),
-  url: SUPABASE_URL
+  url: URL
 });

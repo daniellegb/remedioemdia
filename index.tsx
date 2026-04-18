@@ -18,6 +18,11 @@ root.render(
 
 // Register Service Worker for Push Notifications
 if ('serviceWorker' in navigator) {
+  // KILL ROGUE SW
+  navigator.serviceWorker.getRegistrations().then(registrations => {
+    for(let registration of registrations) registration.unregister();
+  });
+
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js')
       .then(registration => {
