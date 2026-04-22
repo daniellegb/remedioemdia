@@ -126,6 +126,43 @@ export const getExpiryStatusType = (med: Medication, referenceDate: Date, thresh
 };
 
 /**
+ * Verifica se hoje é um dia de pausa para anticoncepcionais.
+ */
+export const isContraceptivePauseDay = (med: Medication, referenceDate: Date): boolean => {
+  if (med.usageCategory !== 'contraceptive' || !med.startDate || !med.contraceptiveType) {
+    return false;
+  }
+
+  const start = new Date(med.startDate + 'T00:00:00');
+  const current = new Date(referenceDate);
+  current.setHours(0, 0, 0, 0);
+
+  if (current < start) return false;
+
+  const diffTime = current.getTime() - start.getTime();
+  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+
+  let activeDays = 28;
+  let pauseDays = 0;
+
+  if (med.contraceptiveType === '21_7') {
+    activeDays = 21;
+    pauseDays = 7;
+  } else if (med.contraceptiveType === '24_4') {
+    activeDays = 24;
+    pauseDays = 4;
+  } else {
+    // Para 'daily' ou '28_continuous', não há pausa.
+    return false;
+  }
+
+  const cycleTotal = activeDays + pauseDays;
+  const dayInCycle = (diffDays % cycleTotal) + 1; // 1-indexed
+
+  return dayInCycle > activeDays;
+};
+
+/**
  * Calcula a próxima dose programada com base nas regras do medicamento.
  */
 export const getNextDoseAt = (med: Medication, referenceDate: Date = new Date()): string | null => {
@@ -146,6 +183,36 @@ export const getNextDoseAt = (med: Medication, referenceDate: Date = new Date())
   
   // Ordenar horários
   const sortedTimes = [...med.times].sort();
+
+  // Caso 3: Anticoncepcional (Respeitando Pausas)
+  if (med.usageCategory === 'contraceptive') {
+    // 1. Verificar se hoje ainda tem doses pendentes e NÃO é dia de pausa
+    if (!isContraceptivePauseDay(med, now)) {
+      for (const time of sortedTimes) {
+        const doseDateTime = new Date(`${todayStr}T${time}:00`);
+        if (doseDateTime > now && doseDateTime >= startDate) {
+          return doseDateTime.toISOString();
+        }
+      }
+    }
+
+    // 2. Procurar o próximo dia ativo
+    let checkDate = new Date(now);
+    checkDate.setDate(checkDate.getDate() + 1);
+    
+    // Limite de segurança para evitar loop infinito (máximo 60 dias de busca)
+    for (let i = 0; i < 60; i++) {
+      if (!isContraceptivePauseDay(med, checkDate)) {
+        const nextDateStr = checkDate.toISOString().split('T')[0];
+        const nextDose = new Date(`${nextDateStr}T${sortedTimes[0]}:00`);
+        if (nextDose >= startDate) {
+          return nextDose.toISOString();
+        }
+      }
+      checkDate.setDate(checkDate.getDate() + 1);
+    }
+    return null;
+  }
 
   // Caso 1: Contínuo ou Período
   if (med.usageCategory === 'continuous' || med.usageCategory === 'period') {
@@ -190,21 +257,11 @@ export const getNextDoseAt = (med: Medication, referenceDate: Date = new Date())
     const intervalsPassed = Math.floor(diffDays / intervalDays) + 1;
     
     const nextDate = new Date(start);
-    nextDate.setDate(nextDate.getDate() + (intervalsPassed * intervalDays));
-    return nextDate.toISOString();
-  }
-
-  // Caso 3: Anticoncepcional (Simplificado para o próximo horário)
-  if (med.usageCategory === 'contraceptive') {
-    // Lógica similar ao contínuo, mas ignorando pausas por enquanto (MVP)
-    for (const time of sortedTimes) {
-      const doseDateTime = new Date(`${todayStr}T${time}:00`);
-      if (doseDateTime > now) return doseDateTime.toISOString();
-    }
-    let nextDate = new Date(now);
-    nextDate.setDate(nextDate.getDate() + 1);
-    const nextDateStr = nextDate.toISOString().split('T')[0];
-    return new Date(`${nextDateStr}T${sortedTimes[0]}:00`).toISOString();
+    const daysToAdd = (intervalsPassed * intervalDays);
+    nextDate.setDate(nextDate.getDate() + daysToAdd);
+    
+    const result = nextDate.toISOString();
+    return isNaN(nextDate.getTime()) ? null : result;
   }
 
   return null;
