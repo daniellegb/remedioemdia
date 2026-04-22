@@ -2,7 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Medication, DoseEvent, Appointment, AppSettings, UsageCategory } from '../types';
 import { CheckCircle2, Circle, Calendar as CalendarIcon, ChevronRight, Clock as ClockIcon, AlertTriangle, XCircle, AlertCircle, Pill, AlertOctagon, TestTubeDiagonal, MapPin, FileText, Map, Navigation, ChevronDown, ChevronUp, Stethoscope, Trash2, Pencil } from 'lucide-react';
 import { calculateDaysOfStockLeft } from '../src/domain/stock';
-import { isMedicationExpired, getDaysUntilExpiry, calculatePeriodDoses } from '../src/domain/medicationRules';
+import { isMedicationExpired, getDaysUntilExpiry, calculatePeriodDoses, isContraceptivePauseDay } from '../src/domain/medicationRules';
 import { greetingService } from '../src/domain/greetings/greetingService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useAuth } from '../src/hooks/useAuth';
@@ -110,6 +110,11 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
 
       // Verifica se o medicamento está ativo hoje
       if (today < startDate) return;
+
+      // Regra de Pausa para Anticoncepcionais
+      if (med.usageCategory === 'contraceptive' && isContraceptivePauseDay(med, today)) {
+        return;
+      }
       
       // Para medicamentos "por período", não usamos a data final fixa, 
       // pois as doses podem ser deslocadas para dias extras.

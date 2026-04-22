@@ -16,7 +16,8 @@ import { consumptionService, mapDoseToCamelCase } from '../services/consumptionS
 import { appointmentService, mapAppToCamelCase } from '../services/appointmentService';
 import { userPreferencesService } from '../services/userPreferencesService';
 import { supabase } from '../lib/supabase';
-import { useLocation } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { useAuth } from '../hooks/useAuth';
 
 import { getUpdatedStock } from '../domain/stock';
 import { getNextDoseAt } from '../domain/medicationRules';
@@ -37,8 +38,9 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const MainApp: React.FC = () => {
-  const { user } = useAuthContext();
+  const { user, onboardingCompleted, loading: authLoading } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   
   const [meds, setMeds] = useState<Medication[]>([]);
   const [doses, setDoses] = useState<DoseEvent[]>([]);
@@ -51,7 +53,7 @@ const MainApp: React.FC = () => {
     if (location.state?.openAddMed) return 'add-med';
     return 'dashboard';
   });
-  const [loading, setLoading] = useState(true);
+  const [dataLoading, setDataLoading] = useState(true);
 
   useEffect(() => {
     if (location.state?.openAddMed) {
@@ -91,9 +93,18 @@ const MainApp: React.FC = () => {
     }
   }, [user, meds, settings.preNotificationMinutes]);
 
+  useEffect(() => {
+    if (!user) return;
+    
+    // Redirecionamento de segurança: se autenticado porém sem onboarding, vai para onboarding
+    if (onboardingCompleted === false && !authLoading && location.pathname !== '/onboarding') {
+      navigate('/onboarding', { replace: true });
+    }
+  }, [user, onboardingCompleted, authLoading, location.pathname, navigate]);
+
   const fetchData = useCallback(async () => {
     if (!user) return;
-    setLoading(true);
+    setDataLoading(true);
     try {
       // Fetch core data first
       const [medsData, dosesData, appointmentsData] = await Promise.all([
@@ -129,7 +140,7 @@ const MainApp: React.FC = () => {
     } catch (error) {
       console.error('Erro ao buscar dados principais:', error);
     } finally {
-      setLoading(false);
+      setDataLoading(false);
     }
   }, [user]);
 
@@ -179,7 +190,7 @@ const MainApp: React.FC = () => {
           const incomingUpdatedAt = prefs.updated_at || new Date(0).toISOString();
           const currentUpdatedAt = settingsRef.current.updatedAt || new Date(0).toISOString();
 
-          if (new Date(incomingUpdatedAt) > new Date(currentUpdatedAt)) {
+          if (new Date(incomingUpdatedAt).getTime() > new Date(currentUpdatedAt).getTime()) {
             const newSettings: AppSettings = {
               thresholdExpiring: prefs.threshold_expiring,
               thresholdRunningOut: prefs.threshold_running_out,
@@ -290,6 +301,7 @@ const MainApp: React.FC = () => {
       setView('meds');
     } catch (error) {
       console.error('Erro ao salvar medicamento:', error);
+      alert('Houve um erro ao salvar o medicamento. Por favor, verifique os dados e tente novamente.');
     }
   }, [user, meds]);
 
@@ -336,7 +348,7 @@ const MainApp: React.FC = () => {
       'Isso apagará todos os seus remédios e consultas. Esta ação não pode ser desfeita. Continuar?',
       async () => {
         try {
-          setLoading(true);
+          setDataLoading(true);
           
           // Deletar tudo do banco para este usuário
           await Promise.all([
@@ -357,7 +369,7 @@ const MainApp: React.FC = () => {
         } catch (error) {
           console.error('Erro ao limpar dados:', error);
         } finally {
-          setLoading(false);
+          setDataLoading(false);
         }
       }
     );
@@ -534,7 +546,7 @@ const MainApp: React.FC = () => {
       <Navigation currentView={view === 'add-appointment' ? 'appointments' : (view === 'add-med' ? 'meds' : view)} setView={setView} />
       <main className="flex-1 md:ml-64 p-4 md:p-10 transition-all duration-300">
         <div className="max-w-6xl mx-auto">
-          {loading ? (
+          {dataLoading ? (
             <div className="flex items-center justify-center h-64">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
             </div>

@@ -4,7 +4,7 @@ import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, LayoutGrid, List, 
 import { Appointment, Medication, DoseEvent } from '../types';
 import { isOutOfStockOnDate } from '../src/domain/stock';
 import { isPastDate, isFutureDate, isTodayDate, getCalendarDisplayMode } from '../src/domain/calendarRules';
-import { isMedicationExpired, hasStock, calculatePeriodDoses } from '../src/domain/medicationRules';
+import { isMedicationExpired, hasStock, calculatePeriodDoses, isContraceptivePauseDay } from '../src/domain/medicationRules';
 import ConfirmationModal from './ConfirmationModal';
 
 type CalendarViewMode = 'monthly' | 'weekly';
@@ -114,6 +114,11 @@ const Calendar: React.FC<Props> = React.memo(({ appointments, meds, doses, onTog
       const diffTime = dateAtMidnight.getTime() - startAtMidnight.getTime();
       const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
       const interval = med.intervalDays || 1;
+      
+      // Regra de Pausa para Anticoncepcionais
+      if (med.usageCategory === 'contraceptive' && isContraceptivePauseDay(med, date)) {
+        return false;
+      }
       
       return diffDays % interval === 0;
     }).map(med => {

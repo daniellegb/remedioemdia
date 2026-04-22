@@ -8,7 +8,7 @@ export const mapMedToCamelCase = (med: any): Medication => ({
   dosage: med.dosage,
   unit: med.unit,
   usageCategory: med.usage_category,
-  dosesPerDay: med.doses_per_day,
+  dosesPerDay: med.doses_per_day ? (typeof med.doses_per_day === 'number' ? `${med.doses_per_day}x` : med.doses_per_day) : '1x',
   intervalDays: med.interval_days,
   times: med.times,
   intervalType: med.interval_type,
@@ -46,6 +46,9 @@ export const medicationService = {
   async createMedication(userId: string, data: Omit<Medication, 'id'>) {
     const nextDoseAt = getNextDoseAt(data as Medication);
     
+    // Sanitização para evitar erros de tipo no Supabase (colunas INTEGER vs strings '1x')
+    const dosesPerDayInt = data.dosesPerDay ? parseInt(data.dosesPerDay) : 1;
+    
     const { data: created, error } = await supabase
       .from('medications')
       .insert([{ 
@@ -53,7 +56,7 @@ export const medicationService = {
         dosage: data.dosage,
         unit: data.unit,
         usage_category: data.usageCategory,
-        doses_per_day: data.dosesPerDay,
+        doses_per_day: isNaN(dosesPerDayInt) ? null : dosesPerDayInt,
         interval_days: data.intervalDays,
         times: data.times,
         interval_type: data.intervalType,
@@ -84,7 +87,10 @@ export const medicationService = {
     if (data.dosage !== undefined) updateData.dosage = data.dosage;
     if (data.unit !== undefined) updateData.unit = data.unit;
     if (data.usageCategory !== undefined) updateData.usage_category = data.usageCategory;
-    if (data.dosesPerDay !== undefined) updateData.doses_per_day = data.dosesPerDay;
+    if (data.dosesPerDay !== undefined) {
+      const dosesPerDayInt = parseInt(data.dosesPerDay);
+      updateData.doses_per_day = isNaN(dosesPerDayInt) ? null : dosesPerDayInt;
+    }
     if (data.intervalDays !== undefined) updateData.interval_days = data.intervalDays;
     if (data.times !== undefined) updateData.times = data.times;
     if (data.intervalType !== undefined) updateData.interval_type = data.intervalType;
