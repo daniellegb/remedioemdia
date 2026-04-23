@@ -9,6 +9,7 @@ interface AuthContextType {
   session: Session | null;
   profile: Profile | null;
   loading: boolean;
+  profileLoaded: boolean;
   signOut: () => Promise<void>;
   signIn: (email: string, password: string) => Promise<any>;
   signUp: (email: string, password: string) => Promise<any>;
@@ -25,6 +26,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
+  const [profileLoaded, setProfileLoaded] = useState(false);
   const profileRef = React.useRef<Profile | null>(null);
 
   useEffect(() => {
@@ -46,11 +48,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       if (error) {
         console.error('Error fetching profile:', error);
+        setProfileLoaded(true);
         return;
       }
       setProfile(data as Profile);
     } catch (err) {
       console.error('Unexpected error fetching profile:', err);
+    } finally {
+      setProfileLoaded(true);
     }
   };
 
@@ -104,7 +109,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Update session/user and fetch profile
       // We use a functional update or comparison to avoid redundant renders if the user is the same
       setSession(prev => (prev?.access_token === currentSession?.access_token ? prev : currentSession));
-      setUser(prev => (prev?.id === newUser?.id ? prev : newUser));
+      setUser(prev => {
+        if (prev?.id !== newUser?.id) {
+          if (newUser) setProfileLoaded(false);
+          return newUser;
+        }
+        return prev;
+      });
       
       if (newUser) {
         // Only trigger profile fetch if it is a major transition or if we don't have a profile yet
@@ -120,18 +131,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [isConfigured]);
 
   const signIn = async (email: string, password: string) => {
+    setProfileLoaded(false);
     const { data, error } = await authService.signIn(email, password);
     if (error) throw error;
     return data;
   };
 
   const signUp = async (email: string, password: string) => {
+    setProfileLoaded(false);
     const { data, error } = await authService.signUp(email, password);
     if (error) throw error;
     return data;
   };
 
   const signInWithGoogle = async () => {
+    setProfileLoaded(false);
     const { data, error } = await authService.signInWithGoogle();
     if (error) throw error;
     return data;
@@ -167,6 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     session,
     profile,
     loading,
+    profileLoaded,
     signOut,
     signIn,
     signUp,
