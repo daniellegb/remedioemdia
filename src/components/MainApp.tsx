@@ -93,15 +93,6 @@ const MainApp: React.FC = () => {
     }
   }, [user, meds, settings.preNotificationMinutes]);
 
-  useEffect(() => {
-    if (!user) return;
-    
-    // Redirecionamento de segurança: se autenticado porém sem onboarding, vai para onboarding
-    if (onboardingCompleted === false && !authLoading && location.pathname !== '/onboarding') {
-      navigate('/onboarding', { replace: true });
-    }
-  }, [user, onboardingCompleted, authLoading, location.pathname, navigate]);
-
   const fetchData = useCallback(async () => {
     if (!user) return;
     setDataLoading(true);
@@ -555,7 +546,7 @@ const MainApp: React.FC = () => {
         } else {
           setIsDataStuck(true);
         }
-      }, 10000); // 10 segundos de tolerância para sincronização de dados
+      }, 5000); // 5 segundos de tolerância para sincronização de dados
     } else {
       setIsDataStuck(false);
     }
@@ -570,6 +561,7 @@ const MainApp: React.FC = () => {
           {dataLoading ? (
             <div className="flex flex-col items-center justify-center p-12 text-center h-64">
               <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-6"></div>
+              <p className="text-slate-500 font-bold text-sm mb-8 animate-pulse font-mono uppercase tracking-widest">Carregando...</p>
               {isDataStuck && (
                 <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
                   <p className="text-xs text-slate-400 mb-3 font-medium">Sincronizando dados...</p>

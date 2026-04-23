@@ -141,11 +141,31 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
     if (formData.usageCategory === 'period') {
       finalEndDate = calculateEndDate(formData.startDate, formData.durationDays);
     }
+    
+    // Sanitização de campos para cada categoria
+    const sanitizedData = { ...formData };
+    
+    if (formData.usageCategory === 'prn') {
+      // PRN não tem horários nem intervalos fixos
+      sanitizedData.times = ['08:00']; // Padronizamos um horário apenas para evitar nulos se o banco exigir
+      sanitizedData.dosesPerDay = '1x';
+      sanitizedData.intervalDays = 1;
+    } else if (formData.usageCategory === 'intervals') {
+      // Grandes intervalos usa apenas o primeiro horário
+      sanitizedData.times = [formData.times[0] || '08:00'];
+      sanitizedData.dosesPerDay = '1x';
+    } else if (formData.usageCategory === 'contraceptive') {
+      // Anticoncepcionais usa apenas o primeiro horário
+      sanitizedData.times = [formData.times[0] || '08:00'];
+      sanitizedData.dosesPerDay = '1x';
+      sanitizedData.intervalDays = 1;
+    }
+
     onSave({
       id: initialData ? initialData.id : Math.random().toString(36).substr(2, 9),
-      ...formData,
+      ...sanitizedData,
       endDate: finalEndDate,
-      frequency: 0
+      frequency: 1 // Usamos 1 como padrão para compatibilidade
     });
   };
 
@@ -302,12 +322,12 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in fade-in">
                 <div className="space-y-2">
                   <label className="text-xs font-bold text-slate-400 uppercase tracking-widest flex items-center gap-2"><CalendarIcon size={12}/> Data de Início</label>
-                  <input type="date" required className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-bold" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
+                  <input type="date" required={!isPRN} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-bold shadow-sm" value={formData.startDate} onChange={e => setFormData({...formData, startDate: e.target.value})} />
                 </div>
                 {isPeriod && (
                   <div className="space-y-2 animate-in fade-in zoom-in-95">
                     <label className="text-xs font-bold text-slate-400 uppercase tracking-widest">Duração (Dias)</label>
-                    <input type="number" min="1" className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-bold" value={formData.durationDays} onChange={e => setFormData({...formData, durationDays: parseInt(e.target.value) || 1})} />
+                    <input type="number" min="1" required={isPeriod} className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 text-sm font-bold shadow-sm" value={formData.durationDays} onChange={e => setFormData({...formData, durationDays: parseInt(e.target.value) || 1})} />
                   </div>
                 )}
               </div>
