@@ -541,14 +541,50 @@ const MainApp: React.FC = () => {
     }
   };
 
+  const [isDataStuck, setIsDataStuck] = useState(false);
+  useEffect(() => {
+    let timer: number;
+    if (dataLoading) {
+      timer = window.setTimeout(() => {
+        const autoResetDone = sessionStorage.getItem('auto_reset_data_stuck');
+        if (!autoResetDone) {
+          sessionStorage.setItem('auto_reset_data_stuck', 'true');
+          console.warn('[Watchdog] Carregamento de dados demorando muito. Limpando cache local...');
+          localStorage.clear();
+          window.location.reload();
+        } else {
+          setIsDataStuck(true);
+        }
+      }, 10000); // 10 segundos de tolerância para sincronização de dados
+    } else {
+      setIsDataStuck(false);
+    }
+    return () => window.clearTimeout(timer);
+  }, [dataLoading]);
+
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
       <Navigation currentView={view === 'add-appointment' ? 'appointments' : (view === 'add-med' ? 'meds' : view)} setView={setView} />
       <main className="flex-1 md:ml-64 p-4 md:p-10 transition-all duration-300">
         <div className="max-w-6xl mx-auto">
           {dataLoading ? (
-            <div className="flex items-center justify-center h-64">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+            <div className="flex flex-col items-center justify-center p-12 text-center h-64">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-6"></div>
+              {isDataStuck && (
+                <div className="animate-in fade-in slide-in-from-bottom-2 duration-500">
+                  <p className="text-xs text-slate-400 mb-3 font-medium">Sincronizando dados...</p>
+                  <button 
+                    onClick={() => {
+                      localStorage.clear();
+                      sessionStorage.clear();
+                      window.location.reload();
+                    }}
+                    className="px-4 py-2 bg-white border border-slate-200 text-slate-500 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-slate-50 transition-all shadow-sm"
+                  >
+                    Resetar App
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             renderView()
