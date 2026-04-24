@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Pill, Mail, Lock, Loader2, AlertTriangle, Activity, Wifi, WifiOff } from 'lucide-react';
+import { Pill, Mail, Lock, Loader2, AlertTriangle, Activity, Wifi, WifiOff, Bug } from 'lucide-react';
 import { testSupabaseConnection } from '../lib/supabase';
 
 const Login: React.FC = () => {
@@ -12,6 +12,7 @@ const Login: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
   const [connStatus, setConnStatus] = useState<{ loading: boolean; ok?: boolean; message?: string }>({ loading: false });
+  const [showDebugInfo, setShowDebugInfo] = useState(false);
 
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading, signIn, signUp, signInWithGoogle, isConfigured } = useAuth();
@@ -121,46 +122,6 @@ const Login: React.FC = () => {
           </p>
         </div>
 
-        {/* Diagnostic Button */}
-        <div className="mb-8 p-4 bg-slate-50 border border-slate-100 rounded-2xl">
-          <div className="flex items-center justify-between mb-2">
-            <div className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest">
-              <Activity size={14} />
-              Status do Servidor
-            </div>
-            <button 
-              onClick={checkConnection}
-              disabled={connStatus.loading}
-              className="text-[10px] font-black text-blue-600 uppercase hover:underline disabled:opacity-50"
-            >
-              Testar Agora
-            </button>
-          </div>
-          
-          {connStatus.loading ? (
-            <div className="flex items-center gap-2 text-slate-400 text-xs italic">
-              <Loader2 size={12} className="animate-spin" /> Verificando conexão...
-            </div>
-          ) : connStatus.ok === true ? (
-            <div className="flex items-center gap-2 text-green-600 text-xs font-bold">
-              <Wifi size={14} /> Conectado ao Supabase!
-            </div>
-          ) : connStatus.ok === false ? (
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 text-red-600 text-xs font-bold">
-                <WifiOff size={14} /> Falha na Conexão
-              </div>
-              <p className="text-[10px] text-slate-500 leading-tight">
-                {connStatus.message}
-              </p>
-            </div>
-          ) : (
-            <p className="text-[10px] text-slate-400 italic">
-              Clique acima para testar a comunicação com o banco de dados.
-            </p>
-          )}
-        </div>
-
         {/* Formulário deve usar <form onSubmit={handleLogin}> */}
         <form onSubmit={handleLogin} className="space-y-6">
           <div className="space-y-2">
@@ -236,7 +197,7 @@ const Login: React.FC = () => {
           Entrar com Google
         </button>
 
-        <div className="mt-8 text-center">
+        <div className="mt-8 text-center relative">
           <button
             onClick={() => {
               setIsSignUp(!isSignUp);
@@ -247,7 +208,59 @@ const Login: React.FC = () => {
           >
             {isSignUp ? 'Já tem uma conta? Entre aqui' : 'Não tem conta? Cadastre-se'}
           </button>
+
+          <button
+            type="button"
+            onClick={() => setShowDebugInfo(!showDebugInfo)}
+            className="absolute -bottom-4 right-0 p-2 text-slate-200 hover:text-slate-400 transition-colors"
+            title="Debug"
+          >
+            <Bug size={14} />
+          </button>
         </div>
+
+        {/* Diagnostic Button - Revealed by Bug icon */}
+        {showDebugInfo && (
+          <div className="mt-8 p-4 bg-slate-50 border border-slate-100 rounded-2xl animate-in fade-in slide-in-from-top-2">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2 text-xs font-black text-slate-400 uppercase tracking-widest">
+                <Activity size={14} />
+                Status do Servidor
+              </div>
+              <button 
+                type="button"
+                onClick={checkConnection}
+                disabled={connStatus.loading}
+                className="text-[10px] font-black text-blue-600 uppercase hover:underline disabled:opacity-50"
+              >
+                Testar Agora
+              </button>
+            </div>
+            
+            {connStatus.loading ? (
+              <div className="flex items-center gap-2 text-slate-400 text-xs italic">
+                <Loader2 size={12} className="animate-spin" /> Verificando conexão...
+              </div>
+            ) : connStatus.ok === true ? (
+              <div className="flex items-center gap-2 text-green-600 text-xs font-bold">
+                <Wifi size={14} /> Conectado ao Supabase!
+              </div>
+            ) : connStatus.ok === false ? (
+              <div className="space-y-1">
+                <div className="flex items-center gap-2 text-red-600 text-xs font-bold">
+                  <WifiOff size={14} /> Falha na Conexão
+                </div>
+                <p className="text-[10px] text-slate-500 leading-tight">
+                  {connStatus.message}
+                </p>
+              </div>
+            ) : (
+              <p className="text-[10px] text-slate-400 italic">
+                Clique acima para testar a comunicação com o banco de dados.
+              </p>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

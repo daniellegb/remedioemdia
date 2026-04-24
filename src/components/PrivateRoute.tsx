@@ -48,7 +48,7 @@ const PrivateRoute: React.FC = () => {
               }}
               className="w-full px-6 py-4 bg-white border-2 border-slate-200 text-slate-600 rounded-[24px] font-bold shadow-sm hover:bg-slate-50 active:scale-95 transition-all"
             >
-              Limpar Tudo e Reiniciar
+              Sair e Reiniciar
             </button>
           </div>
         )}

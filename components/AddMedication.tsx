@@ -13,6 +13,7 @@ interface Props {
 }
 
 const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initialCategory }) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     dosage: '',
@@ -37,9 +38,9 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
   useEffect(() => {
     if (initialData) {
       setFormData({
-        name: initialData.name,
-        dosage: initialData.dosage,
-        unit: initialData.unit,
+        name: initialData.name || '',
+        dosage: initialData.dosage || '',
+        unit: initialData.unit || 'comprimido',
         usageCategory: initialData.usageCategory || 'continuous',
         dosesPerDay: initialData.dosesPerDay || '1x',
         intervalDays: initialData.intervalDays || 1,
@@ -50,11 +51,11 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
         maxDosesPerDay: initialData.maxDosesPerDay || 1,
         startDate: initialData.startDate || new Date().toLocaleDateString('en-CA'),
         endDate: initialData.endDate || '',
-        totalStock: initialData.totalStock,
-        currentStock: initialData.currentStock,
+        totalStock: initialData.totalStock ?? 30,
+        currentStock: initialData.currentStock ?? 30,
         expiryDate: initialData.expiryDate || '',
         notes: initialData.notes || '',
-        color: initialData.color
+        color: initialData.color || COLORS[0]
       });
     }
   }, [initialData]);
@@ -135,38 +136,42 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
     return d.toLocaleDateString('en-CA');
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    let finalEndDate = formData.endDate;
-    if (formData.usageCategory === 'period') {
-      finalEndDate = calculateEndDate(formData.startDate, formData.durationDays);
-    }
-    
-    // Sanitização de campos para cada categoria
-    const sanitizedData = { ...formData };
-    
-    if (formData.usageCategory === 'prn') {
-      // PRN não tem horários nem intervalos fixos
-      sanitizedData.times = ['08:00']; // Padronizamos um horário apenas para evitar nulos se o banco exigir
-      sanitizedData.dosesPerDay = '1x';
-      sanitizedData.intervalDays = 1;
-    } else if (formData.usageCategory === 'intervals') {
-      // Grandes intervalos usa apenas o primeiro horário
-      sanitizedData.times = [formData.times[0] || '08:00'];
-      sanitizedData.dosesPerDay = '1x';
-    } else if (formData.usageCategory === 'contraceptive') {
-      // Anticoncepcionais usa apenas o primeiro horário
-      sanitizedData.times = [formData.times[0] || '08:00'];
-      sanitizedData.dosesPerDay = '1x';
-      sanitizedData.intervalDays = 1;
-    }
+    if (isSubmitting) return;
 
-    onSave({
-      id: initialData ? initialData.id : Math.random().toString(36).substr(2, 9),
-      ...sanitizedData,
-      endDate: finalEndDate,
-      frequency: 1 // Usamos 1 como padrão para compatibilidade
-    });
+    try {
+      setIsSubmitting(true);
+      let finalEndDate = formData.endDate;
+      if (formData.usageCategory === 'period') {
+        finalEndDate = calculateEndDate(formData.startDate, formData.durationDays);
+      }
+      
+      const sanitizedData = { ...formData };
+      
+      if (formData.usageCategory === 'prn') {
+        sanitizedData.times = ['08:00'];
+        sanitizedData.dosesPerDay = '1x';
+        sanitizedData.intervalDays = 1;
+      } else if (formData.usageCategory === 'intervals') {
+        sanitizedData.times = [formData.times[0] || '08:00'];
+        sanitizedData.dosesPerDay = '1x';
+      } else if (formData.usageCategory === 'contraceptive') {
+        sanitizedData.times = [formData.times[0] || '08:00'];
+        sanitizedData.dosesPerDay = '1x';
+        sanitizedData.intervalDays = 1;
+      }
+
+      await onSave({
+        id: initialData?.id || Math.random().toString(36).substr(2, 9),
+        ...sanitizedData,
+        endDate: finalEndDate,
+        frequency: 1 
+      });
+    } catch (error) {
+      console.error('Erro ao processar envio do formulário:', error);
+      setIsSubmitting(false);
+    }
   };
 
   const renderPreview = () => {
@@ -213,7 +218,7 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
   return (
     <div className="max-w-2xl mx-auto pb-24 md:pb-10">
       <div className="flex items-center gap-4 mb-8">
-        <button onClick={onCancel} className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 transition-colors">
+        <button type="button" onClick={onCancel} className="p-2 hover:bg-slate-100 rounded-xl text-slate-500 transition-colors">
           <ChevronLeft size={24} />
         </button>
         <h2 className="text-2xl font-bold">{initialData ? 'Editar Medicamento' : 'Novo Medicamento'}</h2>
@@ -475,8 +480,23 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
           <textarea className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none resize-none transition-all" rows={3} placeholder="Instruções extras (Ex: Ingerir com água)" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} />
         </div>
 
-        <button type="submit" className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl hover:bg-blue-700 hover:shadow-blue-200 transition-all active:scale-[0.98]">
-          {initialData ? 'Salvar Alterações' : 'Finalizar Cadastro'}
+        <button 
+          type="submit" 
+          disabled={isSubmitting}
+          className={`w-full py-4 rounded-2xl font-bold text-lg shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-3 ${
+            isSubmitting 
+              ? 'bg-slate-400 text-white cursor-not-allowed' 
+              : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-blue-200'
+          }`}
+        >
+          {isSubmitting ? (
+            <>
+              <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              <span>Salvando...</span>
+            </>
+          ) : (
+            <span>{initialData ? 'Salvar Alterações' : 'Finalizar Cadastro'}</span>
+          )}
         </button>
       </form>
     </div>
