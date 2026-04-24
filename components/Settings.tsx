@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User, Bell, LogOut, ChevronRight, Database, Trash2, AlertTriangle, CalendarClock, ShieldAlert, RefreshCw, Smile, Smartphone, Send, Bug } from 'lucide-react';
+import { UserAvatar } from '../src/components/UserAvatar';
 import { AppSettings } from '../types';
 import { useAuth } from '../src/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
@@ -154,17 +155,12 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
   return (
     <div className="space-y-8 pb-20 md:pb-0 max-w-2xl mx-auto">
       <header className="flex flex-col items-center py-6">
-        <div className="w-24 h-24 bg-gradient-to-tr from-blue-600 to-blue-400 rounded-full p-1 shadow-xl shadow-blue-100 mb-4 flex items-center justify-center overflow-hidden border-4 border-white">
-          {user?.user_metadata?.avatar_url ? (
-            <img 
-              src={user.user_metadata.avatar_url} 
-              alt="Profile" 
-              className="w-full h-full object-cover"
-            />
-          ) : (
-            <Smile size={48} className="text-white" />
-          )}
-        </div>
+        <UserAvatar 
+          src={user?.user_metadata?.avatar_url} 
+          name={displayName} 
+          size="xl" 
+          className="mb-4 border-4 border-white shadow-xl shadow-blue-100"
+        />
         <h2 className="text-2xl font-bold">{displayName}</h2>
         <p className="text-slate-500">{user?.email || "email@exemplo.com"}</p>
       </header>

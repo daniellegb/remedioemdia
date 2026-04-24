@@ -6,6 +6,7 @@ import { isMedicationExpired, getDaysUntilExpiry, calculatePeriodDoses, isContra
 import { greetingService } from '../src/domain/greetings/greetingService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useAuth } from '../src/hooks/useAuth';
+import { UserAvatar } from '../src/components/UserAvatar';
 
 interface Props {
   meds: Medication[];
@@ -251,14 +252,28 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
 
   return (
     <div className="space-y-8 pb-20 md:pb-0">
-      <header>
-        <h2 className="text-xl sm:text-3xl font-bold text-slate-900 tracking-tight truncate sm:whitespace-normal">{welcomeMessage}</h2>
-        <p className="text-slate-500">Hoje é dia {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}</p>
-        {greeting && (
-          <p className="text-sm text-slate-400 mt-2 font-medium italic">
-            {greeting}
-          </p>
-        )}
+      <header className="flex items-start justify-between gap-4">
+        <div className="min-w-0 flex-1">
+          <h2 className="text-xl sm:text-3xl font-bold text-slate-900 tracking-tight truncate sm:whitespace-normal">{welcomeMessage}</h2>
+          <p className="text-slate-500">Hoje é dia {new Date().toLocaleDateString('pt-BR', { day: 'numeric', month: 'long' })}</p>
+          {greeting && (
+            <p className="text-sm text-slate-400 mt-2 font-medium italic">
+              {greeting}
+            </p>
+          )}
+        </div>
+        <UserAvatar 
+          src={user?.user_metadata?.avatar_url} 
+          name={profile?.name || user?.user_metadata?.full_name} 
+          size="sm"
+          className="sm:hidden"
+        />
+        <UserAvatar 
+          src={user?.user_metadata?.avatar_url} 
+          name={profile?.name || user?.user_metadata?.full_name} 
+          size="md"
+          className="hidden sm:flex"
+        />
       </header>
 
       {/* Stats Summary */}
