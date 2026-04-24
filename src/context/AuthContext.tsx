@@ -73,12 +73,29 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Wrap initialization in a safe block
     const initAuth = async () => {
       try {
+        console.log('[Auth] Initializing session...');
         const { data: { session }, error } = await supabase.auth.getSession();
+        
         if (error) {
-          console.error('Session error:', error);
-          if (error.message?.toLowerCase().includes('refresh token')) {
-            await authService.signOut();
+          console.error('[Auth] Session error:', error);
+          
+          // Se o erro for relacionado a refresh token, forçar logout total
+          if (
+            error.message?.toLowerCase().includes('refresh token') || 
+            error.message?.toLowerCase().includes('not found') ||
+            error.status === 400
+          ) {
+            console.warn('[Auth] Critical session error, clearing local state...');
+            localStorage.removeItem('med-clean-v3');
+            try {
+              await supabase.auth.signOut();
+            } catch (e) {
+              console.error('[Auth] Error calling signOut during cleanup:', e);
+            }
+            window.location.href = '/login';
+            return;
           }
+          
           setLoading(false);
           return;
         }
@@ -91,7 +108,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await fetchProfile(currentUser.id);
         }
       } catch (err) {
-        console.error('Initial session check error:', err);
+        console.error('[Auth] Unexpected initialization error:', err);
       } finally {
         setLoading(false);
       }

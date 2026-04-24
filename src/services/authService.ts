@@ -18,8 +18,15 @@ export const authService = {
   async signOut() {
     try {
       await supabase.auth.signOut();
-    } catch (error) {
+    } catch (error: any) {
       console.error('authService.signOut error:', error);
+      // fallback: forçar limpeza se houver erro ou se for erro de refresh token
+      if (error.message?.toLowerCase().includes('refresh token') || error.message?.toLowerCase().includes('not found')) {
+        localStorage.removeItem('med-clean-v3');
+      }
+    } finally {
+      // Garantir limpeza no storage key configurado
+      localStorage.removeItem('med-clean-v3');
     }
   },
 
