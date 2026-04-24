@@ -374,14 +374,6 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
                   </div>
                 )}
                 
-                <button
-                  type="button"
-                  onClick={() => setShowDebug(!showDebug)}
-                  className={`p-2 transition-colors rounded-xl ${showDebug ? 'text-blue-600 bg-blue-50' : 'text-slate-200 hover:text-slate-400'}`}
-                >
-                  <Bug size={14} />
-                </button>
-
                 <button 
                   onClick={handleTogglePush}
                   disabled={isPushLoading}
@@ -445,10 +437,21 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
         </button>
       </div>
 
-      <p className="text-center text-xs text-slate-400 pb-10">
-        Versão 1.3.1 (Status Inteligente)<br/>
-        Remédio em Dia - Gestão de Saúde Simplificada
-      </p>
+      <div className="mt-8 text-center relative flex flex-col items-center gap-4">
+        <p className="text-xs text-slate-400">
+          Versão 1.3.1 (Status Inteligente)<br/>
+          Remédio em Dia - Gestão de Saúde Simplificada
+        </p>
+
+        <button
+          type="button"
+          onClick={() => setShowDebug(!showDebug)}
+          className={`p-2 transition-colors rounded-xl ${showDebug ? 'text-blue-600 bg-blue-50' : 'text-slate-200 hover:text-slate-400'}`}
+          title="Debug Mode"
+        >
+          <Bug size={14} />
+        </button>
+      </div>
 
       <ConfirmationModal
         isOpen={showResetConfirm}
