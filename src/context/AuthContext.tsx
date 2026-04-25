@@ -36,7 +36,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isConfigured = isSupabaseConfigured();
 
   const isAdmin = profile?.role === 'admin';
-  const isPremium = profile?.plan === 'premium' || profile?.lifetime_access === true;
+  const isPremium = 
+    (profile?.plan === 'premium' && profile?.subscription_status === 'active') || 
+    profile?.subscription_status === 'trial' || 
+    profile?.lifetime_access === true;
 
   const fetchProfile = async (userId: string) => {
     try {

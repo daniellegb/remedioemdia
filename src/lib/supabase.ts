@@ -6,7 +6,9 @@ const clean = (val: any) => typeof val === 'string' ? val.replace(/[\u200B-\u200
 const URL = clean(import.meta.env.VITE_SUPABASE_URL);
 const KEY = clean(import.meta.env.VITE_SUPABASE_ANON_KEY);
 
-console.log('[Supabase Debug] URL detectada:', `"${URL}"`);
+if (import.meta.env.DEV) {
+  console.log('[Supabase] Rodando em Ambiente de Desenvolvimento');
+}
 
 export const supabase = createClient(
   URL || 'https://placeholder.supabase.co',

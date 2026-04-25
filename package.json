@@ -7,7 +7,9 @@
     "dev": "vite",
     "build": "vite build",
     "lint": "tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "db:dev": "supabase db push --db-url $SUPABASE_DB_URL_DEV",
+    "db:prod": "supabase db push --db-url $SUPABASE_DB_URL_PROD"
   },
   "dependencies": {
     "@google/genai": "^1.41.0",

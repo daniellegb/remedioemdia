@@ -78,8 +78,12 @@ export interface Profile {
   onboarding_completed: boolean;
   role: 'user' | 'admin';
   plan: 'free' | 'premium';
+  subscription_status: 'active' | 'trial' | 'expired' | 'canceled';
+  trial_ends_at?: string;
+  subscription_ends_at?: string;
   lifetime_access: boolean;
   created_at?: string;
+  updated_at?: string;
 }
 
 export interface UserPreferences {

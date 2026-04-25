@@ -1,0 +1,30 @@
+name: Supabase Migrations Deploy
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+    paths:
+      - 'supabase/migrations/**'
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Deploy to DEV
+        if: github.ref == 'refs/heads/dev'
+        run: |
+          supabase db push --db-url "${{ secrets.SUPABASE_DB_URL_DEV }}"
+        
+      - name: Deploy to PROD
+        if: github.ref == 'refs/heads/main'
+        run: |
+          supabase db push --db-url "${{ secrets.SUPABASE_DB_URL_PROD }}"
