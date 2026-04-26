@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - main
+      - master
       - dev
     paths:
       - 'supabase/migrations/**'
@@ -19,12 +20,15 @@ jobs:
         with:
           version: latest
 
+      - name: List Migrations
+        run: ls -R supabase/migrations/
+
       - name: Deploy to DEV
         if: github.ref == 'refs/heads/dev'
         run: |
           supabase db push --db-url "${{ secrets.SUPABASE_DB_URL_DEV }}"
         
       - name: Deploy to PROD
-        if: github.ref == 'refs/heads/main'
+        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
         run: |
           supabase db push --db-url "${{ secrets.SUPABASE_DB_URL_PROD }}"
