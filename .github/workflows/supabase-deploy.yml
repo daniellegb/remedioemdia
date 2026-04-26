@@ -9,6 +9,9 @@ on:
     paths:
       - 'supabase/migrations/**'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -20,15 +23,24 @@ jobs:
         with:
           version: latest
 
-      - name: List Migrations
-        run: ls -R supabase/migrations/
-
       - name: Deploy to DEV
         if: github.ref == 'refs/heads/dev'
+        env:
+          DB_URL_DEV: ${{ secrets.SUPABASE_DB_URL_DEV }}
         run: |
-          supabase db push --db-url "${{ secrets.SUPABASE_DB_URL_DEV }}"
+          if [ -z "$DB_URL_DEV" ]; then
+            echo "Error: SUPABASE_DB_URL_DEV secret is not set"
+            exit 1
+          fi
+          supabase db push --db-url "$DB_URL_DEV"
         
       - name: Deploy to PROD
-        if: (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+        if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
+        env:
+          DB_URL_PROD: ${{ secrets.SUPABASE_DB_URL_PROD }}
         run: |
-          supabase db push --db-url "${{ secrets.SUPABASE_DB_URL_PROD }}"
+          if [ -z "$DB_URL_PROD" ]; then
+            echo "Error: SUPABASE_DB_URL_PROD secret is not set"
+            exit 1
+          fi
+          supabase db push --db-url "$DB_URL_PROD"
