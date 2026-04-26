@@ -9,6 +9,9 @@ on:
     paths:
       - 'supabase/migrations/**'
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -20,27 +23,24 @@ jobs:
         with:
           version: latest
 
-      - name: Verify Supabase CLI
-        run: supabase --version
-
       - name: Deploy to DEV
         if: github.ref == 'refs/heads/dev'
         env:
-          DB_URL_DEV: ${{ secrets.SUPABASE_DB_URL_DEV }}
+          DB_URL: ${{ secrets.SUPABASE_DB_URL_DEV }}
         run: |
-          if [ -z "$DB_URL_DEV" ]; then
-            echo "::error::SUPABASE_DB_URL_DEV secret is missing! Go to Repository Settings > Secrets > Actions and add it."
+          if [ -z "$DB_URL" ]; then
+            echo "::error title=Secret Missing::A secret SUPABASE_DB_URL_DEV não foi encontrada nas configurações do seu repositório GitHub."
             exit 1
           fi
-          supabase db push --db-url "$DB_URL_DEV"
+          supabase db push --db-url "$DB_URL"
         
       - name: Deploy to PROD
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         env:
-          DB_URL_PROD: ${{ secrets.SUPABASE_DB_URL_PROD }}
+          DB_URL: ${{ secrets.SUPABASE_DB_URL_PROD }}
         run: |
-          if [ -z "$DB_URL_PROD" ]; then
-            echo "::error::SUPABASE_DB_URL_PROD secret is missing! Go to Repository Settings > Secrets > Actions and add it."
+          if [ -z "$DB_URL" ]; then
+            echo "::error title=Secret Missing::A secret SUPABASE_DB_URL_PROD não foi encontrada nas configurações do seu repositório GitHub."
             exit 1
           fi
-          supabase db push --db-url "$DB_URL_PROD"
+          supabase db push --db-url "$DB_URL"
