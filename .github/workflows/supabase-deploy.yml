@@ -29,10 +29,11 @@ jobs:
           DB_URL: ${{ secrets.SUPABASE_DB_URL_DEV }}
         run: |
           if [ -z "$DB_URL" ]; then
-            echo "::error title=Secret Missing::A secret SUPABASE_DB_URL_DEV não foi encontrada nas configurações do seu repositório GitHub."
+            echo "::error title=Secret Missing::A secret SUPABASE_DB_URL_DEV não foi encontrada."
             exit 1
           fi
-          supabase db push --db-url "$DB_URL"
+          # Adicionado --debug para capturar detalhes da falha de conexão
+          supabase db push --db-url "$DB_URL" --debug
         
       - name: Deploy to PROD
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
@@ -40,7 +41,8 @@ jobs:
           DB_URL: ${{ secrets.SUPABASE_DB_URL_PROD }}
         run: |
           if [ -z "$DB_URL" ]; then
-            echo "::error title=Secret Missing::A secret SUPABASE_DB_URL_PROD não foi encontrada nas configurações do seu repositório GitHub."
+            echo "::error title=Secret Missing::A secret SUPABASE_DB_URL_PROD não foi encontrada."
             exit 1
           fi
-          supabase db push --db-url "$DB_URL"
+          # Adicionado --debug para capturar detalhes da falha de conexão
+          supabase db push --db-url "$DB_URL" --debug
