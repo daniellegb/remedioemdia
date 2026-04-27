@@ -6,8 +6,6 @@ on:
       - main
       - master
       - dev
-    paths:
-      - 'supabase/migrations/**'
 
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
@@ -16,7 +14,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout Repository
+        uses: actions/checkout@v4
 
       - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
@@ -28,21 +27,21 @@ jobs:
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL_DEV }}
         run: |
+          echo "🚀 Iniciando deploy para o ambiente de DESENVOLVIMENTO (DEV)..."
           if [ -z "$DB_URL" ]; then
-            echo "::error title=Secret Missing::A secret SUPABASE_DB_URL_DEV não foi encontrada."
+            echo "::error title=Secret Missing::A secret SUPABASE_DB_URL_DEV não foi configurada no GitHub Actions."
             exit 1
           fi
-          # Adicionado --debug para capturar detalhes da falha de conexão
-          supabase db push --db-url "$DB_URL" --debug
-        
+          supabase db push --db-url "$DB_URL" --include-all --debug
+
       - name: Deploy to PROD
         if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master'
         env:
           DB_URL: ${{ secrets.SUPABASE_DB_URL_PROD }}
         run: |
+          echo "🚀 Iniciando deploy para o ambiente de PRODUÇÃO (PROD)..."
           if [ -z "$DB_URL" ]; then
-            echo "::error title=Secret Missing::A secret SUPABASE_DB_URL_PROD não foi encontrada."
+            echo "::error title=Secret Missing::A secret SUPABASE_DB_URL_PROD não foi configurada no GitHub Actions."
             exit 1
           fi
-          # Adicionado --debug para capturar detalhes da falha de conexão
-          supabase db push --db-url "$DB_URL" --debug
+          supabase db push --db-url "$DB_URL" --include-all --debug
