@@ -1,2 +1,0 @@
--- Apenas um comentário ou uma tabela temporária de teste
-DELETE TABLE public.teste_conexao_tres (id uuid primary key default gen_random_uuid());

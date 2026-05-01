@@ -3,10 +3,12 @@ import { createClient } from '@supabase/supabase-js';
 // Deep clean of environment variables (removing invisible characters)
 const clean = (val: any) => typeof val === 'string' ? val.replace(/[\u200B-\u200D\uFEFF]/g, '').trim() : '';
 
-const URL = clean(import.meta.env.VITE_SUPABASE_URL);
-const KEY = clean(import.meta.env.VITE_SUPABASE_ANON_KEY);
+const URL = clean(typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_URL : process.env.VITE_SUPABASE_URL);
+const KEY = clean(typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.VITE_SUPABASE_ANON_KEY : process.env.VITE_SUPABASE_ANON_KEY);
 
-if (import.meta.env.DEV) {
+const isDev = typeof import.meta !== 'undefined' && import.meta.env ? import.meta.env.DEV : process.env.NODE_ENV !== 'production';
+
+if (isDev) {
   console.log('[Supabase] Rodando em Ambiente de Desenvolvimento');
 }
 

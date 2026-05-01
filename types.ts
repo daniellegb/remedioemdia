@@ -77,11 +77,20 @@ export interface Profile {
   relationship?: string;
   onboarding_completed: boolean;
   role: 'user' | 'admin';
-  plan: 'free' | 'premium';
+  plan: 'free' | 'premium' | 'lifetime_access';
+  /**
+   * Status da assinatura:
+   * - active: Assinatura paga e renovável.
+   * - trial: Período de teste gratuito.
+   * - expired: Acesso encerrado (fim do ciclo ou trial).
+   * - canceled: Cancelada manualmente, mas mantém acesso até subscription_ends_at.
+   */
   subscription_status: 'active' | 'trial' | 'expired' | 'canceled';
   trial_ends_at?: string;
   subscription_ends_at?: string;
   lifetime_access: boolean;
+  has_used_trial: boolean;
+  stripe_customer_id?: string | null;
   created_at?: string;
   updated_at?: string;
 }

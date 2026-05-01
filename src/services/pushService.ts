@@ -108,9 +108,10 @@ export const pushService = {
 
   async checkVapidMatch() {
     try {
+      const isVite = typeof import.meta !== 'undefined' && import.meta.env;
       // Tentar ler de import.meta.env (Vite) ou process.env (injetado via vite.config.ts)
-      const clientVapid = import.meta.env.VITE_VAPID_PUBLIC_KEY || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
-      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL || (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : undefined);
+      const clientVapid = (isVite ? import.meta.env.VITE_VAPID_PUBLIC_KEY : undefined) || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
+      const supabaseUrl = (isVite ? import.meta.env.VITE_SUPABASE_URL : undefined) || (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : undefined);
       
       // Verificação básica de configuração
       if (!supabaseUrl || supabaseUrl === 'your-supabase-url') {
@@ -142,8 +143,11 @@ export const pushService = {
 
   async sendTestNotification(userId: string) {
     try {
+      const isVite = typeof import.meta !== 'undefined' && import.meta.env;
+      const supabaseUrl = (isVite ? import.meta.env.VITE_SUPABASE_URL : undefined) || (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : undefined);
+      
       // Verificação básica de configuração
-      if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL === 'your-supabase-url') {
+      if (!supabaseUrl || supabaseUrl === 'your-supabase-url') {
         throw new Error('Supabase não configurado. Configure as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
       }
 
@@ -170,8 +174,11 @@ export const pushService = {
 
   async getDebugInfo() {
     try {
+      const isVite = typeof import.meta !== 'undefined' && import.meta.env;
+      const supabaseUrl = (isVite ? import.meta.env.VITE_SUPABASE_URL : undefined) || (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : undefined);
+
       // Verificação básica de configuração
-      if (!import.meta.env.VITE_SUPABASE_URL || import.meta.env.VITE_SUPABASE_URL === 'your-supabase-url') {
+      if (!supabaseUrl || supabaseUrl === 'your-supabase-url') {
         return { error: 'Supabase não configurado' };
       }
 

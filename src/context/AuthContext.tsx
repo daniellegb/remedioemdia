@@ -1,8 +1,13 @@
+// ⚠️ Nunca usar profile.plan diretamente para controle de acesso.
+// Sempre usar hasPremiumAccess(profile)
+
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured, getSupabaseStatus } from '../lib/supabase';
 import { Profile } from '../../types';
 import { authService } from '../services/authService';
+import { hasPremiumAccess } from '../utils/subscriptionUtils';
+import { subscriptionService } from '../services/subscriptionService';
 
 interface AuthContextType {
   user: User | null;
@@ -36,13 +41,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isConfigured = isSupabaseConfigured();
 
   const isAdmin = profile?.role === 'admin';
-  const isPremium = 
-    (profile?.plan === 'premium' && profile?.subscription_status === 'active') || 
-    profile?.subscription_status === 'trial' || 
-    profile?.lifetime_access === true;
+  const isPremium = hasPremiumAccess(profile);
 
   const fetchProfile = async (userId: string) => {
     try {
+      // Tentar buscar do backend
       const { data, error } = await supabase
         .from('profiles')
         .select('*')
@@ -50,11 +53,28 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         .single();
       
       if (error) {
-        console.error('Error fetching profile:', error);
+        console.warn('Error fetching profile from backend, checking cache...', error);
+        
+        // Se falhar (ex: offline), tentar carregar do cache local
+        const cachedSubscription = subscriptionService.getFromCache(userId);
+        if (cachedSubscription) {
+          // Criar um perfil parcial baseado no cache para não quebrar o app
+          // Em um app real, salvaríamos o perfil completo no cache
+          const mockProfile: any = {
+            id: userId,
+            ...cachedSubscription,
+            onboarding_completed: true, // Assumindo se já tinha cache
+          };
+          setProfile(subscriptionService.applyLocalExpirationLogic(mockProfile));
+        }
+        
         setProfileLoaded(true);
         return;
       }
-      setProfile(data as Profile);
+      
+      const currentProfile = data as Profile;
+      const updatedProfile = await subscriptionService.refreshSubscriptionStatus(currentProfile);
+      setProfile(updatedProfile);
     } catch (err) {
       console.error('Unexpected error fetching profile:', err);
     } finally {
