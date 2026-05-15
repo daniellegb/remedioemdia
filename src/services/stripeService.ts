@@ -97,18 +97,23 @@ export const stripeService = {
       throw new Error(`Webhook Error: ${err.message}`);
     }
 
-    console.log(`Processing event: ${event.type}`);
+    console.log(`[StripeService] Incoming Event Type: ${event.type}`);
 
     switch (event.type) {
       case 'checkout.session.completed': {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.userId;
+        const sessionId = session.id;
+        console.log(`[StripeService] Checkout Session Completed: ${sessionId} for User: ${userId}`);
+        
         if (userId) {
           await this.updateProfileSubscription(userId, {
             plan: 'premium',
             subscription_status: 'active',
             trial_ends_at: null,
           });
+        } else {
+          console.warn(`[StripeService] No userId found in metadata for session ${sessionId}`);
         }
         break;
       }
@@ -182,11 +187,11 @@ export const stripeService = {
       .single();
 
     if (error) {
-      console.error(`Erro ao atualizar perfil ${userId}:`, error);
+      console.error(`[StripeService] [Supabase Update Result] FAIL for profile ${userId}:`, error.message);
       throw error;
     }
 
-    console.log(`Perfil ${userId} atualizado com sucesso:`, updates);
+    console.log(`[StripeService] [Supabase Update Result] SUCCESS for profile ${userId}. Updates applied:`, JSON.stringify(updates));
     return data as Profile;
   }
 };
