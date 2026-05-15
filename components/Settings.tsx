@@ -66,7 +66,9 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
 
     setIsPushLoading(true);
     try {
-      const vapidKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
+      const isVite = typeof import.meta !== 'undefined' && import.meta.env;
+      const vapidKey = (isVite ? import.meta.env.VITE_VAPID_PUBLIC_KEY : undefined) || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
+      
       if (!vapidKey || vapidKey === 'your-vapid-public-key') {
         alert(`Erro: Chave VAPID não encontrada no Cliente.\n\nCertifique-se de que configurou VITE_VAPID_PUBLIC_KEY.`);
         setIsPushLoading(false);
