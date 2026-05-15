@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx server.ts",
-    "build": "vite build",
+    "build": "vite build && esbuild server.ts --bundle --platform=node --format=cjs --packages=external --sourcemap --outfile=dist/server.cjs",
+    "start": "node dist/server.cjs",
     "lint": "tsc --noEmit",
     "preview": "vite preview",
     "db:dev": "supabase db push --db-url $SUPABASE_DB_URL_DEV",
@@ -16,6 +17,7 @@
     "@supabase/supabase-js": "^2.97.0",
     "@tailwindcss/vite": "^4.2.2",
     "@types/express": "^5.0.6",
+    "esbuild": "^0.28.0",
     "express": "^5.2.1",
     "lucide-react": "^0.564.0",
     "motion": "^12.34.2",
