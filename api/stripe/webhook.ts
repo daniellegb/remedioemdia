@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { stripeServerService } from './stripeServerService';
+import { stripeServerService } from './stripeServerService.js';
 
 export const config = {
   api: {

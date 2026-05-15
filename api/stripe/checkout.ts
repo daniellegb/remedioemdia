@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { stripeServerService } from './stripeServerService';
+import { stripeServerService } from './stripeServerService.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(`[${new Date().toISOString()}] Checkout request: ${req.method} ${req.url}`);
