@@ -1,0 +1,194 @@
+import Stripe from 'stripe';
+import { supabaseAdmin } from '../lib/supabaseAdmin';
+import { Profile } from '../../types';
+
+let stripeClient: Stripe | null = null;
+
+function getStripe() {
+  if (!stripeClient) {
+    const key = process.env.STRIPE_SECRET_KEY;
+    if (!key) {
+      throw new Error('STRIPE_SECRET_KEY environment variable is required');
+    }
+    stripeClient = new Stripe(key, {
+      apiVersion: '2025-01-27.acacia' as any,
+    });
+  }
+  return stripeClient;
+}
+
+export const stripeServerService = {
+  /**
+   * Cria uma sessão de checkout no Stripe integrado com Profile e Supabase Admin.
+   */
+  async createCheckoutSession(profile: Profile): Promise<string> {
+    const stripe = getStripe();
+    let stripeCustomerId = profile.stripe_customer_id;
+
+    // 1. Se não existir stripe_customer_id, criar no Stripe e salvar no Supabase
+    if (!stripeCustomerId) {
+      const customer = await stripe.customers.create({
+        email: profile.email || profile.id, // Preferir email se houver
+        metadata: {
+          userId: profile.id,
+        },
+      });
+      stripeCustomerId = customer.id;
+
+      // Salvar no Supabase usando Admin (ignora RLS se necessário)
+      const { error: updateError } = await supabaseAdmin
+        .from('profiles')
+        .update({ stripe_customer_id: stripeCustomerId })
+        .eq('id', profile.id);
+
+      if (updateError) {
+        console.error('[StripeServerService] Erro ao salvar stripe_customer_id no Supabase:', updateError);
+        throw new Error('Falha ao vincular cliente Stripe ao perfil.');
+      }
+    }
+
+    // 2. Criar checkout session
+    const priceId = process.env.STRIPE_PRICE_ID;
+    if (!priceId) {
+      throw new Error('STRIPE_PRICE_ID environment variable is required');
+    }
+
+    const appUrl = process.env.APP_URL || 'https://remedioemdia.vercel.app';
+
+    const session = await stripe.checkout.sessions.create({
+      customer: stripeCustomerId,
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      success_url: `${appUrl}/subscription/success`,
+      cancel_url: `${appUrl}/subscription/cancel`,
+      metadata: {
+        userId: profile.id,
+      },
+    });
+
+    if (!session.url) {
+      throw new Error('Falha ao gerar URL da sessão de checkout.');
+    }
+
+    return session.url;
+  },
+
+  /**
+   * Processa webhooks do Stripe.
+   */
+  async handleWebhook(sig: string, rawBody: Buffer) {
+    const stripe = getStripe();
+    const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+    if (!webhookSecret) {
+      throw new Error('STRIPE_WEBHOOK_SECRET is not configured');
+    }
+
+    let event: Stripe.Event;
+
+    try {
+      event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
+    } catch (err: any) {
+      console.error(`[StripeServerService] Webhook signature verification failed.`, err.message);
+      throw new Error(`Webhook Error: ${err.message}`);
+    }
+
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] [StripeServerService] Incoming Event Type: ${event.type}`);
+
+    switch (event.type) {
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session;
+        const userId = session.metadata?.userId;
+        const sessionId = session.id;
+        console.log(`[${timestamp}] [StripeServerService] Checkout Session Completed: ${sessionId} for User: ${userId}`);
+        
+        if (userId) {
+          await this.updateProfileSubscription(userId, {
+            plan: 'premium',
+            subscription_status: 'active',
+            trial_ends_at: undefined, // Usamos undefined para remover o valor se o Supabase permitir ou manter o schema
+          });
+        } else {
+          console.warn(`[${timestamp}] [StripeServerService] No userId found in metadata for session ${sessionId}`);
+        }
+        break;
+      }
+
+      case 'invoice.payment_succeeded': {
+        const invoice = event.data.object as any;
+        const subscriptionId = invoice.subscription;
+        
+        if (!subscriptionId) break;
+
+        const subscription = await stripe.subscriptions.retrieve(subscriptionId as string) as any;
+        const userId = subscription.metadata?.userId;
+
+        if (userId) {
+          const endsAt = new Date(subscription.current_period_end * 1000).toISOString();
+          await this.updateProfileSubscription(userId, {
+            subscription_status: 'active',
+            subscription_ends_at: endsAt,
+          });
+        }
+        break;
+      }
+
+      case 'customer.subscription.deleted': {
+        const subscription = event.data.object as any;
+        const userId = subscription.metadata?.userId;
+        if (userId) {
+          await this.updateProfileSubscription(userId, {
+            subscription_status: 'expired', // Se deletado, expirou
+          });
+        }
+        break;
+      }
+
+      case 'customer.subscription.updated': {
+        const subscription = event.data.object as any;
+        const userId = subscription.metadata?.userId;
+        if (userId) {
+          if (subscription.cancel_at_period_end) {
+            await this.updateProfileSubscription(userId, {
+              subscription_status: 'canceled',
+            });
+          }
+        }
+        break;
+      }
+
+      default:
+        console.log(`[${timestamp}] [StripeServerService] Unhandled event type ${event.type}`);
+    }
+  },
+
+  /**
+   * Utilitário para atualizar perfil no Supabase Admin.
+   */
+  async updateProfileSubscription(userId: string, updates: any) {
+    const { data, error } = await supabaseAdmin
+      .from('profiles')
+      .update({
+        ...updates,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', userId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error(`[StripeServerService] [Supabase Admin Update Result] FAIL for profile ${userId}:`, error.message);
+      throw error;
+    }
+
+    console.log(`[StripeServerService] [Supabase Admin Update Result] SUCCESS for profile ${userId}. Updates applied: ${JSON.stringify(updates)}`);
+    return data;
+  }
+};

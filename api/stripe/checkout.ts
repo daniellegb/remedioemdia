@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { stripeService } from '../../src/services/stripeService';
+import { stripeServerService } from '../../server/services/stripeServerService';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(`[${new Date().toISOString()}] Checkout request: ${req.method} ${req.url}`);
@@ -15,7 +15,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(400).json({ error: 'Profile is required' });
     }
 
-    const sessionUrl = await stripeService.createCheckoutSession(profile);
+    const sessionUrl = await stripeServerService.createCheckoutSession(profile);
     console.log('[Checkout] Session created successfully');
     res.status(200).json({ url: sessionUrl });
   } catch (error: any) {

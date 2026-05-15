@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { stripeService } from '../../src/services/stripeService';
+import { stripeServerService } from '../../server/services/stripeServerService';
 
 export const config = {
   api: {
@@ -36,7 +36,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const rawBody = await getRawBody(req);
     console.log(`[${timestamp}] [Webhook] Raw body length: ${rawBody.length} bytes`);
     
-    await stripeService.handleWebhook(sig as string, rawBody);
+    await stripeServerService.handleWebhook(sig as string, rawBody);
     
     console.log(`[${timestamp}] [Webhook] Event processed successfully`);
     res.status(200).json({ received: true });
