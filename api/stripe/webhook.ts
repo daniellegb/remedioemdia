@@ -1,19 +1,12 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { stripeServerService } from './stripeServerService.js';
+import { buffer } from 'micro';
 
 export const config = {
   api: {
     bodyParser: false,
   },
 };
-
-async function getRawBody(req: VercelRequest): Promise<Buffer> {
-  const chunks = [];
-  for await (const chunk of req) {
-    chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
-  }
-  return Buffer.concat(chunks);
-}
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const timestamp = new Date().toISOString();
@@ -33,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const rawBody = await getRawBody(req);
+    const rawBody = await buffer(req);
     console.log(`[${timestamp}] [Webhook] Raw body length: ${rawBody.length} bytes`);
     
     await stripeServerService.handleWebhook(sig as string, rawBody);
