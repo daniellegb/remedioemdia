@@ -20,6 +20,7 @@
     "esbuild": "^0.28.0",
     "express": "^5.2.1",
     "lucide-react": "^0.564.0",
+    "micro": "^10.0.1",
     "motion": "^12.34.2",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
