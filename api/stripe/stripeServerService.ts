@@ -97,6 +97,11 @@ export const stripeServerService = {
       metadata: {
         userId: profile.id,
       },
+      subscription_data: {
+        metadata: {
+          userId: profile.id,
+        },
+      },
     });
 
     if (!session.url) {
@@ -108,6 +113,7 @@ export const stripeServerService = {
 
   /**
    * Processa webhooks do Stripe.
+   * Fluxo: Stripe -> Vercel Endpoint (Raw Body) -> handleWebhook (Signature Validation) -> Supabase (Persistence)
    */
   async handleWebhook(sig: string, rawBody: Buffer) {
     const stripe = getStripe();
@@ -119,6 +125,7 @@ export const stripeServerService = {
 
     let event: Stripe.Event;
 
+    // 1. Validar assinatura (Garante que o payload veio do Stripe e não foi alterado)
     try {
       event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
     } catch (err: any) {
@@ -127,72 +134,135 @@ export const stripeServerService = {
     }
 
     const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] [StripeServerService] EVENT TYPE: ${event.type}`);
+    const eventId = event.id;
+    console.log(`[${timestamp}] [StripeServerService] EVENT RECEIVED: ${eventId} [${event.type}]`);
 
-    switch (event.type) {
-      case 'checkout.session.completed': {
-        const session = event.data.object as Stripe.Checkout.Session;
-        const userId = session.metadata?.userId;
-        const sessionId = session.id;
-        console.log(`[${timestamp}] [StripeServerService] CHECKOUT SESSION ID: ${sessionId} for User: ${userId}`);
-        
-        if (userId) {
-          await this.updateProfileSubscription(userId, {
-            plan: 'premium',
-            subscription_status: 'active',
-            trial_ends_at: null,
-          });
-        } else {
-          console.warn(`[${timestamp}] [StripeServerService] No userId found in metadata for session ${sessionId}`);
-        }
-        break;
-      }
+    // 2. Garantir Idempotência (Não processar o mesmo evento duas vezes)
+    const { data: existingEvent } = await supabaseAdmin
+      .from('stripe_events')
+      .select('id')
+      .eq('stripe_event_id', eventId)
+      .maybeSingle();
 
-      case 'invoice.payment_succeeded': {
-        const invoice = event.data.object as any;
-        const subscriptionId = invoice.subscription;
-        
-        if (!subscriptionId) break;
+    if (existingEvent) {
+      console.log(`[${timestamp}] [StripeServerService] Event ${eventId} already processed. Skipping.`);
+      return;
+    }
 
-        const subscription = await stripe.subscriptions.retrieve(subscriptionId as string) as any;
-        const userId = subscription.metadata?.userId;
+    // Identificar IDs comuns para auditoria
+    let stripeCustomerId: string | null = null;
+    let stripeSubscriptionId: string | null = null;
+    let stripeSessionId: string | null = null;
+    let userId: string | null = null;
 
-        if (userId) {
-          const endsAt = new Date(subscription.current_period_end * 1000).toISOString();
-          await this.updateProfileSubscription(userId, {
-            subscription_status: 'active',
-            subscription_ends_at: endsAt,
-          });
-        }
-        break;
-      }
+    // 3. Processar Evento
+    try {
+      switch (event.type) {
+        case 'checkout.session.completed': {
+          const session = event.data.object as any;
+          userId = session.metadata?.userId || null;
+          stripeCustomerId = session.customer as string;
+          stripeSubscriptionId = session.subscription as string;
+          stripeSessionId = session.id;
 
-      case 'customer.subscription.deleted': {
-        const subscription = event.data.object as any;
-        const userId = subscription.metadata?.userId;
-        if (userId) {
-          await this.updateProfileSubscription(userId, {
-            subscription_status: 'expired',
-          });
-        }
-        break;
-      }
-
-      case 'customer.subscription.updated': {
-        const subscription = event.data.object as any;
-        const userId = subscription.metadata?.userId;
-        if (userId) {
-          if (subscription.cancel_at_period_end) {
+          console.log(`[${timestamp}] [StripeServerService] Processing Checkout Completed for User: ${userId}`);
+          
+          if (userId) {
             await this.updateProfileSubscription(userId, {
-              subscription_status: 'canceled',
+              plan: 'premium',
+              subscription_status: 'active',
+              stripe_customer_id: stripeCustomerId,
+              stripe_subscription_id: stripeSubscriptionId,
+              trial_ends_at: null,
+            });
+          } else {
+            console.warn(`[${timestamp}] [StripeServerService] MISSING userId in metadata for session ${stripeSessionId}`);
+          }
+          break;
+        }
+
+        case 'invoice.payment_succeeded': {
+          const invoice = event.data.object as any;
+          stripeSubscriptionId = invoice.subscription as string;
+          stripeCustomerId = invoice.customer as string;
+          
+          if (!stripeSubscriptionId) break;
+
+          const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId) as any;
+          userId = (subscription.metadata?.userId as string) || null;
+
+          if (userId) {
+            const endsAt = new Date(subscription.current_period_end * 1000).toISOString();
+            await this.updateProfileSubscription(userId, {
+              subscription_status: 'active',
+              subscription_ends_at: endsAt,
+              stripe_customer_id: stripeCustomerId,
+              stripe_subscription_id: stripeSubscriptionId,
             });
           }
+          break;
         }
-        break;
+
+        case 'customer.subscription.deleted': {
+          const subscription = event.data.object as any;
+          userId = (subscription.metadata?.userId as string) || null;
+          stripeCustomerId = subscription.customer as string;
+          stripeSubscriptionId = subscription.id;
+
+          if (userId) {
+            await this.updateProfileSubscription(userId, {
+              subscription_status: 'expired',
+            });
+          }
+          break;
+        }
+
+        case 'customer.subscription.updated': {
+          const subscription = event.data.object as any;
+          userId = (subscription.metadata?.userId as string) || null;
+          stripeCustomerId = subscription.customer as string;
+          stripeSubscriptionId = subscription.id;
+
+          if (userId) {
+            if (subscription.cancel_at_period_end) {
+              await this.updateProfileSubscription(userId, {
+                subscription_status: 'canceled',
+              });
+            } else if (subscription.status === 'active') {
+              await this.updateProfileSubscription(userId, {
+                subscription_status: 'active',
+              });
+            }
+          }
+          break;
+        }
+
+        default:
+          console.log(`[${timestamp}] [StripeServerService] Unhandled event type ${event.type}`);
       }
 
-      default:
-        console.log(`[${timestamp}] [StripeServerService] Unhandled event type ${event.type}`);
+      // 4. Salvar na Tabela de Auditoria (Sempre que o processamento acima não lançar erro)
+      const { error: auditError } = await supabaseAdmin
+        .from('stripe_events')
+        .insert({
+          stripe_event_id: eventId,
+          stripe_event_type: event.type,
+          stripe_customer_id: stripeCustomerId,
+          stripe_subscription_id: stripeSubscriptionId,
+          stripe_session_id: stripeSessionId,
+          user_id: userId,
+          payload_json: event,
+        });
+
+      if (auditError) {
+        console.error(`[${timestamp}] [StripeServerService] FAILED to log event to stripe_events:`, auditError.message);
+      } else {
+        console.log(`[${timestamp}] [StripeServerService] Event ${eventId} logged successfully.`);
+      }
+
+    } catch (processError: any) {
+      console.error(`[${timestamp}] [StripeServerService] FATAL ERROR processing event ${eventId}:`, processError.message);
+      throw processError; // O webhook handler retornará 400/500 e o Stripe tentará novamente
     }
   },
 
@@ -200,6 +270,8 @@ export const stripeServerService = {
    * Utilitário para atualizar perfil no Supabase Admin.
    */
   async updateProfileSubscription(userId: string, updates: any) {
+    console.log(`[StripeServerService] Starting Supabase update for userId: ${userId} with updates: ${JSON.stringify(updates)}`);
+    
     const { data, error } = await supabaseAdmin
       .from('profiles')
       .update({
@@ -207,15 +279,21 @@ export const stripeServerService = {
         updated_at: new Date().toISOString(),
       })
       .eq('id', userId)
-      .select()
-      .single();
+      .select();
+
+    console.log(`[StripeServerService] Supabase Raw Result - Data: ${JSON.stringify(data)}, Error: ${JSON.stringify(error)}`);
 
     if (error) {
       console.error(`[StripeServerService] SUPABASE UPDATE FAIL for profile ${userId}: ${error.message}`);
       throw error;
     }
 
-    console.log(`[StripeServerService] SUPABASE UPDATE SUCCESS for profile ${userId}. Updates: ${JSON.stringify(updates)}`);
+    if (!data || data.length === 0) {
+      console.warn(`[StripeServerService] SUPABASE UPDATE WARNING: No profile found to update with ID ${userId}. Please check if profiles.id matches auth.users.id.`);
+    } else {
+      console.log(`[StripeServerService] SUPABASE UPDATE SUCCESS for profile ${userId}. Records updated: ${data.length}`);
+    }
+
     return data;
   }
 };
