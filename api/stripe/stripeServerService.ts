@@ -209,14 +209,54 @@ export const stripeServerService = {
 
         case 'customer.subscription.deleted': {
           const subscription = event.data.object as any;
-          userId = (subscription.metadata?.userId as string) || null;
           stripeCustomerId = subscription.customer as string;
           stripeSubscriptionId = subscription.id;
+          
+          const rawMetadataUserId = subscription.metadata?.userId;
+          userId = (rawMetadataUserId && rawMetadataUserId !== 'null' && rawMetadataUserId !== '') ? (rawMetadataUserId as string) : null;
+
+          console.log('customer.subscription.deleted received', {
+            stripeCustomerId,
+            stripeSubscriptionId,
+            userId,
+            timestamp
+          });
+
+          const updates = {
+            plan: 'free',
+            subscription_status: 'canceled',
+            subscription_ends_at: new Date().toISOString(),
+            stripe_subscription_id: null,
+            updated_at: new Date().toISOString(),
+          };
 
           if (userId) {
-            await this.updateProfileSubscription(userId, {
-              subscription_status: 'expired',
-            });
+            console.log(`[${timestamp}] [StripeServerService] Downgrading subscription using Metadata User ID: ${userId}`);
+            await this.updateProfileSubscription(userId, updates);
+          } else if (stripeCustomerId) {
+            console.log('attempting downgrade via stripe_customer_id', { stripeCustomerId, updates });
+
+            const { data, error } = await supabaseAdmin
+              .from('profiles')
+              .update(updates)
+              .eq('stripe_customer_id', stripeCustomerId)
+              .select();
+
+            console.log('supabase update result', { data, error });
+
+            if (error) {
+              console.error('supabase update failed', { stripeCustomerId, error: error.message });
+              throw error;
+            }
+
+            if (data && data.length > 0) {
+              userId = data[0].id; // Resolve user ID for events logging audit
+              console.log(`[StripeServerService] SUPABASE UPDATE SUCCESS for stripe_customer_id ${stripeCustomerId}. User ID: ${userId}`);
+            } else {
+              console.warn(`[StripeServerService] SUPABASE UPDATE WARNING: No profile found to update with stripe_customer_id: ${stripeCustomerId}`);
+            }
+          } else {
+            console.error(`[${timestamp}] [StripeServerService] Cannot handle subscription delete: both userId and stripeCustomerId are missing.`);
           }
           break;
         }
