@@ -127,6 +127,10 @@ export const stripeServerService = {
 
     // 1. Validar assinatura (Garante que o payload veio do Stripe e não foi alterado)
     try {
+      const payloadString = rawBody.toString('utf8');
+      console.log(`[StripeServerService] Payload start: ${payloadString.substring(0, 50)}...`);
+      console.log(`[StripeServerService] Secret prefix: ${webhookSecret?.substring(0, 7)}***`);
+      
       event = stripe.webhooks.constructEvent(rawBody, sig, webhookSecret);
     } catch (err: any) {
       console.error(`[StripeServerService] Webhook signature verification failed: ${err.message}`);
