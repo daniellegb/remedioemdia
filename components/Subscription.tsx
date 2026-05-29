@@ -37,10 +37,24 @@ const Subscription: React.FC<Props> = ({ setView }) => {
     }
   };
 
-  const handleManage = () => {
-    alert(
-      "Portal do Cliente Stripe\n\nEm breve você poderá gerenciar, pausar ou cancelar sua assinatura diretamente aqui!\n\nPor enquanto, suas alterações estão sendo processadas de forma automática via Dashboard de faturamento Stripe sincronizado ao seu e-mail: " + (user?.email || "")
-    );
+  const handleManage = async () => {
+    if (!profile) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const returnUrl = `${window.location.origin}/settings/subscription`;
+      const portalUrl = await stripeClientService.createPortalSession(profile, returnUrl);
+      if (portalUrl) {
+        window.location.href = portalUrl;
+      } else {
+        throw new Error('Não foi possível gerar a URL do portal de assinatura.');
+      }
+    } catch (err: any) {
+      console.error('[Subscription] Error initiating portal:', err);
+      setError(err?.message || 'Não foi possível produzir o portal de faturamento. Verifique sua conexão e tente novamente.');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const formatDate = (dateString?: string) => {
@@ -206,9 +220,17 @@ const Subscription: React.FC<Props> = ({ setView }) => {
                 <button 
                   id="btn-manage-subscription-active"
                   onClick={handleManage}
-                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition-all shadow-sm active:scale-[0.99] cursor-pointer"
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition-all shadow-sm active:scale-[0.99] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Gerenciar assinatura
+                  {loading ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" />
+                      Abrindo portal...
+                    </>
+                  ) : (
+                    'Gerenciar assinatura'
+                  )}
                 </button>
               </div>
             </div>
@@ -227,9 +249,17 @@ const Subscription: React.FC<Props> = ({ setView }) => {
                 <button 
                   id="btn-manage-subscription-canceled"
                   onClick={handleManage}
-                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition-all shadow-sm active:scale-[0.99] cursor-pointer"
+                  disabled={loading}
+                  className="w-full flex items-center justify-center gap-2 px-6 py-4 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold rounded-2xl transition-all shadow-sm active:scale-[0.99] cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  Gerenciar assinatura
+                  {loading ? (
+                    <>
+                      <Loader2 size={20} className="animate-spin" />
+                      Abrindo portal...
+                    </>
+                  ) : (
+                    'Gerenciar assinatura'
+                  )}
                 </button>
               </div>
             </div>

@@ -25,5 +25,31 @@ export const stripeClientService = {
       console.error('Stripe client error:', error);
       throw error;
     }
+  },
+
+  /**
+   * Solicita de forma segura a criação de uma sessão no Portal do Cliente Stripe.
+   */
+  async createPortalSession(profile: Profile, returnUrl: string): Promise<string> {
+    try {
+      const response = await fetch('/api/stripe/create-portal-session', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ profile, returnUrl }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao iniciar portal da assinatura');
+      }
+
+      return data.url;
+    } catch (error: any) {
+      console.error('Stripe portal client error:', error);
+      throw error;
+    }
   }
 };

@@ -352,6 +352,40 @@ export const stripeServerService = {
   },
 
   /**
+   * Cria uma sessão de portal de faturamento do Stripe para o cliente gerenciar assinaturas.
+   */
+  async createPortalSession(profile: Profile, returnUrl: string): Promise<string> {
+    const stripe = getStripe();
+    const stripeCustomerId = profile.stripe_customer_id;
+
+    if (!stripeCustomerId) {
+      throw new Error('Nenhuma assinatura encontrada.');
+    }
+
+    // Valida se o cliente de fato existe no Stripe
+    try {
+      console.log(`[StripeServerService] Verifying existing Stripe customer for portal: ${stripeCustomerId}`);
+      const customer = await stripe.customers.retrieve(stripeCustomerId);
+      if (customer.deleted) {
+        throw new Error('Nenhuma assinatura encontrada.');
+      }
+    } catch (err: any) {
+      if (err?.code === 'resource_missing' || err?.statusCode === 404 || err?.message?.includes('No such customer')) {
+        throw new Error('Nenhuma assinatura encontrada.');
+      }
+      throw err;
+    }
+
+    console.log(`[StripeServerService] Creating Stripe billing portal session for customer ${stripeCustomerId}`);
+    const session = await stripe.billingPortal.sessions.create({
+      customer: stripeCustomerId,
+      return_url: returnUrl,
+    });
+
+    return session.url;
+  },
+
+  /**
    * Utilitário para atualizar perfil no Supabase Admin.
    */
   async updateProfileSubscription(userId: string, updates: any) {
