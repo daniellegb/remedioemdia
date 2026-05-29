@@ -217,6 +217,7 @@ export const stripeServerService = {
               subscription_status: 'active',
               stripe_customer_id: stripeCustomerId,
               stripe_subscription_id: stripeSubscriptionId,
+              subscription_ends_at: null,
               trial_ends_at: null,
             });
           } else {
