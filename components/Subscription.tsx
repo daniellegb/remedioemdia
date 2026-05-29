@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Sparkles, Calendar, CreditCard, CheckCircle2, Loader2, ShieldCheck, Zap, ShieldAlert } from 'lucide-react';
 import { useAuth } from '../src/hooks/useAuth';
 import { stripeClientService } from '../src/services/stripeClientService';
@@ -10,9 +10,15 @@ interface Props {
 }
 
 const Subscription: React.FC<Props> = ({ setView }) => {
-  const { user, profile } = useAuth();
+  const { user, profile, refreshProfile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    refreshProfile().catch(err => {
+      console.error('[Subscription] Error refreshing profile on mount:', err);
+    });
+  }, []);
 
   const plan = profile?.plan || 'free';
   const status = profile?.subscription_status || 'expired';
@@ -241,7 +247,7 @@ const Subscription: React.FC<Props> = ({ setView }) => {
                   Seu acesso Premium permanece ativo até <span className="underline">{formatDate(subscriptionEndsAt)}</span>. 
                 </p>
                 <p className="text-xs text-amber-700/80 mt-1 leading-normal font-medium">
-                  Após essa data limite, o faturamento automático será encerrado e sua conta retornará automaticamente ao plano gratuito sem perda dos medicamentos já registrados.
+                  Após essa data limite, o faturamento automático será encerrado e sua conta retornará automaticamente ao plano gratuito. Seu histórico de medicamentos e consultas já cadastrados ainda poderá ser consultado.
                 </p>
               </div>
 

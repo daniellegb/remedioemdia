@@ -304,19 +304,49 @@ export const stripeServerService = {
 
         case 'customer.subscription.updated': {
           const subscription = event.data.object as any;
-          userId = (subscription.metadata?.userId as string) || null;
           stripeCustomerId = subscription.customer as string;
           stripeSubscriptionId = subscription.id;
 
-          if (userId) {
-            if (subscription.cancel_at_period_end) {
-              await this.updateProfileSubscription(userId, {
-                subscription_status: 'canceled',
-              });
-            } else if (subscription.status === 'active') {
-              await this.updateProfileSubscription(userId, {
-                subscription_status: 'active',
-              });
+          const rawMetadataUserId = subscription.metadata?.userId;
+          userId = (rawMetadataUserId && rawMetadataUserId !== 'null' && rawMetadataUserId !== '') ? (rawMetadataUserId as string) : null;
+
+          const endsAt = new Date(subscription.current_period_end * 1000).toISOString();
+          let updates: any = {};
+
+          if (subscription.cancel_at_period_end) {
+            updates = {
+              subscription_status: 'canceled',
+              subscription_ends_at: endsAt,
+            };
+          } else if (subscription.status === 'active') {
+            updates = {
+              subscription_status: 'active',
+              subscription_ends_at: endsAt,
+            };
+          }
+
+          if (Object.keys(updates).length > 0) {
+            if (userId) {
+              console.log(`[${timestamp}] [StripeServerService] Updating subscription using Metadata User ID: ${userId}`);
+              await this.updateProfileSubscription(userId, updates);
+            } else if (stripeCustomerId) {
+              console.log(`[${timestamp}] [StripeServerService] Updating subscription using Stripe Customer ID: ${stripeCustomerId}`);
+              const { data, error } = await supabaseAdmin
+                .from('profiles')
+                .update({
+                  ...updates,
+                  updated_at: new Date().toISOString(),
+                })
+                .eq('stripe_customer_id', stripeCustomerId)
+                .select();
+
+              if (error) {
+                console.error('supabase update failed inside customer.subscription.updated', { stripeCustomerId, error: error.message });
+                throw error;
+              }
+              if (data && data.length > 0) {
+                userId = data[0].id;
+              }
             }
           }
           break;
