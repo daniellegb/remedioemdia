@@ -161,13 +161,13 @@ const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData, se
           label: 'Perfil', 
           sublabel: `${profileTypeLabel}${patientInfo}` 
         },
+        { label: 'Trocar perfil', action: () => setShowResetConfirm(true), icon: RefreshCw },
         { 
           label: 'Minha Assinatura', 
           sublabel: getSubscriptionSublabel(),
           action: () => setView('subscription'),
           icon: Sparkles
         },
-        { label: 'Trocar perfil', action: () => setShowResetConfirm(true), icon: RefreshCw },
         { label: 'Privacidade' },
         { label: 'Segurança' }
       ] 

@@ -195,18 +195,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     if (!isConfigured) return;
 
     try {
-      await authService.signOut();
-      
-      // Placeholder for local notification service cleanup
-      // if (localNotificationService?.cancelAll) {
-      //   await localNotificationService.cancelAll();
-      // }
-
+      // Clean up local state immediately to ensure a seamless UI transition
       setProfile(null);
       setUser(null);
       setSession(null);
+      
+      await authService.signOut();
     } catch (err) {
       console.error('Error during sign out:', err);
+    } finally {
+      // Force visual state reset regardless of errors during network signout
+      setProfile(null);
+      setUser(null);
+      setSession(null);
     }
   };
 
