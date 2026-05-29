@@ -71,7 +71,27 @@ export const stripeServerService = {
       profileEmail: profile?.email,
     });
 
-    // 1. Se não existir stripe_customer_id, criar no Stripe e salvar no Supabase
+    // Validate if existing stripe_customer_id still exists in Stripe
+    if (stripeCustomerId) {
+      try {
+        console.log(`[StripeServerService] Verifying existing Stripe customer ${stripeCustomerId}`);
+        const customer = await stripe.customers.retrieve(stripeCustomerId);
+        if (customer.deleted) {
+          console.warn(`[StripeServerService] Stripe customer ${stripeCustomerId} is marked as deleted. Resetting.`);
+          stripeCustomerId = undefined;
+        }
+      } catch (err: any) {
+        if (err?.code === 'resource_missing' || err?.statusCode === 404 || err?.message?.includes('No such customer')) {
+          console.warn(`[StripeServerService] Stripe customer ${stripeCustomerId} not found in Stripe Dashboard (No such customer). Resetting.`);
+          stripeCustomerId = undefined;
+        } else {
+          console.error('[StripeServerService] Unexpected error retrieving Stripe customer:', err.message);
+          throw err;
+        }
+      }
+    }
+
+    // 1. Se não existir stripe_customer_id (ou foi resetado por não existir mais no Stripe), criar no Stripe e salvar no Supabase
     if (!stripeCustomerId) {
       console.log(`[StripeServerService] Creating new Stripe customer for user ${profile.id}`);
       const customer = await stripe.customers.create({
