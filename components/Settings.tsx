@@ -15,7 +15,7 @@ interface Props {
   setView: (view: ViewType) => void;
 }
 
-const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onClearData, setView }) => {
+const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData, setView }) => {
   const { signOut, user, refreshProfile, profile } = useAuth();
   const navigate = useNavigate();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -119,8 +119,10 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
     : '';
 
   const handleLogout = async () => {
+    console.log("[Settings] handleLogout clicked, invoking signOut");
     try {
       await signOut();
+      console.log("[Settings] signOut completed");
     } catch (error) {
       console.error("Erro ao sair:", error);
     }
@@ -484,6 +486,6 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
       />
     </div>
   );
-});
+};
 
 export default Settings;
