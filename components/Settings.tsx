@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
-import { User, Bell, LogOut, ChevronRight, Database, Trash2, AlertTriangle, CalendarClock, ShieldAlert, RefreshCw, Smile, Smartphone, Send, Bug } from 'lucide-react';
+import { User, Bell, LogOut, ChevronRight, Database, Trash2, AlertTriangle, CalendarClock, ShieldAlert, RefreshCw, Smile, Smartphone, Send, Bug, Sparkles } from 'lucide-react';
 import { UserAvatar } from '../src/components/UserAvatar';
-import { AppSettings } from '../types';
+import { AppSettings, ViewType } from '../types';
 import { useAuth } from '../src/hooks/useAuth';
 import { useNavigate } from 'react-router-dom';
 import { onboardingService } from '../src/services/onboardingService';
@@ -12,9 +12,10 @@ interface Props {
   settings: AppSettings;
   onUpdateSettings: (settings: AppSettings) => void;
   onClearData: () => void;
+  setView: (view: ViewType) => void;
 }
 
-const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onClearData }) => {
+const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onClearData, setView }) => {
   const { signOut, user, refreshProfile, profile } = useAuth();
   const navigate = useNavigate();
   const [showResetConfirm, setShowResetConfirm] = useState(false);
@@ -138,6 +139,17 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
     }
   };
 
+  const getSubscriptionSublabel = () => {
+    if (!profile) return 'Plano Free';
+    if (profile.plan === 'premium') {
+      if (profile.subscription_status === 'canceled') {
+        return 'Cancelamento agendado';
+      }
+      return 'Premium ativo';
+    }
+    return 'Plano Free';
+  };
+
   const sections = [
     { 
       title: 'Conta', 
@@ -146,6 +158,12 @@ const Settings: React.FC<Props> = React.memo(({ settings, onUpdateSettings, onCl
         { 
           label: 'Perfil', 
           sublabel: `${profileTypeLabel}${patientInfo}` 
+        },
+        { 
+          label: 'Minha Assinatura', 
+          sublabel: getSubscriptionSublabel(),
+          action: () => setView('subscription'),
+          icon: Sparkles
         },
         { label: 'Trocar perfil', action: () => setShowResetConfirm(true), icon: RefreshCw },
         { label: 'Privacidade' },

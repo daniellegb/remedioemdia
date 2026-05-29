@@ -7,6 +7,7 @@ import Appointments from '../../components/Appointments';
 import AddAppointment from '../../components/AddAppointment';
 import Calendar from '../../components/Calendar';
 import Settings from '../../components/Settings';
+import Subscription from '../../components/Subscription';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { ViewType, Medication, DoseEvent, Appointment, AppSettings, UsageCategory, UserPreferences } from '../../types';
 import { COLORS } from '../../constants';
@@ -515,7 +516,10 @@ const MainApp: React.FC = () => {
           settings={settings} 
           onUpdateSettings={setSettings} 
           onClearData={handleClearData} 
+          setView={setView}
         />;
+      case 'subscription':
+        return <Subscription setView={setView} />;
       default:
         return <Dashboard 
           meds={meds} 
