@@ -51,11 +51,31 @@ export const stripeServerService = {
     const stripe = getStripe();
     let stripeCustomerId = profile.stripe_customer_id;
 
+    // Fetch authenticated user from Supabase Auth to get the real email address
+    let user: any = null;
+    try {
+      const { data, error: userError } = await supabaseAdmin.auth.admin.getUserById(profile.id);
+      if (userError) {
+        console.error('[StripeServerService] Error fetching user from auth:', userError.message);
+      } else {
+        user = data.user;
+      }
+    } catch (e: any) {
+      console.error('[StripeServerService] Exception fetching user from auth:', e.message);
+    }
+
+    // Temporary debug logs
+    console.log('[StripeServerService] Checkout session user validation:', {
+      userId: user?.id,
+      userEmail: user?.email,
+      profileEmail: profile?.email,
+    });
+
     // 1. Se não existir stripe_customer_id, criar no Stripe e salvar no Supabase
     if (!stripeCustomerId) {
       console.log(`[StripeServerService] Creating new Stripe customer for user ${profile.id}`);
       const customer = await stripe.customers.create({
-        email: profile.email || profile.id,
+        email: user?.email || profile.email || undefined,
         metadata: {
           userId: profile.id,
         },
