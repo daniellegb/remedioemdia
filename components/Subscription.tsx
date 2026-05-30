@@ -15,8 +15,20 @@ const Subscription: React.FC<Props> = ({ setView }) => {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    refreshProfile().catch(err => {
-      console.error('[Subscription] Error refreshing profile on mount:', err);
+    const initAndSync = async () => {
+      await refreshProfile();
+      if (user?.id) {
+        try {
+          await stripeClientService.syncSubscription(user.id);
+          await refreshProfile();
+        } catch (syncErr) {
+          console.error('[Subscription] Falha ao sincronizar assinatura com Stripe:', syncErr);
+        }
+      }
+    };
+
+    initAndSync().catch(err => {
+      console.error('[Subscription] Erro ao carregar dados na montagem:', err);
     });
   }, []);
 

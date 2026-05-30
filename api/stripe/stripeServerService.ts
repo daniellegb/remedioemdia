@@ -211,13 +211,24 @@ export const stripeServerService = {
 
           console.log(`[${timestamp}] [StripeServerService] Processing Checkout Completed for User: ${userId}`);
           
+          let endsAt: string | null = null;
+          if (stripeSubscriptionId) {
+            try {
+              const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId) as any;
+              endsAt = new Date(sub.current_period_end * 1000).toISOString();
+              console.log(`[${timestamp}] [StripeServerService] Found current period end from webhook checkout retrieve: ${endsAt}`);
+            } catch (err) {
+              console.error('[StripeServerService] Error retrieving subscription during checkout fallback:', err);
+            }
+          }
+
           if (userId) {
             await this.updateProfileSubscription(userId, {
               plan: 'premium',
               subscription_status: 'active',
               stripe_customer_id: stripeCustomerId,
               stripe_subscription_id: stripeSubscriptionId,
-              subscription_ends_at: null,
+              subscription_ends_at: endsAt,
               trial_ends_at: null,
             });
           } else {
@@ -234,16 +245,29 @@ export const stripeServerService = {
           if (!stripeSubscriptionId) break;
 
           const subscription = await stripe.subscriptions.retrieve(stripeSubscriptionId) as any;
-          userId = (subscription.metadata?.userId as string) || null;
+          
+          const rawMetadataUserId = subscription.metadata?.userId;
+          userId = (rawMetadataUserId && rawMetadataUserId !== 'null' && rawMetadataUserId !== '') ? (rawMetadataUserId as string) : null;
+
+          const endsAt = new Date(subscription.current_period_end * 1000).toISOString();
+          const updates = {
+            subscription_status: 'active',
+            subscription_ends_at: endsAt,
+            stripe_customer_id: stripeCustomerId,
+            stripe_subscription_id: stripeSubscriptionId,
+          };
 
           if (userId) {
-            const endsAt = new Date(subscription.current_period_end * 1000).toISOString();
-            await this.updateProfileSubscription(userId, {
-              subscription_status: 'active',
-              subscription_ends_at: endsAt,
-              stripe_customer_id: stripeCustomerId,
-              stripe_subscription_id: stripeSubscriptionId,
-            });
+            await this.updateProfileSubscription(userId, updates);
+          } else if (stripeCustomerId) {
+            console.log(`[${timestamp}] [StripeServerService] Updating subscription on invoice payment using customer ID fallback: ${stripeCustomerId}`);
+            await supabaseAdmin
+              .from('profiles')
+              .update({
+                ...updates,
+                updated_at: new Date().toISOString(),
+              })
+              .eq('stripe_customer_id', stripeCustomerId);
           }
           break;
         }
@@ -413,6 +437,74 @@ export const stripeServerService = {
     });
 
     return session.url;
+  },
+
+  /**
+   * Sincroniza o status da assinatura do usuário diretamente com a API do Stripe do backend.
+   * Útil para curar/atualizar instantaneamente dados divergentes ou desatualizados.
+   */
+  async syncSubscription(userId: string): Promise<Profile> {
+    const { data: profile, error: profileError } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+
+    if (profileError || !profile) {
+      console.error('[StripeServerService] Erro ao carregar perfil para sincronização:', profileError?.message);
+      throw new Error('Perfil não encontrado para sincronização.');
+    }
+
+    const stripeCustomerId = profile.stripe_customer_id;
+    if (!stripeCustomerId) {
+      console.log('[StripeServerService] Sincronização ignorada: sem stripe_customer_id.');
+      return profile as Profile;
+    }
+
+    const stripe = getStripe();
+    try {
+      console.log(`[StripeServerService] Sincronizando dados Stripe para o cliente: ${stripeCustomerId}`);
+      const subscriptions = await stripe.subscriptions.list({
+        customer: stripeCustomerId,
+        status: 'all',
+        limit: 1,
+      });
+
+      if (subscriptions.data.length > 0) {
+        const subscription = subscriptions.data[0] as any;
+        const endsAt = new Date(subscription.current_period_end * 1000).toISOString();
+        const status = subscription.cancel_at_period_end ? 'canceled' : subscription.status;
+
+        const updates = {
+          subscription_status: status,
+          subscription_ends_at: endsAt,
+          stripe_subscription_id: subscription.id,
+          plan: (subscription.status === 'active' || subscription.status === 'trialing' || (subscription.status === 'canceled' && new Date() < new Date(subscription.current_period_end * 1000))) ? 'premium' : 'free',
+        };
+
+        console.log(`[StripeServerService] Atualizando dados locais de faturamento via sincronização:`, updates);
+        const { data: updatedProfile, error: updateError } = await supabaseAdmin
+          .from('profiles')
+          .update({
+            ...updates,
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', userId)
+          .select()
+          .single();
+
+        if (updateError) {
+          console.error('[StripeServerService] Falha ao atualizar perfil pós sincronização Stripe:', updateError.message);
+          return profile as Profile;
+        }
+
+        return updatedProfile as Profile;
+      }
+    } catch (err) {
+      console.error('[StripeServerService] Erro inesperado durante sincronização de assinatura com o Stripe:', err);
+    }
+
+    return profile as Profile;
   },
 
   /**

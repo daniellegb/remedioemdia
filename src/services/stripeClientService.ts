@@ -51,5 +51,31 @@ export const stripeClientService = {
       console.error('Stripe portal client error:', error);
       throw error;
     }
+  },
+
+  /**
+   * Sincroniza o status e datas de assinatura diretamente com a API do Stripe via backend.
+   */
+  async syncSubscription(userId: string): Promise<Profile> {
+    try {
+      const response = await fetch('/api/stripe/sync-subscription', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ userId }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao sincronizar assinatura');
+      }
+
+      return data.profile;
+    } catch (error: any) {
+      console.error('Stripe sync client error:', error);
+      throw error;
+    }
   }
 };
