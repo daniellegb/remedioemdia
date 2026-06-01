@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Bell, LogOut, ChevronRight, Database, Trash2, AlertTriangle, CalendarClock, ShieldAlert, RefreshCw, Smile, Smartphone, Send, Bug, Sparkles } from 'lucide-react';
+import { User, Bell, LogOut, ChevronRight, Database, Trash2, AlertTriangle, CalendarClock, ShieldAlert, RefreshCw, Smile, Smartphone, Send, Bug, Sparkles, Lock } from 'lucide-react';
 import { UserAvatar } from '../src/components/UserAvatar';
 import { AppSettings, ViewType } from '../types';
 import { useAuth } from '../src/hooks/useAuth';
@@ -169,7 +169,11 @@ const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData, se
           icon: Sparkles
         },
         { label: 'Privacidade' },
-        { label: 'Segurança' }
+        { 
+          label: 'Segurança', 
+          action: () => setView('security'),
+          icon: Lock
+        }
       ] 
     },
   ];

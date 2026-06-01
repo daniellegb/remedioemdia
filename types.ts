@@ -107,4 +107,4 @@ export interface UserPreferences {
   updated_at?: string; // ISO string
 }
 
-export type ViewType = 'dashboard' | 'calendar' | 'meds' | 'appointments' | 'settings' | 'add-appointment' | 'add-med' | 'onboarding' | 'subscription';
+export type ViewType = 'dashboard' | 'calendar' | 'meds' | 'appointments' | 'settings' | 'add-appointment' | 'add-med' | 'onboarding' | 'subscription' | 'security';
