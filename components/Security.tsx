@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, Key, Check, X } from 'lucide-react';
+import { ArrowLeft, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, Key, Check, X, Smile } from 'lucide-react';
 import { supabase } from '../src/lib/supabase';
 import { useAuth } from '../src/hooks/useAuth';
 import { ViewType } from '../types';
@@ -19,6 +19,10 @@ const Security: React.FC<Props> = ({ setView }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // Check if user is authenticated via Google provider
+  const isGoogleUser = user?.app_metadata?.provider === 'google' || 
+                       (user?.identities && user.identities.some((identity: any) => identity.provider === 'google'));
 
   // Password rules validation states
   const hasMinLength = password.length >= 8;
@@ -60,7 +64,7 @@ const Security: React.FC<Props> = ({ setView }) => {
     setSuccess(false);
 
     try {
-      console.log('[Security] Tentando alterar a senha usando supabase auth...');
+      console.log(`[Security] Tentando ${isGoogleUser ? 'definir' : 'alterar'} a senha usando supabase auth...`);
       const { error: authError } = await supabase.auth.updateUser({
         password: password
       });
@@ -113,8 +117,15 @@ const Security: React.FC<Props> = ({ setView }) => {
         <div id="security-success-banner" className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-emerald-800 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-300">
           <CheckCircle2 className="text-emerald-500 shrink-0 mt-0.5" size={18} />
           <div>
-            <p className="font-semibold">Senha alterada com sucesso.</p>
-            <p className="text-xs mt-0.5 text-emerald-600/80">Sua nova senha de acesso já está em vigor para as próximas sessões.</p>
+            <p className="font-semibold">
+              {isGoogleUser ? 'Senha definida com sucesso.' : 'Senha alterada com sucesso.'}
+            </p>
+            <p className="text-xs mt-0.5 text-emerald-600/80">
+              {isGoogleUser 
+                ? 'Sua senha foi definida. Agora você também pode acessar sua conta usando e-mail e senha.'
+                : 'Sua nova senha de acesso já está em vigor para as próximas sessões.'
+              }
+            </p>
           </div>
         </div>
       )}
@@ -123,20 +134,36 @@ const Security: React.FC<Props> = ({ setView }) => {
         <div id="security-error-banner" className="bg-red-50 border border-red-100 rounded-2xl p-4 text-red-700 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-300">
           <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={18} />
           <div>
-            <p className="font-semibold">Não foi possível alterar a senha</p>
+            <p className="font-semibold">
+              {isGoogleUser ? 'Não foi possível definir a senha' : 'Não foi possível alterar a senha'}
+            </p>
             <p className="text-xs mt-0.5 text-red-600/80">{error}</p>
           </div>
         </div>
       )}
 
-      {/* Change Password Card */}
+      {/* Change / Define Password Card */}
       <div id="security-password-card" className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
           <Key size={18} className="text-slate-400" />
-          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest">Alterar Senha</h3>
+          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest text-slate-600">
+            {isGoogleUser ? 'Definir Senha' : 'Alterar Senha'}
+          </h3>
         </div>
 
         <div className="p-6 md:p-8 space-y-6">
+          {isGoogleUser && (
+            <div className="bg-blue-50/60 border border-blue-100/80 rounded-2xl p-4 text-blue-800 text-xs md:text-sm flex gap-3 items-start">
+              <Smile className="text-blue-500 shrink-0 mt-0.5" size={18} />
+              <div className="space-y-1">
+                <p className="font-semibold">Você entrou com Google.</p>
+                <p className="leading-normal text-slate-600 font-medium">
+                  Defina uma senha caso também queira acessar com e-mail e senha além do login pelo Google.
+                </p>
+              </div>
+            </div>
+          )}
+
           <form onSubmit={handleUpdatePassword} className="space-y-6" id="form-change-password">
             {/* New Password Input */}
             <div className="space-y-2">
@@ -148,7 +175,7 @@ const Security: React.FC<Props> = ({ setView }) => {
                   id="new-password"
                   type={showPassword ? 'text' : 'password'}
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-4 pr-12 py-3.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm"
-                  placeholder="Digite sua nova senha"
+                  placeholder={isGoogleUser ? "Defina sua nova senha" : "Digite sua nova senha"}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   disabled={loading}
@@ -244,7 +271,10 @@ const Security: React.FC<Props> = ({ setView }) => {
                   : 'bg-slate-100 text-slate-400 cursor-not-allowed'
               }`}
             >
-              {loading ? 'Alterando senha...' : 'Alterar Senha'}
+              {loading 
+                ? (isGoogleUser ? 'Definindo senha...' : 'Alterando senha...') 
+                : (isGoogleUser ? 'Definir Senha' : 'Alterar Senha')
+              }
             </button>
           </form>
         </div>
