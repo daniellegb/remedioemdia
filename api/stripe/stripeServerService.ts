@@ -212,9 +212,10 @@ export const stripeServerService = {
           console.log(`[${timestamp}] [StripeServerService] Processing Checkout Completed for User: ${userId}`);
           
           let endsAt: string | null = null;
+          let sub: any = null;
           if (stripeSubscriptionId) {
             try {
-              const sub = await stripe.subscriptions.retrieve(stripeSubscriptionId) as any;
+              sub = await stripe.subscriptions.retrieve(stripeSubscriptionId) as any;
               endsAt = new Date(sub.current_period_end * 1000).toISOString();
               console.log(`[${timestamp}] [StripeServerService] Found current period end from webhook checkout retrieve: ${endsAt}`);
             } catch (err) {
@@ -231,8 +232,53 @@ export const stripeServerService = {
               subscription_ends_at: endsAt,
               trial_ends_at: null,
             });
+
+            // HISTÓRICO: Criar registro ao criar assinatura
+            if (stripeSubscriptionId) {
+              const startedAt = sub?.start_date ? new Date(sub.start_date * 1000).toISOString() : (sub?.created ? new Date(sub.created * 1000).toISOString() : new Date().toISOString());
+              await this.updateSubscriptionHistory({
+                userId,
+                stripeCustomerId,
+                stripeSubscriptionId,
+                status: 'active',
+                startedAt,
+              });
+            }
           } else {
             console.warn(`[${timestamp}] [StripeServerService] MISSING userId in metadata for session ${stripeSessionId}`);
+          }
+          break;
+        }
+
+        case 'customer.subscription.created': {
+          const subscription = event.data.object as any;
+          stripeCustomerId = subscription.customer as string;
+          stripeSubscriptionId = subscription.id;
+
+          const rawMetadataUserId = subscription.metadata?.userId;
+          userId = (rawMetadataUserId && rawMetadataUserId !== 'null' && rawMetadataUserId !== '') ? (rawMetadataUserId as string) : null;
+
+          const startedAt = subscription.start_date ? new Date(subscription.start_date * 1000).toISOString() : (subscription.created ? new Date(subscription.created * 1000).toISOString() : new Date().toISOString());
+
+          if (!userId && stripeCustomerId) {
+            const { data } = await supabaseAdmin
+              .from('profiles')
+              .select('id')
+              .eq('stripe_customer_id', stripeCustomerId)
+              .maybeSingle();
+            if (data) {
+              userId = data.id;
+            }
+          }
+
+          if (userId && stripeSubscriptionId) {
+            await this.updateSubscriptionHistory({
+              userId,
+              stripeCustomerId,
+              stripeSubscriptionId,
+              status: 'active',
+              startedAt,
+            });
           }
           break;
         }
@@ -261,13 +307,29 @@ export const stripeServerService = {
             await this.updateProfileSubscription(userId, updates);
           } else if (stripeCustomerId) {
             console.log(`[${timestamp}] [StripeServerService] Updating subscription on invoice payment using customer ID fallback: ${stripeCustomerId}`);
-            await supabaseAdmin
+            const { data } = await supabaseAdmin
               .from('profiles')
               .update({
                 ...updates,
                 updated_at: new Date().toISOString(),
               })
-              .eq('stripe_customer_id', stripeCustomerId);
+              .eq('stripe_customer_id', stripeCustomerId)
+              .select();
+
+            if (data && data.length > 0) {
+              userId = data[0].id;
+            }
+          }
+
+          if (userId && stripeSubscriptionId) {
+            const startedAt = subscription.start_date ? new Date(subscription.start_date * 1000).toISOString() : (subscription.created ? new Date(subscription.created * 1000).toISOString() : new Date().toISOString());
+            await this.updateSubscriptionHistory({
+              userId,
+              stripeCustomerId,
+              stripeSubscriptionId,
+              status: 'active',
+              startedAt,
+            });
           }
           break;
         }
@@ -323,6 +385,16 @@ export const stripeServerService = {
           } else {
             console.error(`[${timestamp}] [StripeServerService] Cannot handle subscription delete: both userId and stripeCustomerId are missing.`);
           }
+
+          if (userId && stripeSubscriptionId) {
+            await this.updateSubscriptionHistory({
+              userId,
+              stripeCustomerId,
+              stripeSubscriptionId,
+              status: 'ended',
+              endedAt: subscription.ended_at ? new Date(subscription.ended_at * 1000).toISOString() : new Date().toISOString(),
+            });
+          }
           break;
         }
 
@@ -371,6 +443,28 @@ export const stripeServerService = {
               if (data && data.length > 0) {
                 userId = data[0].id;
               }
+            }
+          }
+
+          if (userId && stripeSubscriptionId) {
+            if (subscription.cancel_at_period_end) {
+              await this.updateSubscriptionHistory({
+                userId,
+                stripeCustomerId,
+                stripeSubscriptionId,
+                status: 'canceling',
+                canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : new Date().toISOString(),
+                accessExpiresAt: endsAt,
+              });
+            } else if (subscription.status === 'active') {
+              const startedAt = subscription.start_date ? new Date(subscription.start_date * 1000).toISOString() : (subscription.created ? new Date(subscription.created * 1000).toISOString() : new Date().toISOString());
+              await this.updateSubscriptionHistory({
+                userId,
+                stripeCustomerId,
+                stripeSubscriptionId,
+                status: 'active',
+                startedAt,
+              });
             }
           }
           break;
@@ -498,6 +592,21 @@ export const stripeServerService = {
           return profile as Profile;
         }
 
+        // HISTÓRICO: Sincronizar histórico local também
+        const historyStatus = subscription.cancel_at_period_end ? 'canceling' : (subscription.status === 'active' || subscription.status === 'trialing' ? 'active' : 'ended');
+        const startedAt = subscription.start_date ? new Date(subscription.start_date * 1000).toISOString() : (subscription.created ? new Date(subscription.created * 1000).toISOString() : new Date().toISOString());
+
+        await this.updateSubscriptionHistory({
+          userId,
+          stripeCustomerId,
+          stripeSubscriptionId: subscription.id,
+          status: historyStatus,
+          startedAt,
+          canceledAt: subscription.canceled_at ? new Date(subscription.canceled_at * 1000).toISOString() : undefined,
+          accessExpiresAt: endsAt,
+          endedAt: subscription.ended_at ? new Date(subscription.ended_at * 1000).toISOString() : undefined,
+        });
+
         return updatedProfile as Profile;
       }
     } catch (err) {
@@ -505,6 +614,113 @@ export const stripeServerService = {
     }
 
     return profile as Profile;
+  },
+
+  /**
+   * Mantém o histórico do ciclo Premium do usuário na tabela `stripe_subscription_history`.
+   */
+  async updateSubscriptionHistory(params: {
+    userId: string;
+    stripeCustomerId: string | null;
+    stripeSubscriptionId: string;
+    status: 'active' | 'canceling' | 'ended';
+    startedAt?: string;
+    canceledAt?: string;
+    accessExpiresAt?: string;
+    endedAt?: string;
+  }) {
+    const {
+      userId,
+      stripeCustomerId,
+      stripeSubscriptionId,
+      status,
+      startedAt,
+      canceledAt,
+      accessExpiresAt,
+      endedAt,
+    } = params;
+
+    if (!userId || !stripeSubscriptionId) {
+      console.warn('[StripeServerService] Skipping subscription history write: userId or stripeSubscriptionId missing', { userId, stripeSubscriptionId });
+      return;
+    }
+
+    try {
+      console.log(`[StripeServerService] Updating subscription history: sub=${stripeSubscriptionId}, status=${status}, user=${userId}`);
+
+      // Vamos tentar buscar se já existe para saber quais campos preservar e evitar subescrever com nulls
+      const { data: existingRecord, error: fetchError } = await supabaseAdmin
+        .from('stripe_subscription_history')
+        .select('*')
+        .eq('stripe_subscription_id', stripeSubscriptionId)
+        .maybeSingle();
+
+      if (fetchError) {
+        console.error('[StripeServerService] Error fetching existing subscription history:', fetchError.message);
+      }
+
+      const dbUpdates: any = {
+        user_id: userId,
+        stripe_customer_id: stripeCustomerId,
+        stripe_subscription_id: stripeSubscriptionId,
+        status,
+        updated_at: new Date().toISOString(),
+      };
+
+      // Controlar preenchimento condicional de datas
+      if (status === 'active') {
+        if (startedAt) {
+          dbUpdates.started_at = startedAt;
+        } else if (!existingRecord?.started_at) {
+          dbUpdates.started_at = new Date().toISOString();
+        }
+        // Se já existia valor de access_expires_at, mantém ou atualiza para manter consistência
+        if (accessExpiresAt) {
+          dbUpdates.access_expires_at = accessExpiresAt;
+        }
+      }
+
+      if (status === 'canceling') {
+        dbUpdates.canceled_at = canceledAt || new Date().toISOString();
+        if (accessExpiresAt) {
+          dbUpdates.access_expires_at = accessExpiresAt;
+        }
+        if (existingRecord?.started_at) {
+          dbUpdates.started_at = existingRecord.started_at;
+        }
+      }
+
+      if (status === 'ended') {
+        dbUpdates.ended_at = endedAt || new Date().toISOString();
+        if (accessExpiresAt) {
+          dbUpdates.access_expires_at = accessExpiresAt;
+        } else if (existingRecord && !existingRecord.access_expires_at) {
+          dbUpdates.access_expires_at = dbUpdates.ended_at;
+        } else if (existingRecord?.access_expires_at) {
+          dbUpdates.access_expires_at = existingRecord.access_expires_at;
+        }
+        if (existingRecord?.started_at) {
+          dbUpdates.started_at = existingRecord.started_at;
+        }
+        if (existingRecord?.canceled_at) {
+          dbUpdates.canceled_at = existingRecord.canceled_at;
+        }
+      }
+
+      console.log('[StripeServerService] Upserting subscription history record with:', dbUpdates);
+
+      const { error: upsertError } = await supabaseAdmin
+        .from('stripe_subscription_history')
+        .upsert(dbUpdates, { onConflict: 'stripe_subscription_id' });
+
+      if (upsertError) {
+        console.error('[StripeServerService] Error upserting subscription history:', upsertError.message);
+      } else {
+        console.log('[StripeServerService] Subscription history upserted successfully!');
+      }
+    } catch (err: any) {
+      console.error('[StripeServerService] Exception in updateSubscriptionHistory:', err.message);
+    }
   },
 
   /**

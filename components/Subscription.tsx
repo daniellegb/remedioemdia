@@ -259,7 +259,7 @@ const Subscription: React.FC<Props> = ({ setView }) => {
                   Seu acesso Premium permanece ativo até <span className="underline">{formatDate(subscriptionEndsAt)}</span>. 
                 </p>
                 <p className="text-xs text-amber-700/80 mt-1 leading-normal font-medium">
-                  Após essa data limite, o faturamento automático será encerrado e sua conta retornará automaticamente ao plano gratuito. Seu histórico de medicamentos e consultas já cadastrados ainda poderá ser consultado.
+                  Após essa data limite, o faturamento automático será encerrado e sua conta retornará automaticamente ao plano gratuito. Mais nenhum valor será cobrado. Seu histórico de medicamentos e consultas já cadastrados ainda poderá ser consultado.
                 </p>
               </div>
 
