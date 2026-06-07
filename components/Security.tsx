@@ -87,6 +87,11 @@ const Security: React.FC<Props> = ({ setView }) => {
       setConfirmPassword('');
       // Set loading to false immediately to allow UI updates to render without batching delays
       setLoading(false);
+
+      // Redirect back to settings after 3 seconds
+      setTimeout(() => {
+        setView('settings');
+      }, 3000);
     } catch (err: any) {
       clearTimeout(safetyTimer);
       console.error('[Security] Erro ao atualizar senha via Supabase Auth:', err);
@@ -129,12 +134,12 @@ const Security: React.FC<Props> = ({ setView }) => {
           <CheckCircle2 className="text-emerald-500 shrink-0 mt-0.5" size={18} />
           <div>
             <p className="font-semibold">
-              {isGoogleUser ? 'Senha definida com sucesso.' : 'Senha alterada com sucesso.'}
+              {isGoogleUser ? 'Senha definida com sucesso!' : 'Senha alterada com sucesso!'}
             </p>
-            <p className="text-xs mt-0.5 text-emerald-600/80">
+            <p className="text-xs mt-1 text-emerald-600/80 leading-relaxed">
               {isGoogleUser 
-                ? 'Sua senha foi definida. Agora você também pode acessar sua conta usando e-mail e senha.'
-                : 'Sua nova senha de acesso já está em vigor para as próximas sessões.'
+                ? 'Sua nova senha foi salva! Agora você também pode acessar sua conta usando e-mail e senha. Redirecionando para Ajustes em instantes...'
+                : 'Sua nova senha foi salva com sucesso! Redirecionando para Ajustes em instantes...'
               }
             </p>
           </div>
