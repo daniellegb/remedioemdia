@@ -70,16 +70,50 @@ const Security: React.FC<Props> = ({ setView }) => {
     }, 2500);
 
     try {
-      console.log(`[Security] Tentando ${isGoogleUser ? 'definir' : 'alterar'} a senha usando supabase auth...`);
-      const { error: authError } = await supabase.auth.updateUser({
-        password: password
+      console.log(`[Security] Tentando ${isGoogleUser ? 'definir' : 'alterar'} a senha via REST API direta...`);
+      
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+      const token = currentSession?.access_token;
+      
+      if (!token) {
+        throw new Error('Sessão ativa não encontrada. Por favor, faça login novamente.');
+      }
+
+      // Grab Supabase URL and Anon Key from environment
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      
+      if (!supabaseUrl || !supabaseKey) {
+        throw new Error('Configurações do Supabase não encontradas.');
+      }
+
+      // Standard HTTP PUT to the GoTrue /user endpoint to update user attributes (including password)
+      const response = await fetch(`${supabaseUrl.replace(/\/$/, '')}/auth/v1/user`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': supabaseKey,
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ password: password })
       });
 
-      // Clear the safety timer as we are entering the resolution phase
+      // Clear the safety timer as our request has completed
       clearTimeout(safetyTimer);
 
-      if (authError) {
-        throw authError;
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error_description || errorData.message || errorData.msg || 'Erro na resposta do servidor.');
+      }
+
+      const updatedUserData = await response.json();
+      console.log('[Security] Senha salva com sucesso via REST API:', updatedUserData);
+
+      // Attempt to silently refresh session in client to sync local memory safely
+      try {
+        await supabase.auth.refreshSession();
+      } catch (refreshErr) {
+        console.warn('[Security] Erro não-bloqueante ao atualizar sessão local:', refreshErr);
       }
 
       setSuccess(true);
