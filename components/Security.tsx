@@ -63,11 +63,20 @@ const Security: React.FC<Props> = ({ setView }) => {
     setError(null);
     setSuccess(false);
 
+    // Safety fallback: guaranteed to stop loading state in 2.5 seconds max
+    const safetyTimer = setTimeout(() => {
+      console.warn('[Security] Safety timer reached, forcing loading state to false');
+      setLoading(false);
+    }, 2500);
+
     try {
       console.log(`[Security] Tentando ${isGoogleUser ? 'definir' : 'alterar'} a senha usando supabase auth...`);
       const { error: authError } = await supabase.auth.updateUser({
         password: password
       });
+
+      // Clear the safety timer as we are entering the resolution phase
+      clearTimeout(safetyTimer);
 
       if (authError) {
         throw authError;
@@ -76,10 +85,12 @@ const Security: React.FC<Props> = ({ setView }) => {
       setSuccess(true);
       setPassword('');
       setConfirmPassword('');
+      // Set loading to false immediately to allow UI updates to render without batching delays
+      setLoading(false);
     } catch (err: any) {
+      clearTimeout(safetyTimer);
       console.error('[Security] Erro ao atualizar senha via Supabase Auth:', err);
       setError(err?.message || 'Ocorreu um erro ao alterar sua senha. Por favor, tente novamente.');
-    } finally {
       setLoading(false);
     }
   };
