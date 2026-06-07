@@ -10,7 +10,7 @@ interface Props {
 }
 
 const Security: React.FC<Props> = ({ setView }) => {
-  const { user } = useAuth();
+  const { user, signOut } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -19,6 +19,7 @@ const Security: React.FC<Props> = ({ setView }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  const [isSessionExpired, setIsSessionExpired] = useState(false);
 
   // Check if user is authenticated via Google provider
   const isGoogleUser = user?.app_metadata?.provider === 'google' || 
@@ -128,8 +129,15 @@ const Security: React.FC<Props> = ({ setView }) => {
       }, 3000);
     } catch (err: any) {
       clearTimeout(safetyTimer);
-      console.error('[Security] Erro ao atualizar senha via Supabase Auth:', err);
-      setError(err?.message || 'Ocorreu um erro ao alterar sua senha. Por favor, tente novamente.');
+      console.error('[Security] Erro ao atualizar senha:', err);
+      
+      const errorMsg = err?.message || String(err);
+      if (errorMsg.includes('session_id') || errorMsg.includes('JWT') || errorMsg.includes('Session from session_id')) {
+        setIsSessionExpired(true);
+        setError('Sua sessão de login expirou ou foi invalidada no banco de dados. Para sua segurança, é necessário sair e entrar novamente.');
+      } else {
+        setError(errorMsg || 'Ocorreu um erro ao alterar sua senha. Por favor, tente novamente.');
+      }
       setLoading(false);
     }
   };
@@ -183,11 +191,32 @@ const Security: React.FC<Props> = ({ setView }) => {
       {error && (
         <div id="security-error-banner" className="bg-red-50 border border-red-100 rounded-2xl p-4 text-red-700 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-300">
           <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={18} />
-          <div>
+          <div className="space-y-2 w-full">
             <p className="font-semibold">
               {isGoogleUser ? 'Não foi possível definir a senha' : 'Não foi possível alterar a senha'}
             </p>
-            <p className="text-xs mt-0.5 text-red-600/80">{error}</p>
+            <p className="text-xs text-red-600/90 leading-relaxed">{error}</p>
+            
+            {isSessionExpired && (
+              <div className="pt-2 border-t border-red-100 mt-2 flex flex-wrap gap-2">
+                <button
+                  type="button"
+                  id="btn-re-authenticate"
+                  onClick={async () => {
+                    setLoading(true);
+                    try {
+                      await signOut();
+                    } catch (e) {
+                      localStorage.clear();
+                    }
+                    window.location.href = '/login';
+                  }}
+                  className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
+                >
+                  Sair e Entrar Novamente
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
