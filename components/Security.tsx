@@ -10,7 +10,7 @@ interface Props {
 }
 
 const Security: React.FC<Props> = ({ setView }) => {
-  const { user, signOut } = useAuth();
+  const { user, signOut, profile, refreshProfile } = useAuth();
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -20,6 +20,136 @@ const Security: React.FC<Props> = ({ setView }) => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const [isSessionExpired, setIsSessionExpired] = useState(false);
+
+  // Account deletion states
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteSuccess, setDeleteSuccess] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCancelConfirm, setShowCancelConfirm] = useState(false);
+
+  // User type helper classifications
+  const plan = profile?.plan || 'free';
+  const subscriptionStatus = profile?.subscription_status || 'expired';
+  const accountStatus = profile?.account_status || 'active';
+
+  const isPremiumActive = plan === 'premium' && 
+    (subscriptionStatus === 'active' || subscriptionStatus === 'trial');
+  const isPremiumCanceled = plan === 'premium' && subscriptionStatus === 'canceled';
+  const isPendingDeletion = accountStatus === 'pending_deletion';
+
+  const formatBrazilianDate = (dateStr?: string) => {
+    if (!dateStr) return '';
+    try {
+      const date = new Date(dateStr);
+      // Construct date string formatted with DD/MM/YYYY in standard UTC-centric representation
+      const localDay = String(date.getUTCDate()).padStart(2, '0');
+      const localMonth = String(date.getUTCMonth() + 1).padStart(2, '0');
+      const year = date.getUTCFullYear();
+      return `${localDay}/${localMonth}/${year}`;
+    } catch (e) {
+      return dateStr || '';
+    }
+  };
+
+  const handleDeleteAccount = async () => {
+    setDeleteLoading(true);
+    setDeleteError(null);
+    setDeleteSuccess(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        throw new Error('Sessão expirada. Por favor, faça login novamente.');
+      }
+
+      const response = await fetch('/api/user/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ action: 'delete' })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao processar exclusão da conta.');
+      }
+
+      if (result.status === 'deleted') {
+        setDeleteSuccess('Sua conta foi excluída com sucesso! Você será deslogado em instantes...');
+        setTimeout(async () => {
+          try {
+            await signOut();
+          } catch {
+            localStorage.clear();
+          }
+          window.location.href = '/login';
+        }, 3000);
+      } else if (result.status === 'scheduled') {
+        const dStr = formatBrazilianDate(result.scheduled_deletion_at);
+        setDeleteSuccess(`Sua solicitação de exclusão de conta foi agendada com sucesso para ${dStr}! Você será deslogado automatica e imediatamente.`);
+        setTimeout(async () => {
+          try {
+            await signOut();
+          } catch {
+            localStorage.clear();
+          }
+          window.location.href = '/login';
+        }, 4000);
+      }
+    } catch (err: any) {
+      console.error('[DeleteAccountFlow] Erro:', err);
+      setDeleteError(err?.message || 'Ocorreu um erro ao excluir a conta. Por favor, tente novamente.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
+
+  const handleCancelDeletion = async () => {
+    setDeleteLoading(true);
+    setDeleteError(null);
+    setDeleteSuccess(null);
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      if (!token) {
+        throw new Error('Sessão expirada. Por favor, faça login novamente.');
+      }
+
+      const response = await fetch('/api/user/delete', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ action: 'cancel' })
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro ao cancelar agendamento de exclusão.');
+      }
+
+      setDeleteSuccess('Agendamento de exclusão de conta cancelado com sucesso!');
+      setShowCancelConfirm(false);
+      
+      // Update local profile representation
+      await refreshProfile();
+    } catch (err: any) {
+      console.error('[CancelDeletionFlow] Erro:', err);
+      setDeleteError(err?.message || 'Ocorreu um erro ao cancelar a exclusão. Por favor, tente novamente.');
+    } finally {
+      setDeleteLoading(false);
+    }
+  };
 
   // Check if user is authenticated via Google provider
   const isGoogleUser = user?.app_metadata?.provider === 'google' || 
@@ -358,6 +488,189 @@ const Security: React.FC<Props> = ({ setView }) => {
           </form>
         </div>
       </div>
+
+      {/* Account Deletion Panel Section */}
+      {isPendingDeletion ? (
+        <div id="security-scheduled-deletion-card" className="bg-amber-50 border border-amber-200 rounded-3xl p-6 md:p-8 space-y-4">
+          <div className="flex gap-4 items-start">
+            <AlertTriangle className="text-amber-500 shrink-0 mt-1" size={24} />
+            <div className="space-y-3 w-full">
+              <h3 className="text-base md:text-lg font-bold text-amber-900 leading-tight">Exclusão de Conta Pendente</h3>
+              <p className="text-xs md:text-sm text-slate-600 leading-relaxed">
+                Sua conta está agendada para exclusão em <span className="font-bold text-amber-900">{formatBrazilianDate(profile?.scheduled_deletion_at)}</span>.
+              </p>
+              <p className="text-xs text-slate-500 leading-relaxed">
+                Até essa data, seu acesso Premium permanecerá ativo e seus dados continuarão disponíveis. No dia agendado, a conta será apagada de forma definitiva e automática.
+              </p>
+              
+              {deleteError && (
+                <div className="text-xs text-red-600 bg-red-50 p-3 rounded-xl font-medium border border-red-100 flex gap-2 items-center">
+                  <X size={14} className="shrink-0" />
+                  <span>{deleteError}</span>
+                </div>
+              )}
+              
+              {deleteSuccess && (
+                <div className="text-xs text-emerald-600 bg-emerald-50 p-3 rounded-xl font-medium border border-emerald-100 flex gap-2 items-center">
+                  <Check size={14} className="shrink-0" />
+                  <span>{deleteSuccess}</span>
+                </div>
+              )}
+
+              {showCancelConfirm ? (
+                <div className="bg-white border border-amber-100 rounded-2xl p-4 md:p-5 space-y-3 mt-3 shadow-xs">
+                  <p className="text-xs md:text-sm font-bold text-slate-800 leading-tight">
+                    Tem certeza que deseja cancelar a exclusão da conta?
+                  </p>
+                  <p className="text-xs text-slate-500 leading-normal">
+                    Sua conta continuará ativa normalmente.
+                  </p>
+                  <div className="flex gap-2 pt-1">
+                    <button
+                      type="button"
+                      id="btn-confirm-cancel-deletion"
+                      disabled={deleteLoading}
+                      onClick={handleCancelDeletion}
+                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer active:scale-95 text-center"
+                    >
+                      {deleteLoading ? 'Cancelando...' : 'Sim, cancelar exclusão'}
+                    </button>
+                    <button
+                      type="button"
+                      id="btn-close-cancel-deletion"
+                      onClick={() => setShowCancelConfirm(false)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2 px-4 rounded-xl transition-all cursor-pointer text-center"
+                    >
+                      Voltar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  id="btn-cancel-scheduled-deletion"
+                  onClick={() => {
+                    setDeleteError(null);
+                    setDeleteSuccess(null);
+                    setShowCancelConfirm(true);
+                  }}
+                  className="mt-2 bg-white hover:bg-slate-100 border border-amber-200 text-amber-700 font-bold text-xs py-2 px-4 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95 text-center inline-block"
+                >
+                  Cancelar exclusão
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div id="security-delete-account-card" className="bg-white rounded-3xl border border-red-100 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 bg-red-50/50 border-b border-red-100/50 flex items-center gap-2">
+            <AlertTriangle size={18} className="text-red-500" />
+            <h3 className="text-sm font-bold text-red-600 uppercase tracking-widest">
+              Excluir Conta
+            </h3>
+          </div>
+          
+          <div className="p-6 md:p-8 space-y-6">
+            <p className="text-xs md:text-sm text-slate-500 leading-relaxed">
+              Você pode excluir permanentemente sua conta de usuário a qualquer momento. Esta ação removerá totalmente seus dados de medicamentos, agendamentos e histórico de registros.
+            </p>
+
+            {deleteError && (
+              <div id="delete-error-notice" className="text-xs md:text-sm text-red-600 bg-red-50 p-4 rounded-2xl border border-red-100 font-medium">
+                {deleteError}
+              </div>
+            )}
+
+            {deleteSuccess && (
+              <div id="delete-success-notice" className="text-xs md:text-sm text-emerald-600 bg-emerald-50 p-4 rounded-2xl border border-emerald-100 font-medium">
+                {deleteSuccess}
+              </div>
+            )}
+
+            {isPremiumActive ? (
+              <div className="bg-red-50/60 border border-red-100 rounded-2xl p-4 md:p-5 text-red-800 text-xs md:text-sm">
+                <p className="font-semibold leading-relaxed">Não é possível excluir conta</p>
+                <p className="mt-1 text-slate-600 leading-relaxed font-medium">
+                  Você possui uma assinatura Premium ativa. Cancele sua assinatura primeiro. Após o cancelamento da renovação automática, a exclusão da conta ficará disponível.
+                </p>
+              </div>
+            ) : showDeleteConfirm ? (
+              <div className="bg-red-50/40 border border-red-100 p-5 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                <p className="text-xs md:text-sm font-bold text-red-900 leading-tight">
+                  {isPremiumCanceled 
+                    ? 'Agendar exclusão de conta?' 
+                    : 'Tem certeza que deseja excluir sua conta?'
+                  }
+                </p>
+                
+                <div className="text-xs md:text-sm text-slate-600 space-y-2 leading-relaxed">
+                  {isPremiumCanceled ? (
+                    <div className="space-y-3">
+                      <p>
+                        Sua assinatura permanece ativa até <span className="font-bold text-slate-900">{formatBrazilianDate(profile?.subscription_ends_at)}</span>.
+                      </p>
+                      <div className="space-y-1 bg-white p-3.5 rounded-xl border border-red-100/50">
+                        <p className="font-semibold text-slate-800">Se continuar:</p>
+                        <ul className="list-disc pl-4 space-y-1 text-xs text-slate-500 font-medium">
+                          <li>sua conta será marcada para exclusão;</li>
+                          <li>nenhum novo pagamento será realizado;</li>
+                          <li>seus dados serão removidos automaticamente em {formatBrazilianDate(profile?.subscription_ends_at)}.</li>
+                        </ul>
+                      </div>
+                      <p className="text-xs text-red-700 font-semibold">
+                        Esta ação não poderá ser desfeita após a data programada.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <p>
+                        Esta ação é permanente e não poderá ser desfeita. Todos os medicamentos, lembretes, histórico de registros e compromissos salvos serão apagados definitivamente.
+                      </p>
+                      <div className="bg-white rounded-2xl p-4 text-xs text-slate-500 leading-relaxed border border-red-100/30">
+                        Alguns registros relacionados a pagamentos poderão ser mantidos quando exigidos por obrigações legais, fiscais ou regulatórias.
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="flex flex-wrap gap-2 pt-1">
+                  <button
+                    type="button"
+                    id="btn-confirm-account-deletion"
+                    disabled={deleteLoading}
+                    onClick={handleDeleteAccount}
+                    className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-xs transition-all cursor-pointer active:scale-95 text-center"
+                  >
+                    {deleteLoading ? 'Processando...' : isPremiumCanceled ? 'Confirmar Agendamento de Exclusão' : 'Confirmar Exclusão'}
+                  </button>
+                  <button
+                    type="button"
+                    id="btn-cancel-deletion-dialog"
+                    onClick={() => setShowDeleteConfirm(false)}
+                    className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2.5 px-5 rounded-xl transition-all cursor-pointer active:scale-95 text-center"
+                  >
+                    Voltar
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                type="button"
+                id="btn-trigger-deletion-flow"
+                onClick={() => {
+                  setDeleteError(null);
+                  setDeleteSuccess(null);
+                  setShowDeleteConfirm(true);
+                }}
+                className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold py-4 rounded-2xl text-sm transition-all cursor-pointer border border-red-100 shadow-xs active:scale-[0.99] text-center"
+              >
+                Excluir conta
+              </button>
+            )}
+          </div>
+        </div>
+      )}
     </motion.div>
   );
 };

@@ -93,6 +93,9 @@ export interface Profile {
   stripe_customer_id?: string | null;
   created_at?: string;
   updated_at?: string;
+  account_status?: 'active' | 'pending_deletion';
+  deletion_requested_at?: string | null;
+  scheduled_deletion_at?: string | null;
 }
 
 export interface UserPreferences {
