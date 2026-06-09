@@ -92,15 +92,9 @@ const Security: React.FC<Props> = ({ setView }) => {
         }, 3000);
       } else if (result.status === 'scheduled') {
         const dStr = formatBrazilianDate(result.scheduled_deletion_at);
-        setDeleteSuccess(`Sua solicitação de exclusão de conta foi agendada com sucesso para ${dStr}! Você será deslogado automatica e imediatamente.`);
-        setTimeout(async () => {
-          try {
-            await signOut();
-          } catch {
-            localStorage.clear();
-          }
-          window.location.href = '/login';
-        }, 4000);
+        setDeleteSuccess(`Sua solicitação de exclusão de conta foi agendada com sucesso para ${dStr}!`);
+        setShowDeleteConfirm(false);
+        await refreshProfile();
       }
     } catch (err: any) {
       console.error('[DeleteAccountFlow] Erro:', err);
