@@ -214,6 +214,49 @@ const MainApp: React.FC = () => {
   }, [fetchData]);
 
   const lastSyncTimeRef = useRef<number>(0);
+  const [reactivationAlert, setReactivationAlert] = useState<{ id: string; title: string; body: string } | null>(null);
+
+  const checkReactivationNotification = useCallback(async () => {
+    if (!user?.id) return;
+    try {
+      const { data, error } = await supabase
+        .from('notification_queue')
+        .select('id, title, body')
+        .eq('user_id', user.id)
+        .eq('title', 'Exclusão de Conta Cancelada 🔒')
+        .eq('sent', false)
+        .order('created_at', { ascending: false })
+        .limit(1);
+
+      if (error) {
+        console.error('[MainApp] Error checking reactivation notifications:', error);
+        return;
+      }
+
+      if (data && data.length > 0) {
+        const notification = data[0];
+        
+        // Check local storage for already dismissed notifications
+        let dismissedIds: string[] = [];
+        try {
+          const raw = localStorage.getItem(`dismissed_reactivations_${user.id}`);
+          if (raw) dismissedIds = JSON.parse(raw);
+        } catch (storageErr) {
+          console.error('[MainApp] Error parsing local storage:', storageErr);
+        }
+
+        if (!dismissedIds.includes(notification.id)) {
+          setReactivationAlert({
+            id: notification.id,
+            title: notification.title,
+            body: notification.body,
+          });
+        }
+      }
+    } catch (err) {
+      console.error('[MainApp] Exception checking reactivation notifications:', err);
+    }
+  }, [user?.id]);
 
   const performSubscriptionSync = useCallback(async () => {
     if (!user?.id) return;
@@ -224,10 +267,12 @@ const MainApp: React.FC = () => {
     try {
       await stripeClientService.syncSubscription(user.id);
       await refreshProfile();
+      // Check immediately after sync to catch freshly created database notifications
+      await checkReactivationNotification();
     } catch (err) {
       console.warn('[MainApp] Error during background subscription sync:', err);
     }
-  }, [user?.id, refreshProfile]);
+  }, [user?.id, refreshProfile, checkReactivationNotification]);
 
   useEffect(() => {
     if (user?.id) {
@@ -235,64 +280,53 @@ const MainApp: React.FC = () => {
     }
   }, [user?.id, performSubscriptionSync]);
 
-  const [reactivationAlert, setReactivationAlert] = useState<{ id: string; title: string; body: string } | null>(null);
-
   useEffect(() => {
     if (!user) return;
 
-    const checkReactivationNotification = async () => {
-      try {
-        const { data, error } = await supabase
-          .from('notification_queue')
-          .select('id, title, body')
-          .eq('user_id', user.id)
-          .eq('title', 'Exclusão de Conta Cancelada 🔒')
-          .eq('sent', false)
-          .order('created_at', { ascending: false })
-          .limit(1);
-
-        if (error) {
-          console.error('[MainApp] Error checking reactivation notifications:', error);
-          return;
-        }
-
-        if (data && data.length > 0) {
-          const notification = data[0];
-          
-          // Check local storage for already dismissed notifications
-          let dismissedIds: string[] = [];
-          try {
-            const raw = localStorage.getItem(`dismissed_reactivations_${user.id}`);
-            if (raw) dismissedIds = JSON.parse(raw);
-          } catch (storageErr) {
-            console.error('[MainApp] Error parsing local storage:', storageErr);
-          }
-
-          if (!dismissedIds.includes(notification.id)) {
-            setReactivationAlert({
-              id: notification.id,
-              title: notification.title,
-              body: notification.body,
-            });
-          }
-        }
-      } catch (err) {
-        console.error('[MainApp] Exception checking reactivation notifications:', err);
-      }
-    };
-
     checkReactivationNotification();
 
-    const handleFocus = () => {
-      checkReactivationNotification();
-      performSubscriptionSync();
+    const handleFocus = async () => {
+      await performSubscriptionSync();
+      await checkReactivationNotification();
     };
 
     window.addEventListener('focus', handleFocus);
+
+    // Dynamic real-time subscription for instant updates
+    console.log(`[MainApp] Subscribing to instant real-time notification_queue changes for user: ${user.id}`);
+    const channel = supabase
+      .channel(`notification-queue-changes-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notification_queue', filter: `user_id=eq.${user.id}` },
+        async (payload) => {
+          console.log('[MainApp] Real-time notification inserted:', payload.new);
+          if (payload.new && payload.new.title === 'Exclusão de Conta Cancelada 🔒' && !payload.new.sent) {
+            let dismissedIds: string[] = [];
+            try {
+              const raw = localStorage.getItem(`dismissed_reactivations_${user.id}`);
+              if (raw) dismissedIds = JSON.parse(raw);
+            } catch (storageErr) {
+              console.error('[MainApp] Error parsing local storage:', storageErr);
+            }
+
+            if (!dismissedIds.includes(payload.new.id)) {
+              setReactivationAlert({
+                id: payload.new.id,
+                title: payload.new.title,
+                body: payload.new.body,
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
     return () => {
       window.removeEventListener('focus', handleFocus);
+      supabase.removeChannel(channel);
     };
-  }, [user, performSubscriptionSync]);
+  }, [user, performSubscriptionSync, checkReactivationNotification]);
 
   const handleDismissReactivationAlert = async () => {
     if (!reactivationAlert || !user) return;
