@@ -189,6 +189,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => subscription.unsubscribe();
   }, [isConfigured]);
 
+  useEffect(() => {
+    if (!user || !isConfigured) return;
+
+    console.log(`[AuthContext] Initializing Realtime listener for profile-changes for user: ${user.id}`);
+    const channel = supabase
+      .channel(`profile-db-changes-${user.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, async (payload) => {
+        console.log('[AuthContext] Profiles table changed. Tracing updates:', payload);
+        if (payload.new) {
+          await fetchProfile(user.id);
+        }
+      })
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, isConfigured]);
+
   const signIn = async (email: string, password: string) => {
     setProfileLoaded(false);
     const { data, error } = await authService.signIn(email, password);

@@ -26,6 +26,7 @@ import { useAuth } from '../hooks/useAuth';
 import { getUpdatedStock } from '../domain/stock';
 import { getNextDoseAt } from '../domain/medicationRules';
 import { pushService } from '../services/pushService';
+import { stripeClientService } from '../services/stripeClientService';
 
 const STORAGE_KEYS = {
   SETTINGS: 'medmanager_v2_settings'
@@ -42,7 +43,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const MainApp: React.FC = () => {
-  const { user, onboardingCompleted, loading: authLoading } = useAuth();
+  const { user, onboardingCompleted, loading: authLoading, refreshProfile } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -210,7 +211,12 @@ const MainApp: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-  }, [fetchData]);
+    if (user?.id) {
+      stripeClientService.syncSubscription(user.id)
+        .then(() => refreshProfile())
+        .catch(err => console.warn('[MainApp] Error on initial mount background subscription sync:', err));
+    }
+  }, [fetchData, user, refreshProfile]);
 
   const [reactivationAlert, setReactivationAlert] = useState<{ id: string; title: string; body: string } | null>(null);
 
@@ -262,6 +268,11 @@ const MainApp: React.FC = () => {
 
     const handleFocus = () => {
       checkReactivationNotification();
+      if (user?.id) {
+        stripeClientService.syncSubscription(user.id)
+          .then(() => refreshProfile())
+          .catch(err => console.warn('[MainApp] Error during background window focus sync:', err));
+      }
     };
 
     window.addEventListener('focus', handleFocus);
