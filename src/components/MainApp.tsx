@@ -235,11 +235,23 @@ const MainApp: React.FC = () => {
 
         if (data && data.length > 0) {
           const notification = data[0];
-          setReactivationAlert({
-            id: notification.id,
-            title: notification.title,
-            body: notification.body,
-          });
+          
+          // Check local storage for already dismissed notifications
+          let dismissedIds: string[] = [];
+          try {
+            const raw = localStorage.getItem(`dismissed_reactivations_${user.id}`);
+            if (raw) dismissedIds = JSON.parse(raw);
+          } catch (storageErr) {
+            console.error('[MainApp] Error parsing local storage:', storageErr);
+          }
+
+          if (!dismissedIds.includes(notification.id)) {
+            setReactivationAlert({
+              id: notification.id,
+              title: notification.title,
+              body: notification.body,
+            });
+          }
         }
       } catch (err) {
         console.error('[MainApp] Exception checking reactivation notifications:', err);
@@ -262,6 +274,22 @@ const MainApp: React.FC = () => {
     if (!reactivationAlert || !user) return;
     const alertId = reactivationAlert.id;
     setReactivationAlert(null);
+
+    // Persist local dismissal immediately to prevent double exposure
+    try {
+      let dismissedIds: string[] = [];
+      const raw = localStorage.getItem(`dismissed_reactivations_${user.id}`);
+      if (raw) {
+        dismissedIds = JSON.parse(raw);
+      }
+      if (!dismissedIds.includes(alertId)) {
+        dismissedIds.push(alertId);
+        localStorage.setItem(`dismissed_reactivations_${user.id}`, JSON.stringify(dismissedIds));
+      }
+    } catch (storageErr) {
+      console.error('[MainApp] Error saving dismissed notification locally:', storageErr);
+    }
+
     try {
       await supabase
         .from('notification_queue')
