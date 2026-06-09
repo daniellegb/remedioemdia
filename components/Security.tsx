@@ -590,7 +590,7 @@ const Security: React.FC<Props> = ({ setView }) => {
 
             {isPremiumActive ? (
               <div className="bg-red-50/60 border border-red-100 rounded-2xl p-4 md:p-5 text-red-800 text-xs md:text-sm">
-                <p className="font-semibold leading-relaxed">Não é possível excluir conta</p>
+                <p className="font-semibold leading-relaxed">Cancele sua assinatura antes de cancelar a sua conta!</p>
                 <p className="mt-1 text-slate-600 leading-relaxed font-medium">
                   Você possui uma assinatura Premium ativa. Cancele sua assinatura primeiro. Após o cancelamento da renovação automática, a exclusão da conta ficará disponível.
                 </p>

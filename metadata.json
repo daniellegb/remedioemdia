@@ -3,5 +3,8 @@
   "description": "Sistema completo de gestão de medicamentos e compromissos médicos.",
   "requestFramePermissions": [
     "notifications"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]
 }
