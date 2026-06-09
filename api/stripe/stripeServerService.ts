@@ -14,11 +14,11 @@ interface Profile {
 }
 
 // --- SUPABASE ADMIN ---
-const supabaseUrl = process.env.VITE_SUPABASE_URL;
+const supabaseUrl = process.env.SUPABASE_DB_URL || process.env.VITE_SUPABASE_URL;
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
 
 if (!supabaseUrl || !supabaseServiceKey) {
-  console.error('[StripeServerService] Missing environment variables: VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+  console.error('[StripeServerService] Missing environment variables: SUPABASE_DB_URL/VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
 }
 
 const supabaseAdmin = createClient(
