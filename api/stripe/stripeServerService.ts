@@ -682,12 +682,38 @@ export const stripeServerService = {
         const endsAt = new Date(subscription.current_period_end * 1000).toISOString();
         const status = subscription.cancel_at_period_end ? 'canceled' : subscription.status;
 
-        const updates = {
+        const updates: any = {
           subscription_status: status,
           subscription_ends_at: endsAt,
           stripe_subscription_id: subscription.id,
           plan: (subscription.status === 'active' || subscription.status === 'trialing' || (subscription.status === 'canceled' && new Date() < new Date(subscription.current_period_end * 1000))) ? 'premium' : 'free',
         };
+
+        // --- SPECIAL CASE: subscription reactivation after account deletion gets scheduled ---
+        let autoCancelledDeletion = false;
+        let authMeta: any = null;
+        let originallyScheduledDeletionAt: string | null = null;
+
+        try {
+          // Fetch auth user metadata backup
+          const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(userId);
+          if (authUser?.user_metadata) {
+            authMeta = authUser.user_metadata;
+          }
+        } catch (metaErr: any) {
+          console.error('[StripeServerService-Sync] Error fetching auth user for reactivation:', metaErr.message || metaErr);
+        }
+
+        const accountStatus = profile.account_status || authMeta?.account_status || 'active';
+        originallyScheduledDeletionAt = profile.scheduled_deletion_at || authMeta?.scheduled_deletion_at || null;
+
+        if (!subscription.cancel_at_period_end && subscription.status === 'active' && accountStatus === 'pending_deletion') {
+          console.log(`[StripeServerService-Sync] subscription reactivated for user ${userId}. Auto-cancelling account deletion.`);
+          updates.account_status = 'active';
+          updates.deletion_requested_at = null;
+          updates.scheduled_deletion_at = null;
+          autoCancelledDeletion = true;
+        }
 
         console.log(`[StripeServerService] Atualizando dados locais de faturamento via sincronização:`, updates);
         const { data: updatedProfile, error: updateError } = await supabaseAdmin
@@ -703,6 +729,73 @@ export const stripeServerService = {
         if (updateError) {
           console.error('[StripeServerService] Falha ao atualizar perfil pós sincronização Stripe:', updateError.message);
           return profile as Profile;
+        }
+
+        if (autoCancelledDeletion) {
+          // 1. Update auth metadata backup
+          try {
+            await supabaseAdmin.auth.admin.updateUserById(userId, {
+              user_metadata: {
+                ...(authMeta || {}),
+                account_status: 'active',
+                deletion_requested_at: null,
+                scheduled_deletion_at: null,
+              },
+            });
+          } catch (metaErr: any) {
+            console.error('[StripeServerService-Sync] Failed to update user_metadata during reactivation sync:', metaErr.message || metaErr);
+          }
+
+          // 2. Register Audit Log
+          const auditType = 'ACCOUNT_DELETION_AUTO_CANCELLED_BY_SUBSCRIPTION_REACTIVATION';
+          try {
+            const { error: auditErr } = await supabaseAdmin
+              .from('stripe_events')
+              .insert({
+                stripe_event_id: `reactivation-sync-audit-${userId}-${Date.now()}`,
+                stripe_event_type: auditType,
+                stripe_customer_id: stripeCustomerId,
+                stripe_subscription_id: subscription.id,
+                user_id: userId,
+                payload_json: {
+                  event_type: auditType,
+                  user_id: userId,
+                  timestamp: new Date().toISOString(),
+                  stripe_subscription_id: subscription.id,
+                  originally_scheduled_deletion_at: originallyScheduledDeletionAt,
+                  source: 'sync'
+                },
+              });
+
+            if (auditErr) {
+              console.error(`[StripeServerService-Sync] FAILED to write reactivation audit log: ${auditErr.message}`);
+            } else {
+              console.log(`[StripeServerService-Sync] Audit logged: ${auditType}`);
+            }
+          } catch (auditErr: any) {
+            console.error('[StripeServerService-Sync] Exception writing reactivation audit log:', auditErr.message || auditErr);
+          }
+
+          // 3. Notify the user
+          try {
+            const { error: notifyErr } = await supabaseAdmin
+              .from('notification_queue')
+              .insert([{
+                user_id: userId,
+                title: 'Exclusão de Conta Cancelada 🔒',
+                body: 'Sua assinatura foi reativada e, por isso, o processo de exclusão da conta foi cancelado automaticamente. Caso ainda deseje excluir sua conta, será necessário solicitar a exclusão novamente.',
+                trigger_at: new Date().toISOString(),
+                sent: false,
+              }]);
+
+            if (notifyErr) {
+              console.error(`[StripeServerService-Sync] FAILED to schedule user notification: ${notifyErr.message}`);
+            } else {
+              console.log('[StripeServerService-Sync] Reactivation response notification queued successfully.');
+            }
+          } catch (notifyErr: any) {
+            console.error('[StripeServerService-Sync] Exception queueing reactivation notification:', notifyErr.message || notifyErr);
+          }
         }
 
         // HISTÓRICO: Sincronizar histórico local também
