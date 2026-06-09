@@ -1,9 +1,11 @@
 import React, { useState } from 'react';
-import { ArrowLeft, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, Key, Check, X, Smile } from 'lucide-react';
+import { ArrowLeft, Lock, Eye, EyeOff, CheckCircle2, AlertTriangle, Key, Check, X, Smile, Monitor, ChevronRight } from 'lucide-react';
 import { supabase } from '../src/lib/supabase';
 import { useAuth } from '../src/hooks/useAuth';
 import { ViewType } from '../types';
 import { motion } from 'motion/react';
+import ActiveSessions from './ActiveSessions';
+
 
 interface Props {
   setView: (view: ViewType) => void;
@@ -11,6 +13,7 @@ interface Props {
 
 const Security: React.FC<Props> = ({ setView }) => {
   const { user, signOut, profile, refreshProfile } = useAuth();
+  const [subView, setSubView] = useState<'main' | 'sessions'>('main');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -271,6 +274,20 @@ const Security: React.FC<Props> = ({ setView }) => {
     visible: { opacity: 1, y: 0, transition: { duration: 0.4, ease: 'easeOut' } }
   };
 
+  if (subView === 'sessions') {
+    return (
+      <motion.div 
+        id="security-sessions-container"
+        initial="hidden"
+        animate="visible"
+        variants={containerVariants}
+        className="pb-20 md:pb-0 max-w-2xl mx-auto"
+      >
+        <ActiveSessions onBack={() => setSubView('main')} />
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div 
       id="security-page-container"
@@ -481,6 +498,24 @@ const Security: React.FC<Props> = ({ setView }) => {
             </button>
           </form>
         </div>
+      </div>
+
+      {/* Active Sessions Trigger Card */}
+      <div 
+        id="active-sessions-trigger-card" 
+        onClick={() => setSubView('sessions')}
+        className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 flex flex-row items-center justify-between hover:bg-slate-50 hover:border-slate-200 transition-all cursor-pointer active:scale-[0.99] group duration-150 text-left"
+      >
+        <div className="flex items-center gap-4">
+          <div className="p-3.5 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-100/75 transition-colors">
+            <Monitor size={22} />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-slate-800">Dispositivos e Sessões Ativas</h4>
+            <p className="text-xs text-slate-500 mt-0.5 font-medium leading-relaxed">Visualize e encerre remotamente outros computadores, celulares ou tablets conectados com sua conta.</p>
+          </div>
+        </div>
+        <ChevronRight className="text-slate-400 group-hover:text-slate-600 transition-colors shrink-0" size={18} />
       </div>
 
       {/* Account Deletion Panel Section */}

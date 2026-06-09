@@ -37,7 +37,62 @@ async function runSchemaMigration() {
       ADD COLUMN IF NOT EXISTS scheduled_deletion_at TIMESTAMP WITH TIME ZONE;
     `;
     
-    console.log('[Migration] Colunas de exclusão verificadas/criadas com sucesso no banco de dados!');
+    console.log('[Migration] Verificando se a tabela public.active_sessions existe...');
+    await sql`
+      CREATE TABLE IF NOT EXISTS public.active_sessions (
+        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+        session_id TEXT NOT NULL,
+        user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+        created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+        last_activity TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+        user_agent TEXT,
+        os TEXT,
+        browser TEXT,
+        device_type TEXT,
+        UNIQUE(user_id, session_id)
+      );
+    `;
+
+    console.log('[Migration] Ativando Row Level Security na tabela active_sessions...');
+    await sql`ALTER TABLE public.active_sessions ENABLE ROW LEVEL SECURITY;`;
+
+    // Drop policies to recreate them cleanly (idempotent)
+    await sql`DROP POLICY IF EXISTS "Users can view their own active sessions" ON public.active_sessions;`;
+    await sql`DROP POLICY IF EXISTS "Users can insert their own active sessions" ON public.active_sessions;`;
+    await sql`DROP POLICY IF EXISTS "Users can update their own active sessions" ON public.active_sessions;`;
+    await sql`DROP POLICY IF EXISTS "Users can delete their own active sessions" ON public.active_sessions;`;
+
+    console.log('[Migration] Criando políticas de segurança RLS para active_sessions...');
+    await sql`
+      CREATE POLICY "Users can view their own active sessions" 
+      ON public.active_sessions FOR SELECT 
+      TO authenticated 
+      USING (auth.uid() = user_id);
+    `;
+
+    await sql`
+      CREATE POLICY "Users can insert their own active sessions" 
+      ON public.active_sessions FOR INSERT 
+      TO authenticated 
+      WITH CHECK (auth.uid() = user_id);
+    `;
+
+    await sql`
+      CREATE POLICY "Users can update their own active sessions" 
+      ON public.active_sessions FOR UPDATE 
+      TO authenticated 
+      USING (auth.uid() = user_id) 
+      WITH CHECK (auth.uid() = user_id);
+    `;
+
+    await sql`
+      CREATE POLICY "Users can delete their own active sessions" 
+      ON public.active_sessions FOR DELETE 
+      TO authenticated 
+      USING (auth.uid() = user_id);
+    `;
+
+    console.log('[Migration] Colunas de exclusão e tabela de sessões verificadas/criadas com sucesso no banco de dados!');
     await sql.end();
   } catch (err: any) {
     console.error('[Migration] Erro ao rodar migração de colunas:', err.message || err);

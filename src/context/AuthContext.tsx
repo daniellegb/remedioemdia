@@ -8,6 +8,8 @@ import { Profile } from '../../types';
 import { authService } from '../services/authService';
 import { hasPremiumAccess } from '../utils/subscriptionUtils';
 import { subscriptionService } from '../services/subscriptionService';
+import { sessionService } from '../services/sessionService';
+import { generateUUID } from '../utils/userAgent';
 
 interface AuthContextType {
   user: User | null;
@@ -23,7 +25,9 @@ interface AuthContextType {
   refreshProfile: () => Promise<void>;
   isAdmin: boolean;
   isPremium: boolean;
+  currentSessionId: string;
 }
+
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
@@ -32,6 +36,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<Profile | null>(null);
   const [profileLoaded, setProfileLoaded] = useState(false);
+  const [currentSessionId, setCurrentSessionId] = useState<string>('');
   const profileRef = React.useRef<Profile | null>(null);
 
   useEffect(() => {
@@ -208,6 +213,57 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     };
   }, [user?.id, isConfigured, fetchProfile]);
 
+  useEffect(() => {
+    if (!user || !isConfigured) {
+      setCurrentSessionId('');
+      return;
+    }
+
+    let localId = localStorage.getItem('medmanager_v2_session_id');
+    if (!localId) {
+      localId = generateUUID();
+      localStorage.setItem('medmanager_v2_session_id', localId);
+    }
+    setCurrentSessionId(localId);
+
+    // Async registration
+    sessionService.registerSession(user.id, localId)
+      .then(() => console.log('[SessionTracker] Current session registered in public.active_sessions'))
+      .catch(err => console.error('[SessionTracker] Error registering session:', err));
+
+    // Stand up periodic activity update & validity checking
+    const interval = setInterval(async () => {
+      if (!user?.id || !localId) return;
+      try {
+        const isValid = await sessionService.isSessionValid(user.id, localId);
+        if (!isValid) {
+          console.warn('[SessionTracker] Session has been remotely revoked or terminated. Forcing local logout.');
+          setProfile(null);
+          setUser(null);
+          setSession(null);
+          localStorage.removeItem('medmanager_v2_session_id');
+          try {
+            await authService.signOut();
+          } catch (signOutError) {
+            console.error('[SessionTracker] Error signing out via authService:', signOutError);
+          }
+          window.location.href = '/login?revoked=true';
+          return;
+        }
+
+        // Active, update last activity timestamp of current session
+        await sessionService.updateActivity(user.id, localId);
+      } catch (err) {
+        console.warn('[SessionTracker] Transient background network check warning:', err);
+      }
+    }, 45 * 1000);
+
+    return () => {
+      clearInterval(interval);
+    };
+  }, [user?.id, isConfigured]);
+
+
   const signIn = async (email: string, password: string) => {
     setProfileLoaded(false);
     const { data, error } = await authService.signIn(email, password);
@@ -238,6 +294,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setUser(null);
       setSession(null);
       
+      const localId = localStorage.getItem('medmanager_v2_session_id');
+      if (localId) {
+        try {
+          await sessionService.revokeSession(localId);
+        } catch (dbErr) {
+          console.warn('[AuthContext] Error revoking session entry on manual sign out:', dbErr);
+        }
+        localStorage.removeItem('medmanager_v2_session_id');
+      }
+
       await authService.signOut();
     } catch (err) {
       console.error('Error during sign out:', err);
@@ -246,6 +312,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setProfile(null);
       setUser(null);
       setSession(null);
+      localStorage.removeItem('medmanager_v2_session_id');
     }
   };
 
@@ -268,7 +335,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     isConfigured,
     refreshProfile,
     isAdmin,
-    isPremium
+    isPremium,
+    currentSessionId
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

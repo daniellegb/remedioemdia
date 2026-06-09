@@ -111,3 +111,16 @@ export interface UserPreferences {
 }
 
 export type ViewType = 'dashboard' | 'calendar' | 'meds' | 'appointments' | 'settings' | 'add-appointment' | 'add-med' | 'onboarding' | 'subscription' | 'security';
+
+export interface ActiveSession {
+  id: string;
+  session_id: string;
+  user_id: string;
+  created_at: string;
+  last_activity: string;
+  user_agent: string;
+  os: string;
+  browser: string;
+  device_type: string;
+}
+

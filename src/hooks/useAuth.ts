@@ -14,7 +14,8 @@ export const useAuth = () => {
     isConfigured, 
     refreshProfile, 
     isAdmin, 
-    isPremium 
+    isPremium,
+    currentSessionId
   } = useAuthContext();
 
   return {
@@ -32,6 +33,7 @@ export const useAuth = () => {
     isConfigured,
     refreshProfile,
     isAdmin,
-    isPremium
+    isPremium,
+    currentSessionId
   };
 };
