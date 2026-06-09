@@ -1,4 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { ShieldCheck, X } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import Navigation from '../../components/Navigation';
 import Dashboard from '../../components/Dashboard';
 import Medications from '../../components/Medications';
@@ -209,6 +211,66 @@ const MainApp: React.FC = () => {
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  const [reactivationAlert, setReactivationAlert] = useState<{ id: string; title: string; body: string } | null>(null);
+
+  useEffect(() => {
+    if (!user) return;
+
+    const checkReactivationNotification = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('notification_queue')
+          .select('id, title, body')
+          .eq('user_id', user.id)
+          .eq('title', 'Exclusão de Conta Cancelada 🔒')
+          .eq('sent', false)
+          .order('created_at', { ascending: false })
+          .limit(1);
+
+        if (error) {
+          console.error('[MainApp] Error checking reactivation notifications:', error);
+          return;
+        }
+
+        if (data && data.length > 0) {
+          const notification = data[0];
+          setReactivationAlert({
+            id: notification.id,
+            title: notification.title,
+            body: notification.body,
+          });
+        }
+      } catch (err) {
+        console.error('[MainApp] Exception checking reactivation notifications:', err);
+      }
+    };
+
+    checkReactivationNotification();
+
+    const handleFocus = () => {
+      checkReactivationNotification();
+    };
+
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [user]);
+
+  const handleDismissReactivationAlert = async () => {
+    if (!reactivationAlert || !user) return;
+    const alertId = reactivationAlert.id;
+    setReactivationAlert(null);
+    try {
+      await supabase
+        .from('notification_queue')
+        .update({ sent: true, sent_at: new Date().toISOString() })
+        .eq('id', alertId);
+    } catch (err) {
+      console.error('[MainApp] Error updating notification status in DB:', err);
+    }
+  };
 
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
@@ -598,6 +660,60 @@ const MainApp: React.FC = () => {
         onConfirm={confirmModal.onConfirm}
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
       />
+
+      <AnimatePresence>
+        {reactivationAlert && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
+            {/* Backdrop */}
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={handleDismissReactivationAlert}
+              className="absolute inset-0 bg-slate-900/40 backdrop-blur-sm"
+            />
+
+            {/* Modal Content */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="relative w-full max-w-md bg-white rounded-[32px] shadow-2xl overflow-hidden border border-slate-100 p-6 sm:p-8"
+            >
+              <div className="flex justify-between items-start mb-6">
+                <div className="w-12 h-12 rounded-2xl flex items-center justify-center bg-blue-50 text-blue-600">
+                  <ShieldCheck size={24} />
+                </div>
+                <button
+                  onClick={handleDismissReactivationAlert}
+                  className="p-2 hover:bg-slate-100 rounded-xl text-slate-400 transition-colors"
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div className="space-y-4 mb-8">
+                <h3 className="text-xl font-bold text-slate-900 leading-tight">
+                  {reactivationAlert.title}
+                </h3>
+                <p className="text-slate-500 text-sm leading-relaxed">
+                  {reactivationAlert.body}
+                </p>
+              </div>
+
+              <div className="flex justify-end">
+                <button
+                  type="button"
+                  onClick={handleDismissReactivationAlert}
+                  className="w-full sm:w-auto px-6 py-3 bg-blue-600 text-white font-bold rounded-2xl hover:bg-blue-700 transition-all shadow-lg shadow-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  Entendi, obrigado
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
