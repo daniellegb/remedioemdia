@@ -56,24 +56,59 @@ function startScheduledDeletionWorker() {
       const now = new Date().toISOString();
       console.log(`[Worker] Verificando exclusões programadas pendentes... (Hora atual: ${now})`);
       
-      const { data: profiles, error } = await supabaseAdmin
-        .from('profiles')
-        .select('id, email')
-        .eq('account_status', 'pending_deletion')
-        .lte('scheduled_deletion_at', now);
-        
-      if (error) {
-        console.error('[Worker] Erro ao buscar exclusões pendentes:', error.message);
+      let pendingDeletions: Array<{ id: string; email?: string }> = [];
+
+      // 1. Try profiles table
+      try {
+        const { data: profiles, error } = await supabaseAdmin
+          .from('profiles')
+          .select('id, email')
+          .eq('account_status', 'pending_deletion')
+          .lte('scheduled_deletion_at', now);
+
+        if (!error && profiles) {
+          const typedProfiles = profiles as Array<{ id: string; email?: string }>;
+          pendingDeletions = typedProfiles.map(p => ({
+            id: p.id,
+            email: p.email
+          }));
+        } else if (error) {
+          console.warn('[Worker] Profiles query failed (likely missing columns):', error.message);
+        }
+      } catch (dbErr: any) {
+        console.warn('[Worker] Profiles query threw exception:', dbErr.message || dbErr);
+      }
+
+      // 2. Auth user_metadata Backup Fallback: Scan listUsers for key values
+      try {
+        const { data: { users }, error: listErr } = await supabaseAdmin.auth.admin.listUsers();
+        if (!listErr && users) {
+          for (const user of users) {
+            const meta = user.user_metadata || {};
+            if (meta.account_status === 'pending_deletion') {
+              const scheduledAt = meta.scheduled_deletion_at;
+              if (scheduledAt && scheduledAt <= now) {
+                if (!pendingDeletions.some(p => p.id === user.id)) {
+                  console.log(`[Worker] Falling back to user_metadata: scheduled deletion found for ${user.id}`);
+                  pendingDeletions.push({ id: user.id, email: user.email });
+                }
+              }
+            }
+          }
+        } else if (listErr) {
+          console.error('[Worker] listUsers fallback failed:', listErr.message);
+        }
+      } catch (listCatch: any) {
+        console.error('[Worker] listUsers fallback threw exception:', listCatch.message || listCatch);
+      }
+      
+      if (pendingDeletions.length === 0) {
         return;
       }
       
-      if (!profiles || profiles.length === 0) {
-        return;
-      }
+      console.log(`[Worker] Encontradas ${pendingDeletions.length} contas para exclusão definitiva.`);
       
-      console.log(`[Worker] Encontradas ${profiles.length} contas para exclusão definitiva.`);
-      
-      for (const profile of profiles) {
+      for (const profile of pendingDeletions) {
         console.log(`[Worker] Excluindo permanentemente a conta do usuário ${profile.id} (${profile.email || 'sem e-mail'})`);
         
         const { error: deleteErr } = await supabaseAdmin.auth.admin.deleteUser(profile.id);

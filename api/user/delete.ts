@@ -45,6 +45,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return res.status(404).json({ error: 'Perfil do usuário não encontrado.' });
     }
 
+    const currentAccountStatus = profile.account_status || user.user_metadata?.account_status || 'active';
+
     if (action === 'delete') {
       const isPremiumActive = profile.plan === 'premium' && 
         (profile.subscription_status === 'active' || profile.subscription_status === 'trial');
@@ -61,20 +63,51 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         const nowStr = new Date().toISOString();
         const scheduledDate = profile.subscription_ends_at || nowStr;
 
-        // Mark profile as pending deletion
-        const { error: updateErr } = await supabaseAdmin
-          .from('profiles')
-          .update({
-            account_status: 'pending_deletion',
-            deletion_requested_at: nowStr,
-            scheduled_deletion_at: scheduledDate,
-            updated_at: nowStr
-          })
-          .eq('id', userId);
+        // 1. Try to update profiles table. If it fails, log and continue.
+        let profilesUpdateSuccessful = false;
+        try {
+          const { error: updateErr } = await supabaseAdmin
+            .from('profiles')
+            .update({
+              account_status: 'pending_deletion',
+              deletion_requested_at: nowStr,
+              scheduled_deletion_at: scheduledDate,
+              updated_at: nowStr
+            })
+            .eq('id', userId);
 
-        if (updateErr) {
-          console.error('[DeleteAPI] Erro ao agendar exclusão:', updateErr);
-          return res.status(500).json({ error: 'Falha ao agendar exclusão da conta.' });
+          if (!updateErr) {
+            profilesUpdateSuccessful = true;
+          } else {
+            console.warn('[DeleteAPI] Direct profiles table update failed (likely missing columns):', updateErr.message);
+          }
+        } catch (dbErr: any) {
+          console.warn('[DeleteAPI] Direct profiles table update threw exception:', dbErr.message || dbErr);
+        }
+
+        // 2. Always update user_metadata in Auth as a rock-solid backup
+        let metaUpdateSuccessful = false;
+        try {
+          const { error: metaErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+            user_metadata: {
+              ...(user.user_metadata || {}),
+              account_status: 'pending_deletion',
+              deletion_requested_at: nowStr,
+              scheduled_deletion_at: scheduledDate
+            }
+          });
+          if (!metaErr) {
+            metaUpdateSuccessful = true;
+          } else {
+            console.error('[DeleteAPI] Failed to update user_metadata in Auth:', metaErr.message);
+          }
+        } catch (metaErr: any) {
+          console.error('[DeleteAPI] Auth meta update exception:', metaErr.message || metaErr);
+        }
+
+        // Return success if at least one carrier updated the information
+        if (!profilesUpdateSuccessful && !metaUpdateSuccessful) {
+          return res.status(500).json({ error: 'Falha ao agendar exclusão da conta no banco de dados e nos metadados.' });
         }
 
         return res.status(200).json({
@@ -99,22 +132,53 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
 
     } else if (action === 'cancel') {
-      if (profile.account_status !== 'pending_deletion') {
+      if (currentAccountStatus !== 'pending_deletion') {
         return res.status(400).json({ error: 'Sua conta não possui uma exclusão agendada ativa.' });
       }
 
-      const { error: updateErr } = await supabaseAdmin
-        .from('profiles')
-        .update({
-          account_status: 'active',
-          deletion_requested_at: null,
-          scheduled_deletion_at: null,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', userId);
+      // 1. Try to update profiles table. If it fails, log and continue.
+      let profilesUpdateSuccessful = false;
+      try {
+        const { error: updateErr } = await supabaseAdmin
+          .from('profiles')
+          .update({
+            account_status: 'active',
+            deletion_requested_at: null,
+            scheduled_deletion_at: null,
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', userId);
 
-      if (updateErr) {
-        console.error('[DeleteAPI] Erro ao cancelar exclusão:', updateErr);
+        if (!updateErr) {
+          profilesUpdateSuccessful = true;
+        } else {
+          console.warn('[DeleteAPI] Direct profiles table update during cancel failed:', updateErr.message);
+        }
+      } catch (dbErr: any) {
+        console.warn('[DeleteAPI] Direct profiles table update during cancel threw exception:', dbErr.message || dbErr);
+      }
+
+      // 2. Always update user_metadata in Auth as a fallback/backup
+      let metaUpdateSuccessful = false;
+      try {
+        const { error: metaErr } = await supabaseAdmin.auth.admin.updateUserById(userId, {
+          user_metadata: {
+            ...(user.user_metadata || {}),
+            account_status: 'active',
+            deletion_requested_at: null,
+            scheduled_deletion_at: null
+          }
+        });
+        if (!metaErr) {
+          metaUpdateSuccessful = true;
+        } else {
+          console.error('[DeleteAPI] Failed to update user_metadata during cancel:', metaErr.message);
+        }
+      } catch (metaErr: any) {
+        console.error('[DeleteAPI] Auth meta update exception during cancel:', metaErr.message || metaErr);
+      }
+
+      if (!profilesUpdateSuccessful && !metaUpdateSuccessful) {
         return res.status(500).json({ error: 'Falha ao cancelar exclusão.' });
       }
 

@@ -73,7 +73,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
       
       const currentProfile = data as Profile;
-      const updatedProfile = await subscriptionService.refreshSubscriptionStatus(currentProfile);
+      
+      // Fetch user metadata backup for account deletion properties
+      let meta: any = {};
+      try {
+        const { data: { user } } = await supabase.auth.getUser();
+        if (user?.user_metadata) {
+          meta = user.user_metadata;
+        }
+      } catch (metaErr) {
+        console.warn('[AuthContext] Error retrieving user metadata backup:', metaErr);
+      }
+
+      const mergedProfile: Profile = {
+        ...currentProfile,
+        account_status: currentProfile.account_status || meta.account_status || 'active',
+        deletion_requested_at: currentProfile.deletion_requested_at || meta.deletion_requested_at || null,
+        scheduled_deletion_at: currentProfile.scheduled_deletion_at || meta.scheduled_deletion_at || null
+      };
+
+      const updatedProfile = await subscriptionService.refreshSubscriptionStatus(mergedProfile);
       setProfile(updatedProfile);
     } catch (err) {
       console.error('Unexpected error fetching profile:', err);
