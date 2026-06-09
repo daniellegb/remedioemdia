@@ -465,6 +465,119 @@ export const stripeServerService = {
                 status: 'active',
                 startedAt,
               });
+
+              // --- SPECIAL CASE: subscription reactivation after account deletion gets scheduled ---
+              try {
+                // 1. Fetch user profile db status
+                const { data: profile, error: profileErr } = await supabaseAdmin
+                  .from('profiles')
+                  .select('account_status, scheduled_deletion_at')
+                  .eq('id', userId)
+                  .single();
+
+                if (profileErr) {
+                  console.warn(`[StripeServerService] Profile fetch warning for reactivation sync: ${profileErr.message}`);
+                }
+
+                // 2. Fetch auth user metadata backup
+                let authMeta: any = null;
+                try {
+                  const { data: { user: authUser } } = await supabaseAdmin.auth.admin.getUserById(userId);
+                  if (authUser?.user_metadata) {
+                    authMeta = authUser.user_metadata;
+                  }
+                } catch (metaErr: any) {
+                  console.error('[StripeServerService] Error fetching auth user for reactivation:', metaErr.message || metaErr);
+                }
+
+                const accountStatus = profile?.account_status || authMeta?.account_status || 'active';
+                const originallyScheduledDeletionAt = profile?.scheduled_deletion_at || authMeta?.scheduled_deletion_at || null;
+
+                if (accountStatus === 'pending_deletion') {
+                  console.log(`[StripeServerService] subscription reactivated for user ${userId}. Auto-cancelling account deletion.`);
+
+                  // 1. Update profiles table
+                  const { error: profileUpdateErr } = await supabaseAdmin
+                    .from('profiles')
+                    .update({
+                      account_status: 'active',
+                      deletion_requested_at: null,
+                      scheduled_deletion_at: null,
+                      updated_at: new Date().toISOString(),
+                    })
+                    .eq('id', userId);
+
+                  if (profileUpdateErr) {
+                    console.warn(`[StripeServerService] Direct profiles table update failed during reactivation: ${profileUpdateErr.message}`);
+                  }
+
+                  // 2. Update auth metadata backup
+                  try {
+                    await supabaseAdmin.auth.admin.updateUserById(userId, {
+                      user_metadata: {
+                        ...(authMeta || {}),
+                        account_status: 'active',
+                        deletion_requested_at: null,
+                        scheduled_deletion_at: null,
+                      },
+                    });
+                  } catch (metaErr: any) {
+                    console.error('[StripeServerService] Failed to update user_metadata during reactivation:', metaErr.message || metaErr);
+                  }
+
+                  // 3. Register Audit Log
+                  const auditType = 'ACCOUNT_DELETION_AUTO_CANCELLED_BY_SUBSCRIPTION_REACTIVATION';
+                  try {
+                    const { error: auditErr } = await supabaseAdmin
+                      .from('stripe_events')
+                      .insert({
+                        stripe_event_id: `reactivation-audit-${userId}-${Date.now()}`,
+                        stripe_event_type: auditType,
+                        stripe_customer_id: stripeCustomerId,
+                        stripe_subscription_id: stripeSubscriptionId,
+                        user_id: userId,
+                        payload_json: {
+                          event_type: auditType,
+                          user_id: userId,
+                          timestamp: new Date().toISOString(),
+                          stripe_subscription_id: stripeSubscriptionId,
+                          originally_scheduled_deletion_at: originallyScheduledDeletionAt,
+                        },
+                      });
+
+                    if (auditErr) {
+                      console.error(`[StripeServerService] FAILED to write reactivation audit log: ${auditErr.message}`);
+                    } else {
+                      console.log(`[StripeServerService] Audit logged: ${auditType}`);
+                    }
+                  } catch (auditErr: any) {
+                    console.error('[StripeServerService] Exception writing reactivation audit log:', auditErr.message || auditErr);
+                  }
+
+                  // 4. Notify the user
+                  try {
+                    const { error: notifyErr } = await supabaseAdmin
+                      .from('notification_queue')
+                      .insert([{
+                        user_id: userId,
+                        title: 'Exclusão de Conta Cancelada 🔒',
+                        body: 'Sua assinatura foi reativada e, por isso, o processo de exclusão da conta foi cancelado automaticamente. Caso ainda deseje excluir sua conta, será necessário solicitar a exclusão novamente.',
+                        trigger_at: new Date().toISOString(),
+                        sent: false,
+                      }]);
+
+                    if (notifyErr) {
+                      console.error(`[StripeServerService] FAILED to schedule user notification: ${notifyErr.message}`);
+                    } else {
+                      console.log('[StripeServerService] Reactivation response notification queued successfully.');
+                    }
+                  } catch (notifyErr: any) {
+                    console.error('[StripeServerService] Exception queueing reactivation notification:', notifyErr.message || notifyErr);
+                  }
+                }
+              } catch (reactivationError: any) {
+                console.error('[StripeServerService] Fatal error checking or executing deletion auto-cancel:', reactivationError.message || reactivationError);
+              }
             }
           }
           break;
