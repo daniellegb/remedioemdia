@@ -1,7 +1,7 @@
 // ⚠️ Nunca usar profile.plan diretamente para controle de acesso.
 // Sempre usar hasPremiumAccess(profile)
 
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured, getSupabaseStatus } from '../lib/supabase';
 import { Profile } from '../../types';
@@ -43,7 +43,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAdmin = profile?.role === 'admin';
   const isPremium = hasPremiumAccess(profile);
 
-  const fetchProfile = async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string) => {
     try {
       // Tentar buscar do backend
       const { data, error } = await supabase
@@ -99,7 +99,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } finally {
       setProfileLoaded(true);
     }
-  };
+  }, [isConfigured]);
 
   useEffect(() => {
     // Diagnostics
@@ -206,7 +206,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [user, isConfigured]);
+  }, [user?.id, isConfigured, fetchProfile]);
 
   const signIn = async (email: string, password: string) => {
     setProfileLoaded(false);
@@ -249,11 +249,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const refreshProfile = async () => {
-    if (user) {
+  const refreshProfile = useCallback(async () => {
+    if (user?.id) {
       await fetchProfile(user.id);
     }
-  };
+  }, [user?.id, fetchProfile]);
 
   const value = {
     user,

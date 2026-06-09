@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { ShieldCheck, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Navigation from '../../components/Navigation';
@@ -211,12 +211,29 @@ const MainApp: React.FC = () => {
 
   useEffect(() => {
     fetchData();
-    if (user?.id) {
-      stripeClientService.syncSubscription(user.id)
-        .then(() => refreshProfile())
-        .catch(err => console.warn('[MainApp] Error on initial mount background subscription sync:', err));
+  }, [fetchData]);
+
+  const lastSyncTimeRef = useRef<number>(0);
+
+  const performSubscriptionSync = useCallback(async () => {
+    if (!user?.id) return;
+    const now = Date.now();
+    // Throttle to once every 10 seconds to prevent rendering loops
+    if (now - lastSyncTimeRef.current < 10000) return;
+    lastSyncTimeRef.current = now;
+    try {
+      await stripeClientService.syncSubscription(user.id);
+      await refreshProfile();
+    } catch (err) {
+      console.warn('[MainApp] Error during background subscription sync:', err);
     }
-  }, [fetchData, user, refreshProfile]);
+  }, [user?.id, refreshProfile]);
+
+  useEffect(() => {
+    if (user?.id) {
+      performSubscriptionSync();
+    }
+  }, [user?.id, performSubscriptionSync]);
 
   const [reactivationAlert, setReactivationAlert] = useState<{ id: string; title: string; body: string } | null>(null);
 
@@ -268,18 +285,14 @@ const MainApp: React.FC = () => {
 
     const handleFocus = () => {
       checkReactivationNotification();
-      if (user?.id) {
-        stripeClientService.syncSubscription(user.id)
-          .then(() => refreshProfile())
-          .catch(err => console.warn('[MainApp] Error during background window focus sync:', err));
-      }
+      performSubscriptionSync();
     };
 
     window.addEventListener('focus', handleFocus);
     return () => {
       window.removeEventListener('focus', handleFocus);
     };
-  }, [user]);
+  }, [user, performSubscriptionSync]);
 
   const handleDismissReactivationAlert = async () => {
     if (!reactivationAlert || !user) return;
