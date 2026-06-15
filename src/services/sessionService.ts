@@ -26,8 +26,8 @@ export const sessionService = {
   /**
    * Registers or updates details of the current session in the database.
    */
-  async registerSession(userId: string, sessionId: string): Promise<void> {
-    if (!userId || !sessionId) return;
+  async registerSession(userId: string, sessionId: string): Promise<ActiveSession | null> {
+    if (!userId || !sessionId) return null;
     const ua = navigator.userAgent;
     const { os, browser, deviceType } = parseUserAgent(ua);
 
@@ -41,13 +41,18 @@ export const sessionService = {
       last_activity: new Date().toISOString()
     };
 
-    const { error } = await supabase
+    const { data, error } = await supabase
       .from('active_sessions')
-      .upsert(sessionRow, { onConflict: 'user_id,session_id' });
+      .upsert(sessionRow, { onConflict: 'user_id,session_id' })
+      .select()
+      .single();
 
     if (error) {
       console.error('[SessionService] Error registering session:', error);
+      return null;
     }
+
+    return data as ActiveSession;
   },
 
   /**

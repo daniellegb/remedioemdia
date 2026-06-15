@@ -226,28 +226,66 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setCurrentSessionId(localId);
 
+    let sessionDbId: string | null = null;
+    let isRevoked = false;
+
+    const handleRemoteLogout = async () => {
+      if (isRevoked) return;
+      isRevoked = true;
+      console.warn('[SessionTracker] Current session has been remotely revoked or terminated. Forcing local logout.');
+      setProfile(null);
+      setUser(null);
+      setSession(null);
+      localStorage.removeItem('medmanager_v2_session_id');
+      try {
+        await authService.signOut();
+      } catch (signOutError) {
+        console.error('[SessionTracker] Error signing out via authService:', signOutError);
+      }
+      window.location.href = '/login?revoked=true';
+    };
+
     // Async registration
     sessionService.registerSession(user.id, localId)
-      .then(() => console.log('[SessionTracker] Current session registered in public.active_sessions'))
+      .then((sess) => {
+        if (sess) {
+          sessionDbId = sess.id;
+          console.log('[SessionTracker] Current session registered in public.active_sessions with DB ID:', sess.id);
+        }
+      })
       .catch(err => console.error('[SessionTracker] Error registering session:', err));
 
-    // Stand up periodic activity update & validity checking
+    // Supabase Realtime Channel to detect instant logout
+    const channel = supabase
+      .channel(`active-sessions-channel-${user.id}-${localId}`)
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'active_sessions'
+      }, (payload) => {
+        console.log('[SessionTracker] Realtime DELETE payload received:', payload);
+        const oldRow = payload.old;
+        if (oldRow) {
+          const matchesDbId = sessionDbId && oldRow.id === sessionDbId;
+          const matchesSecId = oldRow.session_id === localId;
+          
+          if (matchesDbId || matchesSecId) {
+            console.log('[SessionTracker] Match found! Initiating instant remote sign out...');
+            handleRemoteLogout();
+          }
+        }
+      })
+      .subscribe((status) => {
+        console.log(`[SessionTracker] Realtime subscription status: ${status}`);
+      });
+
+    // Stand up periodic activity update & validity checking (fallback)
     const interval = setInterval(async () => {
       if (!user?.id || !localId) return;
       try {
         const isValid = await sessionService.isSessionValid(user.id, localId);
         if (!isValid) {
-          console.warn('[SessionTracker] Session has been remotely revoked or terminated. Forcing local logout.');
-          setProfile(null);
-          setUser(null);
-          setSession(null);
-          localStorage.removeItem('medmanager_v2_session_id');
-          try {
-            await authService.signOut();
-          } catch (signOutError) {
-            console.error('[SessionTracker] Error signing out via authService:', signOutError);
-          }
-          window.location.href = '/login?revoked=true';
+          handleRemoteLogout();
           return;
         }
 
@@ -256,10 +294,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } catch (err) {
         console.warn('[SessionTracker] Transient background network check warning:', err);
       }
-    }, 45 * 1000);
+    }, 15 * 1000); // Poll faster (15s instead of 45s) as a robust automatic fallback
 
     return () => {
       clearInterval(interval);
+      supabase.removeChannel(channel);
     };
   }, [user?.id, isConfigured]);
 

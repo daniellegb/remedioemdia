@@ -17,10 +17,23 @@ CREATE TABLE IF NOT EXISTS public.active_sessions (
     UNIQUE(user_id, session_id)
 );
 
--- 2. Habilitação de Segurança de Linha (RLS)
+-- 2. Habilitação de Segurança de Linha (RLS) e Réplica para Realtime
 ALTER TABLE public.active_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.active_sessions REPLICA IDENTITY FULL;
 
--- 3. Limpeza de políticas existentes (Evita erros ao reexecutar o script)
+-- 3. Inserir na publicação de Realtime do Supabase, se existir
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    BEGIN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.active_sessions;
+    EXCEPTION WHEN others THEN
+      RAISE NOTICE 'Tabela active_sessions já está na publicação ou ocorreu outro erro.';
+    END;
+  END IF;
+END $$;
+
+-- 4. Limpeza de políticas existentes (Evita erros ao reexecutar o script)
 DROP POLICY IF EXISTS "Users can view their own active sessions" ON public.active_sessions;
 DROP POLICY IF EXISTS "Users can insert their own active sessions" ON public.active_sessions;
 DROP POLICY IF EXISTS "Users can update their own active sessions" ON public.active_sessions;

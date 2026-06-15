@@ -12,8 +12,21 @@ CREATE TABLE IF NOT EXISTS public.active_sessions (
     UNIQUE(user_id, session_id)
 );
 
--- Enable Row Level Security
+-- Enable Row Level Security and REPLICA RELATION IDENTITY for Realtime
 ALTER TABLE public.active_sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.active_sessions REPLICA IDENTITY FULL;
+
+-- Add active_sessions to the supabase_realtime publication if it exists
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
+    BEGIN
+      ALTER PUBLICATION supabase_realtime ADD TABLE public.active_sessions;
+    EXCEPTION WHEN others THEN
+      RAISE NOTICE 'Tabela active_sessions já está na publicação ou ocorreu outro erro.';
+    END;
+  END IF;
+END $$;
 
 -- Drop policies to recreate them cleanly (idempotent)
 DROP POLICY IF EXISTS "Users can view their own active sessions" ON public.active_sessions;
