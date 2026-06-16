@@ -11,6 +11,7 @@ import Calendar from '../../components/Calendar';
 import Settings from '../../components/Settings';
 import Subscription from '../../components/Subscription';
 import Security from '../../components/Security';
+import Privacy from '../../components/Privacy';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { ViewType, Medication, DoseEvent, Appointment, AppSettings, UsageCategory, UserPreferences } from '../../types';
 import { COLORS } from '../../constants';
@@ -671,6 +672,8 @@ const MainApp: React.FC = () => {
         return <Subscription setView={setView} />;
       case 'security':
         return <Security setView={setView} />;
+      case 'privacy':
+        return <Privacy setView={setView} />;
       default:
         return <Dashboard 
           meds={meds} 

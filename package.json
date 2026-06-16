@@ -19,6 +19,7 @@
     "@types/express": "^5.0.6",
     "esbuild": "^0.28.0",
     "express": "^5.2.1",
+    "jspdf": "^4.2.1",
     "lucide-react": "^0.564.0",
     "micro": "^10.0.1",
     "motion": "^12.34.2",

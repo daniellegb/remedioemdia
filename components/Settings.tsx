@@ -168,7 +168,11 @@ const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData, se
           action: () => setView('subscription'),
           icon: Sparkles
         },
-        { label: 'Privacidade' },
+        { 
+          label: 'Privacidade', 
+          action: () => setView('privacy'),
+          icon: ShieldAlert
+        },
         { 
           label: 'Segurança', 
           action: () => setView('security'),
