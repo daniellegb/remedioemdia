@@ -118,7 +118,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
           doc.setFontSize(8);
           doc.setFont('helvetica', 'normal');
           doc.setTextColor(148, 163, 184); // slate-400
-          doc.text("Remédio em Dia - Relatório de Privacidade e Exportação de Dados Pessoais", 15, 12);
+          doc.text("Remédio em Dia - Relatório de Dados da Conta", 15, 12);
           doc.line(15, 14, 195, 14);
           currentY = 20;
         }
@@ -147,7 +147,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
       currentY += 10;
 
       addText("Remédio em Dia", 15, { fontSize: 24, fontStyle: 'bold', color: [37, 99, 235] });
-      addText("Cópia de Dados de Privacidade (Relatório Exportado)", 15, { fontSize: 11, fontStyle: 'normal', color: [100, 116, 139] });
+      addText("Relatório de Dados da Conta", 15, { fontSize: 11, fontStyle: 'bold', color: [100, 116, 139] });
       addText("Este documento serve para consulta amigável de todos os dados salvos em sua conta, em total conformidade com os princípios de transparência (LGPD).", 15, { fontSize: 9, fontStyle: 'normal', color: [100, 116, 139], maxWidth: 175 });
       
       currentY += 4;
@@ -283,7 +283,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
       
       const generationDate = new Date();
       addText(`• Gerado em: ${generationDate.toLocaleString('pt-BR')}`, 18, { fontSize: 9, color: [100, 116, 139] });
-      addText("• Certificado de conformidade: Este documento foi emitido de forma direta pelo servidor sem intermediários, tokens temporários, dados de infraestrutura ou cookies de rastreio de terceiros.", 18, { fontSize: 9, color: [100, 116, 139], maxWidth: 175 });
+      addText("• Observação: Este relatório foi gerado diretamente pelo sistema e contém apenas informações relacionadas à sua conta e utilização do aplicativo.", 18, { fontSize: 9, color: [100, 116, 139], maxWidth: 175 });
 
       currentY += 8;
       // Accent bar at the bottom
@@ -350,8 +350,8 @@ const Privacy: React.FC<Props> = ({ setView }) => {
           <div id="privacy-success-banner" className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-emerald-800 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-300">
             <CheckCircle2 className="text-emerald-500 shrink-0 mt-0.5" size={18} />
             <div>
-              <p className="font-bold">Solicitação processada com sucesso!</p>
-              <p className="text-emerald-600">Seu arquivo PDF com todos os dados pessoais cadastrados foi gerado localmente e o download está disponível.</p>
+              <p className="font-bold">PDF gerado com sucesso!</p>
+              <p className="text-emerald-600">Seu relatório de dados pessoais está pronto para download.</p>
             </div>
           </div>
         )}
@@ -383,7 +383,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
           <div className="p-4 bg-slate-50 rounded-2xl text-xs text-slate-500 flex gap-2">
             <Clock size={16} className="text-slate-400 shrink-0 mt-0.5" />
             <p>
-              O documento gerado será estruturado no formato PDF, otimizado para leitura por humanos e totalmente livre de termos criptografados de sistema, logs, chaves ou IDs de infraestrutura.
+              Este relatório apresenta seus dados de forma clara e organizada, contendo apenas informações relevantes da sua conta e utilização do aplicativo.
             </p>
           </div>
 
