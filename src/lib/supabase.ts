@@ -22,6 +22,35 @@ if (isDev) {
   console.log('[Supabase] Rodando em Ambiente de Desenvolvimento');
 }
 
+const activeLocks = new Map<string, Promise<any>>();
+
+const customLock = async <R>(name: string, acquireTimeout: number, fn: () => Promise<R>): Promise<R> => {
+  if (typeof window === 'undefined') {
+    return fn();
+  }
+
+  // Use a highly robust in-memory lock to serialize calls within the window/tab context.
+  // This avoids Navigator LockManager timeouts which fail inside sandboxed iframes.
+  const existingLock = activeLocks.get(name) || Promise.resolve();
+  
+  let resolveLock: () => void;
+  const newLock = new Promise<void>((resolve) => {
+    resolveLock = resolve;
+  });
+
+  activeLocks.set(name, existingLock.then(() => newLock, () => newLock));
+
+  try {
+    await existingLock;
+    return await fn();
+  } finally {
+    resolveLock!();
+    if (activeLocks.get(name) === newLock) {
+      activeLocks.delete(name);
+    }
+  }
+};
+
 export const supabase = createClient(
   URL || 'https://placeholder.supabase.co',
   KEY || 'placeholder',
@@ -30,7 +59,8 @@ export const supabase = createClient(
       persistSession: true,
       autoRefreshToken: true,
       detectSessionInUrl: true,
-      storageKey: 'med-clean-v3'
+      storageKey: 'med-clean-v3',
+      lock: customLock
     }
   }
 );
