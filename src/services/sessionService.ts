@@ -41,27 +41,49 @@ export const sessionService = {
       last_activity: new Date().toISOString()
     };
 
-    // First try with onConflict 'session_id' (new schema with session_id as Primary Key)
-    let { data, error } = await supabase
+    // 1. Try to find if a session already exists with this user_id and session_id
+    const { data: existing, error: selectError } = await supabase
       .from('active_sessions')
-      .upsert(sessionRow, { onConflict: 'session_id' })
-      .select()
-      .single();
+      .select('*')
+      .eq('user_id', userId)
+      .eq('session_id', sessionId)
+      .maybeSingle();
 
-    // If it fails with constraint matching errors (e.g. 42P10), fallback to the old unique constraint (user_id,session_id)
-    if (error && (error.code === '42P10' || error.message?.includes('ON CONFLICT'))) {
-      console.warn('[SessionService] New schema not detected on Supabase. Falling back to old unique constraint user_id,session_id:', error.message);
-      const fallbackResult = await supabase
+    if (selectError) {
+      console.warn('[SessionService] Checking existing session warning:', selectError);
+    }
+
+    let data, error;
+    if (existing) {
+      // 2. If it exists, update it. This does NOT require any ON CONFLICT constraints!
+      const updateResult = await supabase
         .from('active_sessions')
-        .upsert(sessionRow, { onConflict: 'user_id,session_id' })
+        .update({
+          last_activity: new Date().toISOString(),
+          user_agent: ua.substring(0, 255),
+          os,
+          browser,
+          device_type: deviceType
+        })
+        .eq('user_id', userId)
+        .eq('session_id', sessionId)
         .select()
         .single();
-      data = fallbackResult.data;
-      error = fallbackResult.error;
+      data = updateResult.data;
+      error = updateResult.error;
+    } else {
+      // 3. If it doesn't exist, insert it. This does NOT require any ON CONFLICT constraints!
+      const insertResult = await supabase
+        .from('active_sessions')
+        .insert(sessionRow)
+        .select()
+        .single();
+      data = insertResult.data;
+      error = insertResult.error;
     }
 
     if (error) {
-      console.error('[SessionService] Error registering session:', error);
+      console.error('[SessionService] Error registering session (raw):', error);
       return null;
     }
 

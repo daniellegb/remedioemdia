@@ -227,6 +227,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setCurrentSessionId(localId);
 
     let isRegisteredOnDb = false;
+    let sessionDbId: string | null = null;
     let isRevoked = false;
 
     const handleRemoteLogout = async () => {
@@ -250,7 +251,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .then((sess) => {
         if (sess) {
           isRegisteredOnDb = true;
-          console.log('[SessionTracker] Current session registered in public.active_sessions:', sess.session_id);
+          sessionDbId = sess.id;
+          console.log('[SessionTracker] Current session registered in public.active_sessions with DB ID:', sess.id);
         }
       })
       .catch(err => console.error('[SessionTracker] Error registering session:', err));
@@ -266,11 +268,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('[SessionTracker] Realtime DELETE payload received:', payload);
         const oldRow = payload.old;
         if (oldRow) {
-          // Since session_id is the PRIMARY KEY, Postgres ALWAYS includes it in the DELETE old payload,
-          // bypassing any need for REPLICA IDENTITY FULL or database-owner privilege alters!
-          const matchesSecId = oldRow.session_id === localId;
+          // 1. If oldRow has session_id (new schema where session_id is Primary Key)
+          const matchesSecId = oldRow.session_id && oldRow.session_id === localId;
           
-          if (matchesSecId) {
+          // 2. If oldRow only has the row's surrogate id (old schema where id is Primary Key)
+          const matchesDbId = sessionDbId && oldRow.id === sessionDbId;
+          
+          if (matchesSecId || matchesDbId) {
             console.log('[SessionTracker] Match found! Initiating instant remote sign out...');
             handleRemoteLogout();
           }
@@ -298,6 +302,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const sess = await sessionService.registerSession(user.id, localId);
           if (sess) {
             isRegisteredOnDb = true;
+            sessionDbId = sess.id;
             console.log('[SessionTracker] Current session successfully registered (retry).');
           }
         }
