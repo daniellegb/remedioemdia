@@ -220,7 +220,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
 
     let localId = localStorage.getItem('medmanager_v2_session_id');
-    if (!localId) {
+    if (!localId || localId === 'undefined' || localId === 'null' || localId.trim() === '') {
       localId = generateUUID();
       localStorage.setItem('medmanager_v2_session_id', localId);
     }
@@ -265,14 +265,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         schema: 'public',
         table: 'active_sessions'
       }, (payload) => {
-        console.log('[SessionTracker] Realtime DELETE payload received:', payload);
+        console.log('[SessionTracker] Realtime DELETE payload received:', JSON.stringify(payload));
         const oldRow = payload.old;
         if (oldRow) {
+          // Robust checking: verify that localId and oldRow variables are actual valid session keys and not placeholders/undef
+          const isLocalIdValid = !!(localId && localId !== 'undefined' && localId !== 'null' && localId.trim() !== '');
+          const isOldRowSessionIdValid = !!(oldRow.session_id && oldRow.session_id !== 'undefined' && oldRow.session_id !== 'null' && oldRow.session_id.trim() !== '');
+          
           // 1. If oldRow has session_id (new schema where session_id is Primary Key)
-          const matchesSecId = oldRow.session_id && oldRow.session_id === localId;
+          const matchesSecId = isLocalIdValid && isOldRowSessionIdValid && oldRow.session_id === localId;
           
           // 2. If oldRow only has the row's surrogate id (old schema where id is Primary Key)
-          const matchesDbId = sessionDbId && oldRow.id === sessionDbId;
+          const isSessionDbIdValid = !!(sessionDbId && sessionDbId !== 'undefined' && sessionDbId !== 'null' && sessionDbId.trim() !== '');
+          const isOldRowIdValid = !!(oldRow.id && oldRow.id !== 'undefined' && oldRow.id !== 'null' && oldRow.id.trim() !== '');
+          const matchesDbId = isSessionDbIdValid && isOldRowIdValid && oldRow.id === sessionDbId;
+          
+          console.log('[SessionTracker] Match evaluation:', {
+            matchesSecId,
+            matchesDbId,
+            oldRowSessionId: oldRow.session_id,
+            localId,
+            oldRowId: oldRow.id,
+            sessionDbId,
+            isLocalIdValid,
+            isOldRowSessionIdValid,
+            isSessionDbIdValid,
+            isOldRowIdValid
+          });
           
           if (matchesSecId || matchesDbId) {
             console.log('[SessionTracker] Match found! Initiating instant remote sign out...');
