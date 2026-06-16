@@ -1,15 +1,16 @@
 -- Migration to create public.active_sessions for remote session management representation
-CREATE TABLE IF NOT EXISTS public.active_sessions (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    session_id TEXT NOT NULL,
-    user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+DROP TABLE IF EXISTS public.active_sessions CASCADE;
+
+CREATE TABLE public.active_sessions (
+    session_id TEXT PRIMARY KEY,
+    id UUID NOT NULL DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL REFERENCES auth.users ON DELETE CASCADE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     last_activity TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     user_agent TEXT,
     os TEXT,
     browser TEXT,
-    device_type TEXT,
-    UNIQUE(user_id, session_id)
+    device_type TEXT
 );
 
 -- Enable Row Level Security and REPLICA RELATION IDENTITY for Realtime

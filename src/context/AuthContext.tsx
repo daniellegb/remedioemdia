@@ -226,7 +226,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
     setCurrentSessionId(localId);
 
-    let sessionDbId: string | null = null;
+    let isRegisteredOnDb = false;
     let isRevoked = false;
 
     const handleRemoteLogout = async () => {
@@ -249,8 +249,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     sessionService.registerSession(user.id, localId)
       .then((sess) => {
         if (sess) {
-          sessionDbId = sess.id;
-          console.log('[SessionTracker] Current session registered in public.active_sessions with DB ID:', sess.id);
+          isRegisteredOnDb = true;
+          console.log('[SessionTracker] Current session registered in public.active_sessions:', sess.session_id);
         }
       })
       .catch(err => console.error('[SessionTracker] Error registering session:', err));
@@ -266,10 +266,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.log('[SessionTracker] Realtime DELETE payload received:', payload);
         const oldRow = payload.old;
         if (oldRow) {
-          const matchesDbId = sessionDbId && oldRow.id === sessionDbId;
+          // Since session_id is the PRIMARY KEY, Postgres ALWAYS includes it in the DELETE old payload,
+          // bypassing any need for REPLICA IDENTITY FULL or database-owner privilege alters!
           const matchesSecId = oldRow.session_id === localId;
           
-          if (matchesDbId || matchesSecId) {
+          if (matchesSecId) {
             console.log('[SessionTracker] Match found! Initiating instant remote sign out...');
             handleRemoteLogout();
           }
@@ -283,18 +284,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const interval = setInterval(async () => {
       if (!user?.id || !localId) return;
       try {
-        const isValid = await sessionService.isSessionValid(user.id, localId);
-        if (!isValid) {
-          handleRemoteLogout();
-          return;
-        }
+        if (isRegisteredOnDb) {
+          const isValid = await sessionService.isSessionValid(user.id, localId);
+          if (!isValid) {
+            handleRemoteLogout();
+            return;
+          }
 
-        // Active, update last activity timestamp of current session
-        await sessionService.updateActivity(user.id, localId);
+          // Active, update last activity timestamp of current session
+          await sessionService.updateActivity(user.id, localId);
+        } else {
+          // Retry registration if it previously failed (high resilience)
+          const sess = await sessionService.registerSession(user.id, localId);
+          if (sess) {
+            isRegisteredOnDb = true;
+            console.log('[SessionTracker] Current session successfully registered (retry).');
+          }
+        }
       } catch (err) {
         console.warn('[SessionTracker] Transient background network check warning:', err);
       }
-    }, 15 * 1000); // Poll faster (15s instead of 45s) as a robust automatic fallback
+    }, 20 * 1000); // Fallback check every 20 seconds
 
     return () => {
       clearInterval(interval);

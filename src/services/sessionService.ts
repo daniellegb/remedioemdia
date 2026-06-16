@@ -43,7 +43,7 @@ export const sessionService = {
 
     const { data, error } = await supabase
       .from('active_sessions')
-      .upsert(sessionRow, { onConflict: 'user_id,session_id' })
+      .upsert(sessionRow, { onConflict: 'session_id' })
       .select()
       .single();
 

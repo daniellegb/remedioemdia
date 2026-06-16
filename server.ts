@@ -37,19 +37,40 @@ async function runSchemaMigration() {
       ADD COLUMN IF NOT EXISTS scheduled_deletion_at TIMESTAMP WITH TIME ZONE;
     `;
     
-    console.log('[Migration] Verificando se a tabela public.active_sessions existe...');
+    console.log('[Migration] Verificando se a tabela public.active_sessions existe com a nova estrutura de chaves...');
+    
+    // Check primary key of public.active_sessions to migrate safely if needed
+    let isSessionIdPK = false;
+    try {
+      const keyCheck = await sql`
+        SELECT a.attname
+        FROM   pg_index i
+        JOIN   pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey)
+        WHERE  i.indrelid = 'public.active_sessions'::regclass
+        AND    i.indisprimary;
+      `;
+      isSessionIdPK = keyCheck.some(row => row.attname === 'session_id');
+      
+      if (keyCheck.length > 0 && !isSessionIdPK) {
+        console.log('[Migration] Estrutura antiga de active_sessions detectada. Recriando tabela para suportar replicação Realtime...');
+        await sql`DROP TABLE IF EXISTS public.active_sessions CASCADE;`;
+      }
+    } catch (e) {
+      // Table doesn't exist yet, which is expected on first run
+      console.log('[Migration] Tabela active_sessions será criada pela primeira vez.');
+    }
+
     await sql`
       CREATE TABLE IF NOT EXISTS public.active_sessions (
-        id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-        session_id TEXT NOT NULL,
-        user_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+        session_id TEXT PRIMARY KEY,
+        id UUID NOT NULL DEFAULT gen_random_uuid(),
+        user_id UUID NOT NULL REFERENCES auth.users ON DELETE CASCADE,
         created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
         last_activity TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
         user_agent TEXT,
         os TEXT,
         browser TEXT,
-        device_type TEXT,
-        UNIQUE(user_id, session_id)
+        device_type TEXT
       );
     `;
 
