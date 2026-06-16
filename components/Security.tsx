@@ -13,7 +13,7 @@ interface Props {
 
 const Security: React.FC<Props> = ({ setView }) => {
   const { user, signOut, profile, refreshProfile } = useAuth();
-  const [subView, setSubView] = useState<'main' | 'sessions'>('main');
+  const [subView, setSubView] = useState<'main' | 'sessions' | 'password' | 'delete'>('main');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -250,9 +250,10 @@ const Security: React.FC<Props> = ({ setView }) => {
       // Set loading to false immediately to allow UI updates to render without batching delays
       setLoading(false);
 
-      // Redirect back to settings after 3 seconds
+      // Redirect back to security main screen after 3 seconds
       setTimeout(() => {
-        setView('settings');
+        setSubView('main');
+        setSuccess(false);
       }, 3000);
     } catch (err: any) {
       clearTimeout(safetyTimer);
@@ -288,6 +289,441 @@ const Security: React.FC<Props> = ({ setView }) => {
     );
   }
 
+  if (subView === 'password') {
+    return (
+      <motion.div 
+        id="security-password-container"
+        initial="hidden"
+        animate="visible"
+        variants={containerVariants}
+        className="space-y-6 pb-20 md:pb-0 max-w-2xl mx-auto"
+      >
+        {/* Header with Back button */}
+        <div className="flex items-center gap-4">
+          <button 
+            id="btn-back-to-security-menu"
+            onClick={() => {
+              setError(null);
+              setSuccess(false);
+              setSubView('main');
+            }}
+            className="p-2.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl text-slate-500 hover:text-slate-800 transition-colors shadow-sm cursor-pointer"
+            title="Voltar para Segurança"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">
+              {isGoogleUser ? 'Definir Senha' : 'Alterar Senha'}
+            </h2>
+            <p className="text-xs md:text-sm text-slate-500">
+              {isGoogleUser 
+                ? 'Defina uma senha para acessar sua conta sem o login Google' 
+                : 'Mantenha sua conta segura atualizando sua senha periodicamente'}
+            </p>
+          </div>
+        </div>
+
+        {success && (
+          <div id="security-success-banner" className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-emerald-800 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-300">
+            <CheckCircle2 className="text-emerald-500 shrink-0 mt-0.5" size={18} />
+            <div>
+              <p className="font-semibold">
+                {isGoogleUser ? 'Senha definida com sucesso!' : 'Senha alterada com sucesso!'}
+              </p>
+              <p className="text-xs mt-1 text-emerald-600/80 leading-relaxed">
+                {isGoogleUser 
+                  ? 'Sua nova senha foi salva! Agora você também pode acessar sua conta usando e-mail e senha. Redirecionando para segurança...'
+                  : 'Sua nova senha foi salva com sucesso! Redirecionando para segurança...'
+                }
+              </p>
+            </div>
+          </div>
+        )}
+
+        {error && (
+          <div id="security-error-banner" className="bg-red-50 border border-red-100 rounded-2xl p-4 text-red-700 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-300">
+            <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={18} />
+            <div className="space-y-2 w-full">
+              <p className="font-semibold">
+                {isGoogleUser ? 'Não foi possível definir a senha' : 'Não foi possível alterar a senha'}
+              </p>
+              <p className="text-xs text-red-600/90 leading-relaxed">{error}</p>
+              
+              {isSessionExpired && (
+                <div className="pt-2 border-t border-red-100 mt-2 flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    id="btn-re-authenticate"
+                    onClick={async () => {
+                      setLoading(true);
+                      try {
+                        await signOut();
+                      } catch (e) {
+                        localStorage.clear();
+                      }
+                      window.location.href = '/login';
+                    }}
+                    className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
+                  >
+                    Sair e Entrar Novamente
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        <div id="security-password-card" className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="p-6 md:p-8 space-y-6">
+            {isGoogleUser && (
+              <div className="bg-blue-50/60 border border-blue-100/80 rounded-2xl p-4 text-blue-800 text-xs md:text-sm flex gap-3 items-start">
+                <Smile className="text-blue-500 shrink-0 mt-0.5" size={18} />
+                <div className="space-y-1">
+                  <p className="font-semibold">Você entrou com Google.</p>
+                  <p className="leading-normal text-slate-600 font-medium">
+                    Defina uma senha caso também queira acessar com e-mail e senha além do login pelo Google.
+                  </p>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleUpdatePassword} className="space-y-6" id="form-change-password">
+              {/* New Password Input */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700" htmlFor="new-password">
+                  Nova Senha
+                </label>
+                <div className="relative">
+                  <input
+                    id="new-password"
+                    type={showPassword ? 'text' : 'password'}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-4 pr-12 py-3.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm"
+                    placeholder={isGoogleUser ? "Defina sua nova senha" : "Digite sua nova senha"}
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                    tabIndex={-1}
+                  >
+                    {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Confirm New Password Input */}
+              <div className="space-y-2">
+                <label className="text-sm font-bold text-slate-700" htmlFor="confirm-new-password">
+                  Confirmar Nova Senha
+                </label>
+                <div className="relative">
+                  <input
+                    id="confirm-new-password"
+                    type={showConfirmPassword ? 'text' : 'password'}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-4 pr-12 py-3.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm"
+                    placeholder="Confirme a nova senha"
+                    value={confirmPassword}
+                    onChange={(e) => setConfirmPassword(e.target.value)}
+                    disabled={loading}
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
+                    tabIndex={-1}
+                  >
+                    {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
+                  </button>
+                </div>
+              </div>
+
+              {/* Dynamic validations checklist */}
+              <div className="bg-slate-50 rounded-2xl p-4 md:p-5 space-y-3 border border-slate-100">
+                <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Requisitos da senha</h4>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 text-xs text-slate-600">
+                  <div className="flex items-center gap-2">
+                    <div className={`p-0.5 rounded-full ${hasMinLength ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
+                      <Check size={12} strokeWidth={3} />
+                    </div>
+                    <span className={hasMinLength ? 'text-slate-800 font-medium' : 'text-slate-400'}>Mínimo de 8 caracteres</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className={`p-0.5 rounded-full ${hasUppercase ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
+                      <Check size={12} strokeWidth={3} />
+                    </div>
+                    <span className={hasUppercase ? 'text-slate-800 font-medium' : 'text-slate-400'}>Pelo menos 1 letra maiúscula</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className={`p-0.5 rounded-full ${hasLowercase ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
+                      <Check size={12} strokeWidth={3} />
+                    </div>
+                    <span className={hasLowercase ? 'text-slate-800 font-medium' : 'text-slate-400'}>Pelo menos 1 letra minúscula</span>
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <div className={`p-0.5 rounded-full ${hasNumber ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
+                      <Check size={12} strokeWidth={3} />
+                    </div>
+                    <span className={hasNumber ? 'text-slate-800 font-medium' : 'text-slate-400'}>Pelo menos 1 número</span>
+                  </div>
+
+                  <div className="flex items-center gap-2 md:col-span-2 pt-1 border-t border-slate-100 mt-1">
+                    <div className={`p-0.5 rounded-full ${passwordsMatch ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
+                      <Check size={12} strokeWidth={3} />
+                    </div>
+                    <span className={passwordsMatch ? 'text-slate-800 font-medium' : 'text-slate-400'}>As senhas coincidem</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Action Button */}
+              <button
+                id="btn-save-password"
+                type="submit"
+                disabled={loading || !isFormValid}
+                className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-bold transition-all ${
+                  isFormValid && !loading
+                    ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-100 active:scale-[0.99] cursor-pointer'
+                    : 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                }`}
+              >
+                {loading 
+                  ? (isGoogleUser ? 'Definindo senha...' : 'Alterando senha...') 
+                  : (isGoogleUser ? 'Definir Senha' : 'Alterar Senha')
+                }
+              </button>
+            </form>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
+  if (subView === 'delete') {
+    return (
+      <motion.div 
+        id="security-delete-container"
+        initial="hidden"
+        animate="visible"
+        variants={containerVariants}
+        className="space-y-6 pb-20 md:pb-0 max-w-2xl mx-auto"
+      >
+        {/* Header with Back button */}
+        <div className="flex items-center gap-4">
+          <button 
+            id="btn-back-to-security-menu-from-delete"
+            onClick={() => {
+              setDeleteError(null);
+              setDeleteSuccess(null);
+              setShowDeleteConfirm(false);
+              setShowCancelConfirm(false);
+              setSubView('main');
+            }}
+            className="p-2.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl text-slate-500 hover:text-slate-800 transition-colors shadow-sm cursor-pointer"
+            title="Voltar para Segurança"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Excluir Conta</h2>
+            <p className="text-xs md:text-sm text-slate-500">Gerencie a exclusão de sua conta e dos seus dados do aplicativo</p>
+          </div>
+        </div>
+
+        {/* Account Deletion Panel Section */}
+        {isPendingDeletion ? (
+          <div id="security-scheduled-deletion-card" className="bg-amber-50 border border-amber-200 rounded-3xl p-6 md:p-8 space-y-4">
+            <div className="flex gap-4 items-start">
+              <AlertTriangle className="text-amber-500 shrink-0 mt-1" size={24} />
+              <div className="space-y-3 w-full">
+                <h3 className="text-base md:text-lg font-bold text-amber-900 leading-tight">Exclusão de Conta Pendente</h3>
+                <p className="text-xs md:text-sm text-slate-600 leading-relaxed">
+                  Sua conta está agendada para exclusão em <span className="font-bold text-amber-900">{formatBrazilianDate(profile?.scheduled_deletion_at)}</span>.
+                </p>
+                <p className="text-xs text-slate-500 leading-relaxed">
+                  Até essa data, seu acesso Premium permanecerá ativo e seus dados continuarão disponíveis. No dia agendado, a conta será apagada de forma definitiva e automática.
+                </p>
+                
+                {deleteError && (
+                  <div className="text-xs text-red-600 bg-red-50 p-3 rounded-xl font-medium border border-red-100 flex gap-2 items-center">
+                    <X size={14} className="shrink-0" />
+                    <span>{deleteError}</span>
+                  </div>
+                )}
+                
+                {deleteSuccess && (
+                  <div className="text-xs text-emerald-600 bg-emerald-50 p-3 rounded-xl font-medium border border-emerald-100 flex gap-2 items-center">
+                    <Check size={14} className="shrink-0" />
+                    <span>{deleteSuccess}</span>
+                  </div>
+                )}
+
+                {showCancelConfirm ? (
+                  <div className="bg-white border border-amber-100 rounded-2xl p-4 md:p-5 space-y-3 mt-3 shadow-xs">
+                    <p className="text-xs md:text-sm font-bold text-slate-800 leading-tight">
+                      Tem certeza que deseja cancelar a exclusão da conta?
+                    </p>
+                    <p className="text-xs text-slate-500 leading-normal">
+                      Sua conta continuará ativa normalmente.
+                    </p>
+                    <div className="flex gap-2 pt-1">
+                      <button
+                        type="button"
+                        id="btn-confirm-cancel-deletion"
+                        disabled={deleteLoading}
+                        onClick={handleCancelDeletion}
+                        className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer active:scale-95 text-center"
+                      >
+                        {deleteLoading ? 'Cancelando...' : 'Sim, cancelar exclusão'}
+                      </button>
+                      <button
+                        type="button"
+                        id="btn-close-cancel-deletion"
+                        onClick={() => setShowCancelConfirm(false)}
+                        className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2 px-4 rounded-xl transition-all cursor-pointer text-center"
+                      >
+                        Voltar
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    id="btn-cancel-scheduled-deletion"
+                    onClick={() => {
+                      setDeleteError(null);
+                      setDeleteSuccess(null);
+                      setShowCancelConfirm(true);
+                    }}
+                    className="mt-2 bg-white hover:bg-slate-100 border border-amber-200 text-amber-700 font-bold text-xs py-2 px-4 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95 text-center inline-block"
+                  >
+                    Cancelar exclusão
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div id="security-delete-account-card" className="bg-white rounded-3xl border border-red-100 shadow-sm overflow-hidden">
+            <div className="px-6 py-4 bg-red-50/50 border-b border-red-100/50 flex items-center gap-2">
+              <AlertTriangle size={18} className="text-red-500" />
+              <h3 className="text-sm font-bold text-red-600 uppercase tracking-widest">
+                Excluir Conta
+              </h3>
+            </div>
+            
+            <div className="p-6 md:p-8 space-y-6">
+              <p className="text-xs md:text-sm text-slate-500 leading-relaxed">
+                Você pode excluir permanentemente sua conta de usuário a qualquer momento. Esta ação removerá totalmente seus dados de medicamentos, agendamentos e histórico de registros.
+              </p>
+
+              {deleteError && (
+                <div id="delete-error-notice" className="text-xs md:text-sm text-red-600 bg-red-50 p-4 rounded-2xl border border-red-100 font-medium animate-in fade-in slide-in-from-top-1 duration-200">
+                  {deleteError}
+                </div>
+              )}
+
+              {deleteSuccess && (
+                <div id="delete-success-notice" className="text-xs md:text-sm text-emerald-600 bg-emerald-50 p-4 rounded-2xl border border-emerald-100 font-medium animate-in fade-in slide-in-from-top-1 duration-200">
+                  {deleteSuccess}
+                </div>
+              )}
+
+              {isPremiumActive ? (
+                <div className="bg-red-50/60 border border-red-100 rounded-2xl p-4 md:p-5 text-red-800 text-xs md:text-sm animate-in fade-in slide-in-from-top-1 duration-200">
+                  <p className="font-semibold leading-relaxed">Cancele sua assinatura antes de excluir a sua conta!</p>
+                  <p className="mt-1 text-slate-600 leading-relaxed font-medium">
+                    Você possui uma assinatura Premium ativa. Cancele sua assinatura primeiro. Após o cancelamento da renovação automática, a exclusão da conta ficará disponível.
+                  </p>
+                </div>
+              ) : showDeleteConfirm ? (
+                <div className="bg-red-50/40 border border-red-100 p-5 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                  <p className="text-xs md:text-sm font-bold text-red-900 leading-tight">
+                    {isPremiumCanceled 
+                      ? 'Agendar exclusão de conta?' 
+                      : 'Tem certeza que deseja excluir sua conta?'
+                    }
+                  </p>
+                  
+                  <div className="text-xs md:text-sm text-slate-600 space-y-2 leading-relaxed">
+                    {isPremiumCanceled ? (
+                      <div className="space-y-3">
+                        <p>
+                          Sua assinatura permanece activa até <span className="font-bold text-slate-900">{formatBrazilianDate(profile?.subscription_ends_at)}</span>.
+                        </p>
+                        <div className="space-y-1 bg-white p-3.5 rounded-xl border border-red-100/50">
+                          <p className="font-semibold text-slate-800">Se continuar:</p>
+                          <ul className="list-disc pl-4 space-y-1 text-xs text-slate-500 font-medium">
+                            <li>sua conta será marcada para exclusão;</li>
+                            <li>nenhum novo pagamento será realizado;</li>
+                            <li>seus dados serão removidos automaticamente em {formatBrazilianDate(profile?.subscription_ends_at)}.</li>
+                          </ul>
+                        </div>
+                        <p className="text-xs text-red-700 font-semibold">
+                          Esta ação não poderá ser desfeita após a data programada.
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <p>
+                          Esta ação é permanente e não poderá ser desfeita. Todos os medicamentos, lembretes, histórico de registros e compromissos salvos serão apagados definitivamente.
+                        </p>
+                        <div className="bg-white rounded-2xl p-4 text-xs text-slate-500 leading-relaxed border border-red-100/30">
+                          Alguns registros relacionados a pagamentos poderão ser mantidos quando exigidos por obrigações legais, fiscais ou regulatórias.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  <div className="flex flex-wrap gap-2 pt-1">
+                    <button
+                      type="button"
+                      id="btn-confirm-account-deletion"
+                      disabled={deleteLoading}
+                      onClick={handleDeleteAccount}
+                      className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-xs transition-all cursor-pointer active:scale-95 text-center"
+                    >
+                      {deleteLoading ? 'Processando...' : isPremiumCanceled ? 'Confirmar Agendamento de Exclusão' : 'Confirmar Exclusão'}
+                    </button>
+                    <button
+                      type="button"
+                      id="btn-cancel-deletion-dialog"
+                      onClick={() => setShowDeleteConfirm(false)}
+                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2.5 px-5 rounded-xl transition-all cursor-pointer active:scale-95 text-center"
+                    >
+                      Voltar
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  id="btn-trigger-deletion-flow"
+                  onClick={() => {
+                    setDeleteError(null);
+                    setDeleteSuccess(null);
+                    setShowDeleteConfirm(true);
+                  }}
+                  className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold py-4 rounded-2xl text-sm transition-all cursor-pointer border border-red-100 shadow-xs active:scale-[0.99] text-center"
+                >
+                  Excluir conta
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div 
       id="security-page-container"
@@ -312,394 +748,96 @@ const Security: React.FC<Props> = ({ setView }) => {
         </div>
       </div>
 
-      {success && (
-        <div id="security-success-banner" className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-emerald-800 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-300">
-          <CheckCircle2 className="text-emerald-500 shrink-0 mt-0.5" size={18} />
-          <div>
-            <p className="font-semibold">
-              {isGoogleUser ? 'Senha definida com sucesso!' : 'Senha alterada com sucesso!'}
-            </p>
-            <p className="text-xs mt-1 text-emerald-600/80 leading-relaxed">
-              {isGoogleUser 
-                ? 'Sua nova senha foi salva! Agora você também pode acessar sua conta usando e-mail e senha. Redirecionando para Ajustes em instantes...'
-                : 'Sua nova senha foi salva com sucesso! Redirecionando para Ajustes em instantes...'
-              }
-            </p>
+      {/* Grid or list of Cards */}
+      <div className="space-y-4">
+        {/* Card 1: Change Password */}
+        <div 
+          id="security-password-trigger-card" 
+          onClick={() => {
+            setError(null);
+            setSuccess(false);
+            setSubView('password');
+          }}
+          className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 flex flex-row items-center justify-between hover:bg-slate-50 hover:border-slate-200 transition-all cursor-pointer active:scale-[0.99] group duration-150 text-left"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3.5 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-100/75 transition-colors">
+              <Key size={22} />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-800">
+                {isGoogleUser ? 'Definir Senha de Acesso' : 'Alterar Senha de Acesso'}
+              </h4>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium leading-relaxed">
+                {isGoogleUser 
+                  ? 'Crie uma senha de acesso para poder entrar com e-mail e senha além do Google.' 
+                  : 'Atualize sua senha de acesso periodicamente para manter sua conta protegida.'}
+              </p>
+            </div>
           </div>
+          <ChevronRight className="text-slate-400 group-hover:text-slate-600 transition-colors shrink-0" size={18} />
         </div>
-      )}
 
-      {error && (
-        <div id="security-error-banner" className="bg-red-50 border border-red-100 rounded-2xl p-4 text-red-700 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-300">
-          <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={18} />
-          <div className="space-y-2 w-full">
-            <p className="font-semibold">
-              {isGoogleUser ? 'Não foi possível definir a senha' : 'Não foi possível alterar a senha'}
-            </p>
-            <p className="text-xs text-red-600/90 leading-relaxed">{error}</p>
-            
-            {isSessionExpired && (
-              <div className="pt-2 border-t border-red-100 mt-2 flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  id="btn-re-authenticate"
-                  onClick={async () => {
-                    setLoading(true);
-                    try {
-                      await signOut();
-                    } catch (e) {
-                      localStorage.clear();
-                    }
-                    window.location.href = '/login';
-                  }}
-                  className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-sm transition-all cursor-pointer active:scale-95"
-                >
-                  Sair e Entrar Novamente
-                </button>
-              </div>
-            )}
+        {/* Card 2: Active Sessions */}
+        <div 
+          id="active-sessions-trigger-card" 
+          onClick={() => setSubView('sessions')}
+          className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 flex flex-row items-center justify-between hover:bg-slate-50 hover:border-slate-200 transition-all cursor-pointer active:scale-[0.99] group duration-150 text-left"
+        >
+          <div className="flex items-center gap-4">
+            <div className="p-3.5 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-100/75 transition-colors">
+              <Monitor size={22} />
+            </div>
+            <div>
+              <h4 className="text-sm font-bold text-slate-800">Dispositivos e Sessões Ativas</h4>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium leading-relaxed">
+                Visualize e encerre remotamente outros computadores, celulares ou tablets conectados com sua conta.
+              </p>
+            </div>
           </div>
-        </div>
-      )}
-
-      {/* Change / Define Password Card */}
-      <div id="security-password-card" className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden">
-        <div className="px-6 py-4 bg-slate-50 border-b border-slate-100 flex items-center gap-2">
-          <Key size={18} className="text-slate-400" />
-          <h3 className="text-sm font-bold text-slate-500 uppercase tracking-widest text-slate-600">
-            {isGoogleUser ? 'Definir Senha' : 'Alterar Senha'}
-          </h3>
+          <ChevronRight className="text-slate-400 group-hover:text-slate-600 transition-colors shrink-0" size={18} />
         </div>
 
-        <div className="p-6 md:p-8 space-y-6">
-          {isGoogleUser && (
-            <div className="bg-blue-50/60 border border-blue-100/80 rounded-2xl p-4 text-blue-800 text-xs md:text-sm flex gap-3 items-start">
-              <Smile className="text-blue-500 shrink-0 mt-0.5" size={18} />
-              <div className="space-y-1">
-                <p className="font-semibold">Você entrou com Google.</p>
-                <p className="leading-normal text-slate-600 font-medium">
-                  Defina uma senha caso também queira acessar com e-mail e senha além do login pelo Google.
-                </p>
-              </div>
+        {/* Card 3: Delete Account */}
+        <div 
+          id="security-delete-trigger-card" 
+          onClick={() => {
+            setDeleteError(null);
+            setDeleteSuccess(null);
+            setSubView('delete');
+          }}
+          className={`bg-white rounded-3xl border transition-all cursor-pointer active:scale-[0.99] group duration-150 text-left p-6 flex flex-row items-center justify-between ${
+            isPendingDeletion 
+              ? 'border-amber-100 hover:bg-amber-50/30 hover:border-amber-200' 
+              : 'border-slate-100 hover:bg-red-50/10 hover:border-red-100'
+          }`}
+        >
+          <div className="flex items-center gap-4">
+            <div className={`p-3.5 rounded-2xl transition-colors ${
+              isPendingDeletion 
+                ? 'bg-amber-50 text-amber-600 group-hover:bg-amber-100/75' 
+                : 'bg-red-50 text-red-500 group-hover:bg-red-100/50'
+            }`}>
+              <AlertTriangle size={22} />
             </div>
-          )}
-
-          <form onSubmit={handleUpdatePassword} className="space-y-6" id="form-change-password">
-            {/* New Password Input */}
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700" htmlFor="new-password">
-                Nova Senha
-              </label>
-              <div className="relative">
-                <input
-                  id="new-password"
-                  type={showPassword ? 'text' : 'password'}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-4 pr-12 py-3.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm"
-                  placeholder={isGoogleUser ? "Defina sua nova senha" : "Digite sua nova senha"}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  disabled={loading}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
-                  tabIndex={-1}
-                >
-                  {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
+            <div>
+              <h4 className={`text-sm font-bold ${isPendingDeletion ? 'text-amber-800' : 'text-slate-800'}`}>
+                {isPendingDeletion ? 'Exclusão Pendente' : 'Excluir Conta'}
+              </h4>
+              <p className="text-xs text-slate-500 mt-0.5 font-medium leading-relaxed">
+                {isPendingDeletion 
+                  ? `Sua conta está agendada para ser excluída em ${formatBrazilianDate(profile?.scheduled_deletion_at)}.` 
+                  : 'Gerencie a exclusão definitiva de sua conta de usuário e a remoção de todos os seus dados.'}
+              </p>
             </div>
-
-            {/* Confirm New Password Input */}
-            <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-700" htmlFor="confirm-new-password">
-                Confirmar Nova Senha
-              </label>
-              <div className="relative">
-                <input
-                  id="confirm-new-password"
-                  type={showConfirmPassword ? 'text' : 'password'}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl pl-4 pr-12 py-3.5 text-slate-800 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all text-sm"
-                  placeholder="Confirme a nova senha"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  disabled={loading}
-                  required
-                />
-                <button
-                  type="button"
-                  onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                  className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition-colors p-1"
-                  tabIndex={-1}
-                >
-                  {showConfirmPassword ? <EyeOff size={18} /> : <Eye size={18} />}
-                </button>
-              </div>
-            </div>
-
-            {/* Dynamic visual validations checklist */}
-            <div className="bg-slate-50 rounded-2xl p-4 md:p-5 space-y-3 border border-slate-100">
-              <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Requisitos da senha</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 text-xs text-slate-600">
-                <div className="flex items-center gap-2">
-                  <div className={`p-0.5 rounded-full ${hasMinLength ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
-                    <Check size={12} strokeWidth={3} />
-                  </div>
-                  <span className={hasMinLength ? 'text-slate-800 font-medium' : 'text-slate-400'}>Mínimo de 8 caracteres</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className={`p-0.5 rounded-full ${hasUppercase ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
-                    <Check size={12} strokeWidth={3} />
-                  </div>
-                  <span className={hasUppercase ? 'text-slate-800 font-medium' : 'text-slate-400'}>Pelo menos 1 letra maiúscula</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className={`p-0.5 rounded-full ${hasLowercase ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
-                    <Check size={12} strokeWidth={3} />
-                  </div>
-                  <span className={hasLowercase ? 'text-slate-800 font-medium' : 'text-slate-400'}>Pelo menos 1 letra minúscula</span>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <div className={`p-0.5 rounded-full ${hasNumber ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
-                    <Check size={12} strokeWidth={3} />
-                  </div>
-                  <span className={hasNumber ? 'text-slate-800 font-medium' : 'text-slate-400'}>Pelo menos 1 número</span>
-                </div>
-
-                <div className="flex items-center gap-2 md:col-span-2 pt-1 border-t border-slate-100 mt-1">
-                  <div className={`p-0.5 rounded-full ${passwordsMatch ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
-                    <Check size={12} strokeWidth={3} />
-                  </div>
-                  <span className={passwordsMatch ? 'text-slate-800 font-medium' : 'text-slate-400'}>As senhas coincidem</span>
-                </div>
-              </div>
-            </div>
-
-            {/* Action Button */}
-            <button
-              id="btn-save-password"
-              type="submit"
-              disabled={loading || !isFormValid}
-              className={`w-full flex items-center justify-center gap-2 py-4 rounded-2xl text-sm font-bold transition-all ${
-                isFormValid && !loading
-                  ? 'bg-blue-600 text-white hover:bg-blue-700 shadow-md shadow-blue-100 active:scale-[0.99] cursor-pointer'
-                  : 'bg-slate-100 text-slate-400 cursor-not-allowed'
-              }`}
-            >
-              {loading 
-                ? (isGoogleUser ? 'Definindo senha...' : 'Alterando senha...') 
-                : (isGoogleUser ? 'Definir Senha' : 'Alterar Senha')
-              }
-            </button>
-          </form>
+          </div>
+          <ChevronRight className={`transition-colors shrink-0 ${
+            isPendingDeletion 
+              ? 'text-amber-400 group-hover:text-amber-600' 
+              : 'text-slate-400 group-hover:text-red-500'
+          }`} size={18} />
         </div>
       </div>
-
-      {/* Active Sessions Trigger Card */}
-      <div 
-        id="active-sessions-trigger-card" 
-        onClick={() => setSubView('sessions')}
-        className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 flex flex-row items-center justify-between hover:bg-slate-50 hover:border-slate-200 transition-all cursor-pointer active:scale-[0.99] group duration-150 text-left"
-      >
-        <div className="flex items-center gap-4">
-          <div className="p-3.5 bg-blue-50 text-blue-600 rounded-2xl group-hover:bg-blue-100/75 transition-colors">
-            <Monitor size={22} />
-          </div>
-          <div>
-            <h4 className="text-sm font-bold text-slate-800">Dispositivos e Sessões Ativas</h4>
-            <p className="text-xs text-slate-500 mt-0.5 font-medium leading-relaxed">Visualize e encerre remotamente outros computadores, celulares ou tablets conectados com sua conta.</p>
-          </div>
-        </div>
-        <ChevronRight className="text-slate-400 group-hover:text-slate-600 transition-colors shrink-0" size={18} />
-      </div>
-
-      {/* Account Deletion Panel Section */}
-      {isPendingDeletion ? (
-        <div id="security-scheduled-deletion-card" className="bg-amber-50 border border-amber-200 rounded-3xl p-6 md:p-8 space-y-4">
-          <div className="flex gap-4 items-start">
-            <AlertTriangle className="text-amber-500 shrink-0 mt-1" size={24} />
-            <div className="space-y-3 w-full">
-              <h3 className="text-base md:text-lg font-bold text-amber-900 leading-tight">Exclusão de Conta Pendente</h3>
-              <p className="text-xs md:text-sm text-slate-600 leading-relaxed">
-                Sua conta está agendada para exclusão em <span className="font-bold text-amber-900">{formatBrazilianDate(profile?.scheduled_deletion_at)}</span>.
-              </p>
-              <p className="text-xs text-slate-500 leading-relaxed">
-                Até essa data, seu acesso Premium permanecerá ativo e seus dados continuarão disponíveis. No dia agendado, a conta será apagada de forma definitiva e automática.
-              </p>
-              
-              {deleteError && (
-                <div className="text-xs text-red-600 bg-red-50 p-3 rounded-xl font-medium border border-red-100 flex gap-2 items-center">
-                  <X size={14} className="shrink-0" />
-                  <span>{deleteError}</span>
-                </div>
-              )}
-              
-              {deleteSuccess && (
-                <div className="text-xs text-emerald-600 bg-emerald-50 p-3 rounded-xl font-medium border border-emerald-100 flex gap-2 items-center">
-                  <Check size={14} className="shrink-0" />
-                  <span>{deleteSuccess}</span>
-                </div>
-              )}
-
-              {showCancelConfirm ? (
-                <div className="bg-white border border-amber-100 rounded-2xl p-4 md:p-5 space-y-3 mt-3 shadow-xs">
-                  <p className="text-xs md:text-sm font-bold text-slate-800 leading-tight">
-                    Tem certeza que deseja cancelar a exclusão da conta?
-                  </p>
-                  <p className="text-xs text-slate-500 leading-normal">
-                    Sua conta continuará ativa normalmente.
-                  </p>
-                  <div className="flex gap-2 pt-1">
-                    <button
-                      type="button"
-                      id="btn-confirm-cancel-deletion"
-                      disabled={deleteLoading}
-                      onClick={handleCancelDeletion}
-                      className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs py-2 px-4 rounded-xl shadow-xs transition-all cursor-pointer active:scale-95 text-center"
-                    >
-                      {deleteLoading ? 'Cancelando...' : 'Sim, cancelar exclusão'}
-                    </button>
-                    <button
-                      type="button"
-                      id="btn-close-cancel-deletion"
-                      onClick={() => setShowCancelConfirm(false)}
-                      className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2 px-4 rounded-xl transition-all cursor-pointer text-center"
-                    >
-                      Voltar
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  id="btn-cancel-scheduled-deletion"
-                  onClick={() => {
-                    setDeleteError(null);
-                    setDeleteSuccess(null);
-                    setShowCancelConfirm(true);
-                  }}
-                  className="mt-2 bg-white hover:bg-slate-100 border border-amber-200 text-amber-700 font-bold text-xs py-2 px-4 rounded-xl transition-all shadow-xs cursor-pointer active:scale-95 text-center inline-block"
-                >
-                  Cancelar exclusão
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      ) : (
-        <div id="security-delete-account-card" className="bg-white rounded-3xl border border-red-100 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 bg-red-50/50 border-b border-red-100/50 flex items-center gap-2">
-            <AlertTriangle size={18} className="text-red-500" />
-            <h3 className="text-sm font-bold text-red-600 uppercase tracking-widest">
-              Excluir Conta
-            </h3>
-          </div>
-          
-          <div className="p-6 md:p-8 space-y-6">
-            <p className="text-xs md:text-sm text-slate-500 leading-relaxed">
-              Você pode excluir permanentemente sua conta de usuário a qualquer momento. Esta ação removerá totalmente seus dados de medicamentos, agendamentos e histórico de registros.
-            </p>
-
-            {deleteError && (
-              <div id="delete-error-notice" className="text-xs md:text-sm text-red-600 bg-red-50 p-4 rounded-2xl border border-red-100 font-medium">
-                {deleteError}
-              </div>
-            )}
-
-            {deleteSuccess && (
-              <div id="delete-success-notice" className="text-xs md:text-sm text-emerald-600 bg-emerald-50 p-4 rounded-2xl border border-emerald-100 font-medium">
-                {deleteSuccess}
-              </div>
-            )}
-
-            {isPremiumActive ? (
-              <div className="bg-red-50/60 border border-red-100 rounded-2xl p-4 md:p-5 text-red-800 text-xs md:text-sm">
-                <p className="font-semibold leading-relaxed">Cancele sua assinatura antes de cancelar a sua conta!</p>
-                <p className="mt-1 text-slate-600 leading-relaxed font-medium">
-                  Você possui uma assinatura Premium ativa. Cancele sua assinatura primeiro. Após o cancelamento da renovação automática, a exclusão da conta ficará disponível.
-                </p>
-              </div>
-            ) : showDeleteConfirm ? (
-              <div className="bg-red-50/40 border border-red-100 p-5 rounded-2xl space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
-                <p className="text-xs md:text-sm font-bold text-red-900 leading-tight">
-                  {isPremiumCanceled 
-                    ? 'Agendar exclusão de conta?' 
-                    : 'Tem certeza que deseja excluir sua conta?'
-                  }
-                </p>
-                
-                <div className="text-xs md:text-sm text-slate-600 space-y-2 leading-relaxed">
-                  {isPremiumCanceled ? (
-                    <div className="space-y-3">
-                      <p>
-                        Sua assinatura permanece ativa até <span className="font-bold text-slate-900">{formatBrazilianDate(profile?.subscription_ends_at)}</span>.
-                      </p>
-                      <div className="space-y-1 bg-white p-3.5 rounded-xl border border-red-100/50">
-                        <p className="font-semibold text-slate-800">Se continuar:</p>
-                        <ul className="list-disc pl-4 space-y-1 text-xs text-slate-500 font-medium">
-                          <li>sua conta será marcada para exclusão;</li>
-                          <li>nenhum novo pagamento será realizado;</li>
-                          <li>seus dados serão removidos automaticamente em {formatBrazilianDate(profile?.subscription_ends_at)}.</li>
-                        </ul>
-                      </div>
-                      <p className="text-xs text-red-700 font-semibold">
-                        Esta ação não poderá ser desfeita após a data programada.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="space-y-3">
-                      <p>
-                        Esta ação é permanente e não poderá ser desfeita. Todos os medicamentos, lembretes, histórico de registros e compromissos salvos serão apagados definitivamente.
-                      </p>
-                      <div className="bg-white rounded-2xl p-4 text-xs text-slate-500 leading-relaxed border border-red-100/30">
-                        Alguns registros relacionados a pagamentos poderão ser mantidos quando exigidos por obrigações legais, fiscais ou regulatórias.
-                      </div>
-                    </div>
-                  )}
-                </div>
-                
-                <div className="flex flex-wrap gap-2 pt-1">
-                  <button
-                    type="button"
-                    id="btn-confirm-account-deletion"
-                    disabled={deleteLoading}
-                    onClick={handleDeleteAccount}
-                    className="bg-red-600 hover:bg-red-700 text-white font-bold text-xs py-2.5 px-5 rounded-xl shadow-xs transition-all cursor-pointer active:scale-95 text-center"
-                  >
-                    {deleteLoading ? 'Processando...' : isPremiumCanceled ? 'Confirmar Agendamento de Exclusão' : 'Confirmar Exclusão'}
-                  </button>
-                  <button
-                    type="button"
-                    id="btn-cancel-deletion-dialog"
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="bg-slate-100 hover:bg-slate-200 text-slate-600 font-bold text-xs py-2.5 px-5 rounded-xl transition-all cursor-pointer active:scale-95 text-center"
-                  >
-                    Voltar
-                  </button>
-                </div>
-              </div>
-            ) : (
-              <button
-                type="button"
-                id="btn-trigger-deletion-flow"
-                onClick={() => {
-                  setDeleteError(null);
-                  setDeleteSuccess(null);
-                  setShowDeleteConfirm(true);
-                }}
-                className="w-full bg-red-50 hover:bg-red-100 text-red-600 font-bold py-4 rounded-2xl text-sm transition-all cursor-pointer border border-red-100 shadow-xs active:scale-[0.99] text-center"
-              >
-                Excluir conta
-              </button>
-            )}
-          </div>
-        </div>
-      )}
     </motion.div>
   );
 };

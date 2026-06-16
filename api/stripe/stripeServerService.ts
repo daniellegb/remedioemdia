@@ -683,15 +683,43 @@ export const stripeServerService = {
    * Útil para curar/atualizar instantaneamente dados divergentes ou desatualizados.
    */
   async syncSubscription(userId: string): Promise<Profile> {
-    const { data: profile, error: profileError } = await supabaseAdmin
+    let { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('*')
       .eq('id', userId)
       .single();
 
     if (profileError || !profile) {
-      console.error('[StripeServerService] Erro ao carregar perfil para sincronização:', profileError?.message);
-      throw new Error('Perfil não encontrado para sincronização.');
+      console.log(`[StripeServerService] Perfil para o id ${userId} não encontrado para sincronização. Tentando criar um perfil padrão...`);
+      try {
+        const { data: { user: authUser }, error: authError } = await supabaseAdmin.auth.admin.getUserById(userId);
+        if (authError || !authUser) {
+          throw new Error('Usuário de autenticação não encontrado no Supabase: ' + (authError?.message || 'id inexistente'));
+        }
+
+        const name = authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Usuário';
+
+        const newProfile = {
+          id: userId,
+          name: name
+        };
+
+        const { data: insertedProfile, error: insertError } = await supabaseAdmin
+          .from('profiles')
+          .insert([newProfile])
+          .select()
+          .single();
+
+        if (insertError) {
+          console.error('[StripeServerService] Erro ao inserir perfil padrão:', insertError.message);
+          throw new Error('Não foi possível criar o perfil no banco de dados para o usuário: ' + insertError.message);
+        }
+
+        profile = insertedProfile;
+      } catch (err: any) {
+        console.error('[StripeServerService] Falha ao recuperar/criar perfil padrão:', err.message || err);
+        throw new Error('Perfil não encontrado para sincronização: ' + (err.message || err));
+      }
     }
 
     const stripeCustomerId = profile.stripe_customer_id;

@@ -60,6 +60,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       if (error) {
         console.warn('Error fetching profile from backend, checking cache...', error);
         
+        if (error.code === 'PGRST116') {
+          console.log('[AuthContext] Profile row not found. Creating a default profile row on the fly...');
+          try {
+            const { data: { user: authUser } } = await supabase.auth.getUser();
+            if (authUser) {
+              const name = authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Usuário';
+              const newProfile: any = {
+                id: userId,
+                name: name
+              };
+              const { data: insertedData, error: insertError } = await supabase
+                .from('profiles')
+                .insert([newProfile])
+                .select()
+                .single();
+              
+              if (!insertError && insertedData) {
+                console.log('[AuthContext] Default profile row created successfully on the fly:', insertedData);
+                const updatedProfile = await subscriptionService.refreshSubscriptionStatus(insertedData as Profile);
+                setProfile(updatedProfile);
+                setProfileLoaded(true);
+                return;
+              } else if (insertError) {
+                console.error('[AuthContext] Error creating profile row on the fly:', insertError.message);
+              }
+            }
+          } catch (createErr) {
+            console.error('[AuthContext] Error trying to create profile on the fly:', createErr);
+          }
+        }
+        
         // Se falhar (ex: offline), tentar carregar do cache local
         const cachedSubscription = subscriptionService.getFromCache(userId);
         if (cachedSubscription) {
