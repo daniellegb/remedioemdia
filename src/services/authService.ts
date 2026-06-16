@@ -15,9 +15,9 @@ export const authService = {
     return await supabase.auth.signInWithPassword({ email, password });
   },
 
-  async signOut() {
+  async signOut(options: { scope?: 'global' | 'local' | 'others' } = { scope: 'local' }) {
     try {
-      await supabase.auth.signOut();
+      await supabase.auth.signOut(options);
     } catch (error: any) {
       console.error('authService.signOut error:', error);
       // fallback: forçar limpeza se houver erro ou se for erro de refresh token

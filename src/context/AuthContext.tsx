@@ -239,7 +239,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setSession(null);
       localStorage.removeItem('medmanager_v2_session_id');
       try {
-        await authService.signOut();
+        await authService.signOut({ scope: 'local' });
       } catch (signOutError) {
         console.error('[SessionTracker] Error signing out via authService:', signOutError);
       }
@@ -358,7 +358,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         localStorage.removeItem('medmanager_v2_session_id');
       }
 
-      await authService.signOut();
+      await authService.signOut({ scope: 'local' });
     } catch (err) {
       console.error('Error during sign out:', err);
     } finally {
