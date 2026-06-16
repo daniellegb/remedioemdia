@@ -41,11 +41,24 @@ export const sessionService = {
       last_activity: new Date().toISOString()
     };
 
-    const { data, error } = await supabase
+    // First try with onConflict 'session_id' (new schema with session_id as Primary Key)
+    let { data, error } = await supabase
       .from('active_sessions')
       .upsert(sessionRow, { onConflict: 'session_id' })
       .select()
       .single();
+
+    // If it fails with constraint matching errors (e.g. 42P10), fallback to the old unique constraint (user_id,session_id)
+    if (error && (error.code === '42P10' || error.message?.includes('ON CONFLICT'))) {
+      console.warn('[SessionService] New schema not detected on Supabase. Falling back to old unique constraint user_id,session_id:', error.message);
+      const fallbackResult = await supabase
+        .from('active_sessions')
+        .upsert(sessionRow, { onConflict: 'user_id,session_id' })
+        .select()
+        .single();
+      data = fallbackResult.data;
+      error = fallbackResult.error;
+    }
 
     if (error) {
       console.error('[SessionService] Error registering session:', error);
