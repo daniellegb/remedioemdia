@@ -37,6 +37,9 @@ export const isTrialActive = (profile: Profile | null | undefined): boolean => {
 export const isSubscriptionActive = (profile: Profile | null | undefined): boolean => {
   if (!profile) return false;
   
+  // Se o plano não for premium, o status 'active' ou 'canceled' da assinatura não confere acesso premium.
+  if (profile.plan !== 'premium') return false;
+  
   const now = new Date();
   
   // Se estiver ativo, verificamos a data de expiração (se existir)

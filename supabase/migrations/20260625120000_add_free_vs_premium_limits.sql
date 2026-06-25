@@ -32,13 +32,14 @@ BEGIN
     END IF;
 
     -- Verificação de assinatura ativa ou cancelada porém dentro do prazo pago
-    IF u_sub_status = 'active' THEN
+    -- Só confere acesso premium se o plano cadastrado for premium
+    IF COALESCE(u_plan, 'free') = 'premium' AND u_sub_status = 'active' THEN
         IF u_sub_ends IS NULL OR now_tz < u_sub_ends THEN
             RETURN TRUE;
         END IF;
     END IF;
 
-    IF u_sub_status = 'canceled' AND u_sub_ends IS NOT NULL AND now_tz < u_sub_ends THEN
+    IF COALESCE(u_plan, 'free') = 'premium' AND u_sub_status = 'canceled' AND u_sub_ends IS NOT NULL AND now_tz < u_sub_ends THEN
         RETURN TRUE;
     END IF;
 
