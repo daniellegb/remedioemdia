@@ -6,6 +6,11 @@ export const COLORS = [
   'bg-amber-500', 'bg-cyan-500', 'bg-indigo-500'
 ];
 
+export const FREE_PLAN_LIMITS = {
+  medications: 3,
+  appointments: 5
+};
+
 export const INITIAL_MEDS: Medication[] = [];
 
 export const INITIAL_APPOINTMENTS: Appointment[] = [];

@@ -1,15 +1,41 @@
 import React from 'react';
 import { Appointment } from '../types';
 import { Calendar, MapPin, Stethoscope, TestTubeDiagonal, Plus, Pencil, Trash2, Navigation, Map as MapIcon } from 'lucide-react';
+import { FREE_PLAN_LIMITS } from '../constants';
 
 interface Props {
   appointments: Appointment[];
   onAddClick: () => void;
   onEditClick: (app: Appointment) => void;
   onDeleteClick: (id: string) => void;
+  isPremium?: boolean;
+  onUpgradeClick?: () => void;
 }
 
-const Appointments: React.FC<Props> = React.memo(({ appointments, onAddClick, onEditClick, onDeleteClick }) => {
+const Appointments: React.FC<Props> = React.memo(({ appointments, onAddClick, onEditClick, onDeleteClick, isPremium = false, onUpgradeClick }) => {
+  const currentCount = appointments.length;
+  const maxLimit = FREE_PLAN_LIMITS.appointments;
+  const percentage = Math.min(100, (currentCount / maxLimit) * 100);
+
+  // Determine progress bar color based on usage percentage
+  let barColor = 'bg-blue-600';
+  let textColor = 'text-blue-600';
+  let badgeColor = 'bg-blue-50 text-blue-700 border-blue-100';
+
+  if (percentage > 50 && percentage <= 80) {
+    barColor = 'bg-amber-500';
+    textColor = 'text-amber-600';
+    badgeColor = 'bg-amber-50 text-amber-700 border-amber-100';
+  } else if (percentage > 80 && percentage < 100) {
+    barColor = 'bg-orange-500';
+    textColor = 'text-orange-600';
+    badgeColor = 'bg-orange-50 text-orange-700 border-orange-100';
+  } else if (percentage >= 100) {
+    barColor = 'bg-red-500';
+    textColor = 'text-red-600';
+    badgeColor = 'bg-red-50 text-red-700 border-red-100';
+  }
+
   const openGoogleMaps = (address: string) => {
     const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
     window.open(url, '_blank');
@@ -35,6 +61,38 @@ const Appointments: React.FC<Props> = React.memo(({ appointments, onAddClick, on
           <span className="font-bold">Agendar</span>
         </button>
       </div>
+
+      {/* Indicador de Uso do Plano Gratuito */}
+      {!isPremium && (
+        <div id="free-plan-appointments-limit-indicator" className="bg-white p-5 md:p-6 rounded-3xl border border-slate-100 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+            <p className="text-sm text-slate-600">
+              Você cadastrou <strong className={`${textColor}`}>{currentCount} de {maxLimit} compromissos</strong> disponíveis no Plano Gratuito.
+            </p>
+            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full border w-fit ${badgeColor}`}>
+              Plano Gratuito
+            </span>
+          </div>
+
+          {/* Progress Bar Container */}
+          <div className="space-y-1">
+            <div className="h-2.5 bg-slate-100 rounded-full overflow-hidden w-full">
+              <div 
+                className={`h-full rounded-full transition-all duration-500 ${barColor}`}
+                style={{ width: `${percentage}%` }}
+              />
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onUpgradeClick}
+            className={`text-xs font-bold transition-colors cursor-pointer block hover:underline text-left ${textColor}`}
+          >
+            Torne-se Premium e cadastre compromissos ilimitados.
+          </button>
+        </div>
+      )}
 
       <div className="space-y-4">
         {appointments.map((app) => (

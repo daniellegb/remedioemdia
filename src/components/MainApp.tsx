@@ -14,7 +14,7 @@ import Security from '../../components/Security';
 import Privacy from '../../components/Privacy';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { ViewType, Medication, DoseEvent, Appointment, AppSettings, UsageCategory, UserPreferences } from '../../types';
-import { COLORS } from '../../constants';
+import { COLORS, FREE_PLAN_LIMITS } from '../../constants';
 import { useAuthContext } from '../context/AuthContext';
 import { medicationService, mapMedToCamelCase } from '../services/medicationService';
 import { consumptionService, mapDoseToCamelCase } from '../services/consumptionService';
@@ -44,7 +44,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const MainApp: React.FC = () => {
-  const { user, onboardingCompleted, loading: authLoading, refreshProfile } = useAuth();
+  const { user, onboardingCompleted, loading: authLoading, refreshProfile, isPremium } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -364,6 +364,10 @@ const MainApp: React.FC = () => {
     title: string;
     message: string;
     onConfirm: () => void;
+    onCancel?: () => void;
+    confirmText?: string;
+    cancelText?: string;
+    variant?: 'danger' | 'warning' | 'neutral';
   }>({
     isOpen: false,
     title: '',
@@ -376,8 +380,32 @@ const MainApp: React.FC = () => {
       isOpen: true,
       title,
       message,
+      confirmText: 'Confirmar',
+      cancelText: 'Cancelar',
+      variant: 'danger',
       onConfirm: () => {
         onConfirm();
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      },
+      onCancel: () => {
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      }
+    });
+  };
+
+  const showUpgradeModal = (title: string, message: string) => {
+    setConfirmModal({
+      isOpen: true,
+      title,
+      message,
+      confirmText: 'Tornar-se Premium',
+      cancelText: 'Agora não',
+      variant: 'warning',
+      onConfirm: () => {
+        setView('subscription');
+        setConfirmModal(prev => ({ ...prev, isOpen: false }));
+      },
+      onCancel: () => {
         setConfirmModal(prev => ({ ...prev, isOpen: false }));
       }
     });
@@ -433,6 +461,13 @@ const MainApp: React.FC = () => {
         setMeds(newMeds);
         await pushService.syncMedicationReminders(user.id, newMeds);
       } else {
+        if (!isPremium && meds.length >= FREE_PLAN_LIMITS.medications) {
+          showUpgradeModal(
+            'Limite do Plano Gratuito atingido',
+            'Você já cadastrou os 3 medicamentos disponíveis no Plano Gratuito. Torne-se Premium para cadastrar medicamentos ilimitados e continuar organizando seus tratamentos.'
+          );
+          return;
+        }
         const finalMed = { ...newMed, color: newMed.color || COLORS[Math.floor(Math.random() * COLORS.length)] };
         const created = await medicationService.createMedication(user.id, finalMed);
         const newMeds = [created, ...meds];
@@ -445,7 +480,7 @@ const MainApp: React.FC = () => {
       console.error('Erro ao salvar medicamento:', error);
       alert('Houve um erro ao salvar o medicamento. Por favor, verifique os dados e tente novamente.');
     }
-  }, [user, meds]);
+  }, [user, meds, isPremium]);
 
   const handleDeleteMed = useCallback(async (id: string) => {
     if (!user) return;
@@ -477,10 +512,17 @@ const MainApp: React.FC = () => {
   }, []);
 
   const handleAddMed = useCallback((category?: UsageCategory) => {
+    if (!isPremium && meds.length >= FREE_PLAN_LIMITS.medications) {
+      showUpgradeModal(
+        'Limite do Plano Gratuito atingido',
+        'Você já cadastrou os 3 medicamentos disponíveis no Plano Gratuito. Torne-se Premium para cadastrar medicamentos ilimitados e continuar organizando seus tratamentos.'
+      );
+      return;
+    }
     setEditingMedication(null);
     setInitialMedCategory(category);
     setView('add-med');
-  }, []);
+  }, [isPremium, meds]);
 
   const handleClearData = useCallback(() => {
     if (!user) return;
@@ -517,6 +559,18 @@ const MainApp: React.FC = () => {
     );
   }, [user]);
 
+  const handleAddAppointment = useCallback(() => {
+    if (!isPremium && appointments.length >= FREE_PLAN_LIMITS.appointments) {
+      showUpgradeModal(
+        'Limite do Plano Gratuito atingido',
+        'Você já cadastrou os 5 compromissos disponíveis no Plano Gratuito. Torne-se Premium para cadastrar compromissos ilimitados.'
+      );
+      return;
+    }
+    setEditingAppointment(null);
+    setView('add-appointment');
+  }, [isPremium, appointments]);
+
   const handleSaveAppointment = useCallback(async (newApp: Appointment) => {
     if (!user) return;
     try {
@@ -525,6 +579,13 @@ const MainApp: React.FC = () => {
         const updated = await appointmentService.updateAppointment(user.id, newApp.id, newApp);
         setAppointments(prev => prev.map(app => app.id === updated.id ? updated : app));
       } else {
+        if (!isPremium && appointments.length >= FREE_PLAN_LIMITS.appointments) {
+          showUpgradeModal(
+            'Limite do Plano Gratuito atingido',
+            'Você já cadastrou os 5 compromissos disponíveis no Plano Gratuito. Torne-se Premium para cadastrar compromissos ilimitados.'
+          );
+          return;
+        }
         const created = await appointmentService.createAppointment(user.id, newApp);
         setAppointments(prev => [created, ...prev]);
       }
@@ -533,7 +594,7 @@ const MainApp: React.FC = () => {
     } catch (error) {
       console.error('Erro ao salvar compromisso:', error);
     }
-  }, [user, appointments]);
+  }, [user, appointments, isPremium]);
 
   const handleDeleteAppointment = useCallback(async (id: string) => {
     if (!user) return;
@@ -652,11 +713,11 @@ const MainApp: React.FC = () => {
           onAddMed={handleAddMed}
         />;
       case 'meds':
-        return <Medications meds={meds} settings={settings} onAdd={() => handleAddMed()} onEdit={handleEditMedication} onDelete={handleDeleteMed} />;
+        return <Medications meds={meds} settings={settings} onAdd={() => handleAddMed()} onEdit={handleEditMedication} onDelete={handleDeleteMed} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
       case 'add-med':
         return <AddMedication onSave={handleSaveMedication} onCancel={() => setView('meds')} initialData={editingMedication} initialCategory={initialMedCategory} />;
       case 'appointments':
-        return <Appointments appointments={appointments} onAddClick={() => { setEditingAppointment(null); setView('add-appointment'); }} onEditClick={handleEditAppointment} onDeleteClick={handleDeleteAppointment} />;
+        return <Appointments appointments={appointments} onAddClick={handleAddAppointment} onEditClick={handleEditAppointment} onDeleteClick={handleDeleteAppointment} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
       case 'add-appointment':
         return <AddAppointment onSave={handleSaveAppointment} onCancel={() => setView('appointments')} initialData={editingAppointment} />;
       case 'calendar':
