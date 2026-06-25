@@ -17,6 +17,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showPolicy, setShowPolicy] = useState(false);
 
   const formatBrazilianDate = (dateStr?: string) => {
     if (!dateStr) return 'Não informada';
@@ -307,6 +308,112 @@ const Privacy: React.FC<Props> = ({ setView }) => {
     }
   };
 
+  if (showPolicy) {
+    return (
+      <motion.div
+        id="privacy-policy-view"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 15 }}
+        transition={{ duration: 0.3 }}
+        className="max-w-2xl mx-auto space-y-6 pb-20 md:pb-0"
+      >
+        {/* Header with Back button */}
+        <div className="flex items-center gap-4">
+          <button
+            id="btn-back-to-privacy-menu"
+            onClick={() => setShowPolicy(false)}
+            className="p-2.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl text-slate-500 hover:text-slate-800 transition-colors shadow-sm cursor-pointer flex items-center justify-center"
+            title="Voltar para Privacidade"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Política de Privacidade</h2>
+            <p className="text-xs md:text-sm text-slate-500">Transparência sobre seus dados pessoais</p>
+          </div>
+        </div>
+
+        {/* Policy Document Card */}
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 md:p-8 space-y-6 text-slate-600 leading-relaxed text-sm">
+          <div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">1. Introdução</h3>
+            <p>
+              No aplicativo <strong>Remédio em Dia</strong>, priorizamos a segurança e a confidencialidade das suas informações médicas e pessoais. Esta Política de Privacidade explica de forma simples quais dados coletamos, como eles são utilizados e como garantimos os seus direitos conforme a legislação de proteção de dados (como a LGPD).
+            </p>
+          </div>
+
+          <hr className="border-slate-100" />
+
+          <div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">2. Quais Dados Coletamos?</h3>
+            <p className="mb-2">
+              Para possibilitar o funcionamento das funcionalidades do aplicativo, armazenamos as seguintes informações fornecidas por você:
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><strong>Dados de Perfil:</strong> Seu nome (ou do paciente sob seus cuidados) e endereço de e-mail.</li>
+              <li><strong>Medicamentos:</strong> Nomes dos medicamentos, dosagens, horários de ingestão, notas personalizadas e informações de estoque.</li>
+              <li><strong>Lembretes e Compromissos:</strong> Horários configurados para alertas e datas de consultas médicas.</li>
+              <li><strong>Preferências do Aplicativo:</strong> Customizações de alertas, notificações e preferências de visualização.</li>
+            </ul>
+          </div>
+
+          <hr className="border-slate-100" />
+
+          <div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">3. Como Usamos Seus Dados</h3>
+            <p className="mb-2">
+              Seus dados são usados estritamente para o funcionamento do serviço personalizado de monitoramento e alertas de medicamentos:
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li>Enviar lembretes no horário correto para que você não esqueça suas doses.</li>
+              <li>Notificar sobre medicamentos próximos de vencer ou estoques que estão acabando.</li>
+              <li>Facilitar o acompanhamento do seu histórico de saúde de forma simplificada.</li>
+            </ul>
+            <p className="mt-2 text-slate-500 italic">
+              <strong>Importante:</strong> Não compartilhamos, vendemos ou alugamos seus dados pessoais com parceiros de marketing, redes de anúncios ou quaisquer terceiros.
+            </p>
+          </div>
+
+          <hr className="border-slate-100" />
+
+          <div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">4. Seus Direitos (LGPD)</h3>
+            <p className="mb-2">
+              Como titular de dados, a LGPD garante a você controle total sobre suas informações. No aplicativo Remédio em Dia, você pode exercer os seguintes direitos:
+            </p>
+            <ul className="list-disc pl-5 space-y-1">
+              <li><strong>Portabilidade (Baixar Meus Dados):</strong> Obter a qualquer momento um relatório legível em formato PDF com todas as suas informações pessoais.</li>
+              <li><strong>Exclusão:</strong> Você pode excluir permanentemente sua conta e todos os dados associados a ela na aba de Segurança.</li>
+              <li><strong>Retificação:</strong> Corrigir qualquer informação imprecisa ou desatualizada diretamente pelo painel do aplicativo.</li>
+            </ul>
+          </div>
+
+          <hr className="border-slate-100" />
+
+          <div>
+            <h3 className="text-lg font-bold text-slate-900 mb-2">5. Segurança dos Dados</h3>
+            <p>
+              Adotamos práticas de segurança rigorosas, como criptografia, controle de acesso restrito (Row Level Security) e ambientes de armazenamento seguros em nuvem para que seus dados permaneçam sempre privados e acessíveis apenas por você.
+            </p>
+          </div>
+
+          <hr className="border-slate-100" />
+
+          <div className="pt-2">
+            <button
+              id="btn-back-to-privacy-menu-bottom"
+              onClick={() => setShowPolicy(false)}
+              className="w-full font-bold py-3.5 px-6 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors"
+            >
+              Voltar para Privacidade
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       id="privacy-page-container"
@@ -316,31 +423,19 @@ const Privacy: React.FC<Props> = ({ setView }) => {
       transition={{ duration: 0.3 }}
       className="max-w-2xl mx-auto space-y-6 pb-20 md:pb-0"
     >
-      {/* Back Header */}
+      {/* Header with Back button */}
       <div className="flex items-center gap-4">
         <button
           id="btn-back-to-settings-from-privacy"
           onClick={() => setView('settings')}
-          className="flex items-center gap-2 text-slate-500 hover:text-slate-800 font-bold text-sm bg-slate-100 hover:bg-slate-200 px-4 py-2 rounded-2xl transition-all"
+          className="p-2.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl text-slate-500 hover:text-slate-800 transition-colors shadow-sm cursor-pointer flex items-center justify-center"
+          title="Voltar para Ajustes"
         >
-          <ArrowLeft size={16} />
-          Voltar
+          <ArrowLeft size={20} />
         </button>
-      </div>
-
-      {/* Hero Display */}
-      <div className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-3xl p-6 md:p-8 text-white shadow-xl shadow-blue-100 relative overflow-hidden">
-        <div className="absolute right-0 bottom-0 translate-x-4 translate-y-4 opacity-10">
-          <Shield size={240} />
-        </div>
-        <div className="relative z-10 space-y-3">
-          <div className="p-3 bg-white/10 rounded-2xl w-fit">
-            <Shield size={32} />
-          </div>
-          <h2 className="text-2xl font-bold">Privacidade & Meus Dados</h2>
-          <p className="text-blue-100 text-sm max-w-md leading-relaxed">
-            Aqui você gerencia as solicitações sobre a custódia, transparência e portabilidade de seus dados pessoais em total conformidade com a LGPD.
-          </p>
+        <div>
+          <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Privacidade</h2>
+          <p className="text-xs md:text-sm text-slate-500">Gerencie a privacidade e exportação de seus dados pessoais</p>
         </div>
       </div>
 
@@ -399,6 +494,33 @@ const Privacy: React.FC<Props> = ({ setView }) => {
           >
             <Download size={18} className={loading ? 'animate-bounce' : ''} />
             {loading ? 'Reunindo dados e gerando PDF...' : 'Baixar PDF'}
+          </button>
+        </div>
+
+        {/* Card: Política de Privacidade */}
+        <div id="privacy-policy-card" className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 space-y-6">
+          <div className="flex gap-4 items-start">
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl shrink-0">
+              <Shield size={24} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-bold text-slate-800 text-lg">Política de Privacidade</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                Entenda como coletamos, protegemos e tratamos as suas informações pessoais e médicas.
+              </p>
+            </div>
+          </div>
+
+          <button
+            id="btn-access-privacy-policy"
+            onClick={() => {
+              setSuccess(false);
+              setError(null);
+              setShowPolicy(true);
+            }}
+            className="w-full font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all active:scale-[0.98] cursor-pointer"
+          >
+            Acessar a Política de Privacidade
           </button>
         </div>
       </div>
