@@ -13,7 +13,7 @@ const Navigation: React.FC<Props> = React.memo(({ currentView, setView }) => {
     { id: 'dashboard', label: 'Hoje', icon: Home },
     { id: 'calendar', label: 'Calendário', icon: Calendar },
     { id: 'meds', label: 'Remédios', icon: Pill },
-    { id: 'appointments', label: 'Consultas', icon: Clock },
+    { id: 'appointments', label: 'Compromissos', icon: Clock },
     { id: 'settings', label: 'Ajustes', icon: Settings },
   ];
 

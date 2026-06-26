@@ -1,6 +1,8 @@
 
 import { supabase } from '../lib/supabase';
 
+let syncPromise: Promise<void> = Promise.resolve();
+
 export const pushService = {
   async saveSubscription(userId: string, subscription: PushSubscription) {
     const subData = subscription.toJSON();
@@ -40,70 +42,91 @@ export const pushService = {
   },
 
   async syncMedicationReminders(userId: string, medications: any[], preNotificationMinutes: number = 0) {
-    // 1. Remover lembretes antigos
-    await supabase
-      .from('medication_reminders')
-      .delete()
-      .eq('user_id', userId);
+    // Encadear a execução para garantir que as operações de delete + insert ocorram sequencialmente,
+    // evitando condições de corrida (race conditions) concorrentes que resultam no erro 409 (unique constraint violation 23505)
+    syncPromise = syncPromise.then(async () => {
+      try {
+        // 1. Remover lembretes antigos
+        const { error: deleteError } = await supabase
+          .from('medication_reminders')
+          .delete()
+          .eq('user_id', userId);
 
-    // 2. Criar novos lembretes baseados nos horários dos medicamentos
-    const reminders: any[] = [];
-    
-    medications.forEach(med => {
-      // REGRA: Medicamentos da categoria 'Se Necessário' (prn) não geram notificações agendadas
-      if (med.usageCategory === 'prn') {
-        return;
-      }
+        if (deleteError) {
+          console.error("Erro ao remover lembretes antigos:", deleteError);
+          throw deleteError;
+        }
 
-      if (med.times && Array.isArray(med.times)) {
-        med.times.forEach((time: string) => {
-          // Lembrete na hora exata
-          reminders.push({
-            user_id: userId,
-            medication_id: med.id,
-            medication_name: med.name,
-            reminder_time: time,
-            active: true,
-            message_template: `Hora de tomar ${med.name}`
-          });
+        // 2. Criar novos lembretes baseados nos horários dos medicamentos
+        const reminders: any[] = [];
+        
+        medications.forEach(med => {
+          // REGRA: Medicamentos da categoria 'Se Necessário' (prn) não geram notificações agendadas
+          if (med.usageCategory === 'prn') {
+            return;
+          }
 
-          // Lembrete antecipado (se configurado)
-          if (preNotificationMinutes > 0) {
-            const [hours, minutes] = time.split(':').map(Number);
-            const date = new Date();
-            date.setHours(hours, minutes, 0, 0);
-            date.setMinutes(date.getMinutes() - preNotificationMinutes);
-            
-            const preTime = date.toLocaleTimeString('pt-BR', { 
-              hour: '2-digit', 
-              minute: '2-digit', 
-              hour12: false 
-            });
+          if (med.times && Array.isArray(med.times)) {
+            med.times.forEach((time: string) => {
+              // Lembrete na hora exata
+              reminders.push({
+                user_id: userId,
+                medication_id: med.id,
+                medication_name: med.name,
+                reminder_time: time,
+                active: true,
+                message_template: `Hora de tomar ${med.name}`
+              });
 
-            reminders.push({
-              user_id: userId,
-              medication_id: med.id,
-              medication_name: med.name,
-              reminder_time: preTime,
-              active: true,
-              message_template: `Faltam ${preNotificationMinutes} minutos para tomar ${med.name}`
+              // Lembrete antecipado (se configurado)
+              if (preNotificationMinutes > 0) {
+                const [hours, minutes] = time.split(':').map(Number);
+                const date = new Date();
+                date.setHours(hours, minutes, 0, 0);
+                date.setMinutes(date.getMinutes() - preNotificationMinutes);
+                
+                const preTime = date.toLocaleTimeString('pt-BR', { 
+                  hour: '2-digit', 
+                  minute: '2-digit', 
+                  hour12: false 
+                });
+
+                reminders.push({
+                  user_id: userId,
+                  medication_id: med.id,
+                  medication_name: med.name,
+                  reminder_time: preTime,
+                  active: true,
+                  message_template: `Faltam ${preNotificationMinutes} minutos para tomar ${med.name}`
+                });
+              }
             });
           }
         });
+
+        if (reminders.length > 0) {
+          // De-duplicar lembretes antes de inserir para evitar erros de restrição de unicidade
+          const uniqueReminders = Array.from(new Map(reminders.map(r => 
+            [`${r.user_id}-${r.medication_id}-${r.reminder_time}-${r.message_template}`, r]
+          )).values());
+
+          const { error: insertError } = await supabase
+            .from('medication_reminders')
+            .insert(uniqueReminders);
+          
+          if (insertError) {
+            console.error("Erro ao inserir novos lembretes:", insertError);
+            throw insertError;
+          }
+        }
+      } catch (err) {
+        console.error("Erro no fluxo sequencial de sincronização de lembretes:", err);
+        // Não propagamos o erro para não quebrar a cadeia de promessas de forma permanente,
+        // mas lançamos para o chamador atual se necessário. No entanto, encadeamentos futuros devem continuar funcionando.
       }
     });
 
-    if (reminders.length > 0) {
-      // De-duplicar lembretes antes de inserir para evitar erros de restrição de unicidade
-      const uniqueReminders = Array.from(new Map(reminders.map(r => 
-        [`${r.user_id}-${r.medication_id}-${r.reminder_time}-${r.message_template}`, r]
-      )).values());
-
-      const { error } = await supabase
-        .from('medication_reminders')
-        .insert(uniqueReminders);
-      if (error) throw error;
-    }
+    return syncPromise;
   },
 
   async checkVapidMatch() {
