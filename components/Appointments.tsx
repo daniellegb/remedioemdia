@@ -2,6 +2,7 @@ import React from 'react';
 import { Appointment } from '../types';
 import { Calendar, MapPin, Stethoscope, TestTubeDiagonal, Plus, Pencil, Trash2, Navigation, Map as MapIcon } from 'lucide-react';
 import { FREE_PLAN_LIMITS } from '../constants';
+import { openGoogleMapsLink, openWazeLink } from '../src/utils/mapUtils';
 
 interface Props {
   appointments: Appointment[];
@@ -37,13 +38,11 @@ const Appointments: React.FC<Props> = React.memo(({ appointments, onAddClick, on
   }
 
   const openGoogleMaps = (address: string) => {
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-    window.open(url, '_blank');
+    openGoogleMapsLink(address);
   };
 
   const openWaze = (address: string) => {
-    const url = `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
-    window.open(url, '_blank');
+    openWazeLink(address);
   };
 
   return (

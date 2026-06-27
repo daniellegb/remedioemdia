@@ -7,6 +7,7 @@ import { greetingService } from '../src/domain/greetings/greetingService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useAuth } from '../src/hooks/useAuth';
 import { UserAvatar } from '../src/components/UserAvatar';
+import { openGoogleMapsLink, openWazeLink } from '../src/utils/mapUtils';
 
 interface Props {
   meds: Medication[];
@@ -240,14 +241,12 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
 
   const openGoogleMaps = (e: React.MouseEvent, address: string) => {
     e.stopPropagation();
-    const url = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-    window.open(url, '_blank');
+    openGoogleMapsLink(address);
   };
 
   const openWaze = (e: React.MouseEvent, address: string) => {
     e.stopPropagation();
-    const url = `https://waze.com/ul?q=${encodeURIComponent(address)}&navigate=yes`;
-    window.open(url, '_blank');
+    openWazeLink(address);
   };
 
   return (

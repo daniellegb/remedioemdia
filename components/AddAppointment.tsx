@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Appointment, AppointmentType } from '../types';
-import { ChevronLeft, Stethoscope, TestTubeDiagonal, User, Calendar, Clock, MapPin } from 'lucide-react';
+import { ChevronLeft, Stethoscope, TestTubeDiagonal, User, Calendar, Clock, MapPin, Loader2 } from 'lucide-react';
 
 interface Props {
   onSave: (appointment: Appointment) => void;
@@ -20,6 +20,12 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
     notes: ''
   });
 
+  const [suggestions, setSuggestions] = useState<string[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
+  const [showDropdown, setShowDropdown] = useState(false);
+  const [lastSelectedLocation, setLastSelectedLocation] = useState('');
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
   useEffect(() => {
     if (initialData) {
       setType(initialData.type);
@@ -31,8 +37,66 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
         location: initialData.location,
         notes: initialData.notes || ''
       });
+      setLastSelectedLocation(initialData.location);
     }
   }, [initialData]);
+
+  // Fechar dropdown ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowDropdown(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Busca debounced para sugestões de endereço
+  useEffect(() => {
+    const query = formData.location.trim();
+    if (query.length < 3 || query === lastSelectedLocation) {
+      setSuggestions([]);
+      setShowDropdown(false);
+      return;
+    }
+
+    const delayDebounceFn = setTimeout(async () => {
+      setIsLoadingSuggestions(true);
+      setShowDropdown(true);
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=5&addressdetails=1`,
+          {
+            headers: {
+              'User-Agent': 'MedManagerApp/1.0'
+            }
+          }
+        );
+        if (response.ok) {
+          const data = await response.json();
+          const list = data.map((item: any) => item.display_name);
+          setSuggestions(list);
+        } else {
+          setSuggestions([]);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar autocompletar de endereços:', error);
+        setSuggestions([]);
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    }, 600);
+
+    return () => clearTimeout(delayDebounceFn);
+  }, [formData.location, lastSelectedLocation]);
+
+  const handleSelectSuggestion = (suggestion: string) => {
+    setLastSelectedLocation(suggestion);
+    setFormData(prev => ({ ...prev, location: suggestion }));
+    setSuggestions([]);
+    setShowDropdown(false);
+  };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,22 +206,59 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
           </div>
 
           {/* Location */}
-          <div className="space-y-2">
+          <div className="space-y-2 relative" ref={dropdownRef}>
             <label className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
               <MapPin size={14} /> Endereço
             </label>
-            <input
-              className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-              placeholder="Ex: Av. Principal, 123"
-              value={formData.location}
-              onChange={e => setFormData({...formData, location: e.target.value})}
-            />
+            <div className="relative">
+              <input
+                className="w-full bg-slate-50 border-none rounded-xl pl-4 pr-10 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-slate-800"
+                placeholder="Ex: Av. Paulista, 1000, São Paulo"
+                value={formData.location}
+                onChange={e => setFormData({...formData, location: e.target.value})}
+                onFocus={() => {
+                  if (suggestions.length > 0) setShowDropdown(true);
+                }}
+              />
+              {isLoadingSuggestions && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400">
+                  <Loader2 className="animate-spin" size={18} />
+                </div>
+              )}
+            </div>
+
+            {showDropdown && (
+              <div className="absolute left-0 right-0 z-50 bg-white border border-slate-100 rounded-xl shadow-xl max-h-60 overflow-y-auto mt-1">
+                {isLoadingSuggestions && suggestions.length === 0 ? (
+                  <div className="p-4 text-sm text-slate-500 text-center flex items-center justify-center gap-2">
+                    <Loader2 className="animate-spin text-blue-500" size={16} />
+                    Buscando endereços...
+                  </div>
+                ) : suggestions.length > 0 ? (
+                  <ul>
+                    {suggestions.map((suggestion, index) => (
+                      <li
+                        key={index}
+                        onClick={() => handleSelectSuggestion(suggestion)}
+                        className="px-4 py-3 text-sm text-slate-700 hover:bg-blue-50 active:bg-blue-100 cursor-pointer border-b last:border-b-0 border-slate-50 transition-colors"
+                      >
+                        {suggestion}
+                      </li>
+                    ))}
+                  </ul>
+                ) : !isLoadingSuggestions && formData.location.trim().length >= 3 ? (
+                  <div className="p-4 text-sm text-slate-500 text-center">
+                    Nenhum endereço encontrado
+                  </div>
+                ) : null}
+              </div>
+            )}
           </div>
         </div>
 
         <button
           type="submit"
-          className="w-full bg-slate-900 text-white py-4 rounded-2xl font-bold text-lg shadow-xl shadow-slate-200 hover:bg-slate-800 transition-all flex items-center justify-center gap-2"
+          className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl hover:bg-blue-700 hover:shadow-blue-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
         >
           {initialData ? 'Salvar Alterações' : 'Confirmar Agendamento'}
         </button>
