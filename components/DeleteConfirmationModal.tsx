@@ -136,7 +136,9 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
                       : 'bg-red-600 hover:bg-red-700 shadow-red-100'
                   }`}
                 >
-                  {isMed ? 'Excluir medicamento' : 'Excluir compromisso'}
+                  {keepHistory
+                    ? (isMed ? 'Inativar medicamento' : 'Inativar compromisso')
+                    : (isMed ? 'Excluir medicamento' : 'Excluir compromisso')}
                 </button>
               </div>
             </div>
