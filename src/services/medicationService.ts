@@ -111,6 +111,7 @@ export const medicationService = {
     if (data.color !== undefined) updateData.color = data.color;
     if (data.frequency !== undefined) updateData.frequency = data.frequency;
     if (data.active !== undefined) updateData.active = data.active;
+    if (data.deleted !== undefined) updateData.deleted = data.deleted;
 
     // Recalcular próxima dose se campos relevantes mudarem
     if (data.times || data.intervalDays || data.usageCategory || data.startDate) {

@@ -18,8 +18,8 @@ interface Props {
 }
 
 const Medications: React.FC<Props> = React.memo(({ meds, settings, onAdd, onEdit, onDelete, onReactivate, isPremium = false, onUpgradeClick }) => {
-  const activeMeds = meds.filter(m => m.active !== false && m.active !== 'false' && m.active !== 0);
-  const inactiveMeds = meds.filter(m => m.active === false || m.active === 'false' || m.active === 0);
+  const activeMeds = meds.filter(m => m.active !== false && m.active !== 'false' && m.active !== 0 && m.deleted !== true);
+  const inactiveMeds = meds.filter(m => m.active === false || m.active === 'false' || m.active === 0 || m.deleted === true);
   
   const currentCount = activeMeds.length;
   const maxLimit = FREE_PLAN_LIMITS.medications;

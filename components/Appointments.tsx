@@ -15,8 +15,8 @@ interface Props {
 }
 
 const Appointments: React.FC<Props> = React.memo(({ appointments, onAddClick, onEditClick, onDeleteClick, onReactivateClick, isPremium = false, onUpgradeClick }) => {
-  const activeApps = appointments.filter(a => a.active !== false && a.active !== 'false' && a.active !== 0);
-  const inactiveApps = appointments.filter(a => a.active === false || a.active === 'false' || a.active === 0);
+  const activeApps = appointments.filter(a => a.active !== false && a.active !== 'false' && a.active !== 0 && a.deleted !== true);
+  const inactiveApps = appointments.filter(a => a.active === false || a.active === 'false' || a.active === 0 || a.deleted === true);
 
   const currentCount = activeApps.length;
   const maxLimit = FREE_PLAN_LIMITS.appointments;

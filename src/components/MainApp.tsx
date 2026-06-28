@@ -603,7 +603,7 @@ const MainApp: React.FC = () => {
     try {
       const med = meds.find(m => m.id === id);
       if (med) {
-        const updated = await medicationService.updateMedication(user.id, id, { ...med, active: true });
+        const updated = await medicationService.updateMedication(user.id, id, { ...med, active: true, deleted: false });
         const newMeds = meds.map(m => m.id === updated.id ? updated : m);
         setMeds(newMeds);
         await pushService.syncMedicationReminders(user.id, newMeds);
@@ -623,7 +623,7 @@ const MainApp: React.FC = () => {
     try {
       const app = appointments.find(a => a.id === id);
       if (app) {
-        const updated = await appointmentService.updateAppointment(user.id, id, { ...app, active: true });
+        const updated = await appointmentService.updateAppointment(user.id, id, { ...app, active: true, deleted: false });
         setAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
       }
     } catch (error) {
@@ -834,11 +834,11 @@ const MainApp: React.FC = () => {
           onAddMed={handleAddMed}
         />;
       case 'meds':
-        return <Medications meds={nonDeletedMeds} settings={settings} onAdd={() => handleAddMed()} onEdit={handleEditMedication} onDelete={handleDeleteMed} onReactivate={handleReactivateMed} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
+        return <Medications meds={meds} settings={settings} onAdd={() => handleAddMed()} onEdit={handleEditMedication} onDelete={handleDeleteMed} onReactivate={handleReactivateMed} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
       case 'add-med':
         return <AddMedication onSave={handleSaveMedication} onCancel={() => setView('meds')} initialData={editingMedication} initialCategory={initialMedCategory} />;
       case 'appointments':
-        return <Appointments appointments={nonDeletedAppointments} onAddClick={handleAddAppointment} onEditClick={handleEditAppointment} onDeleteClick={handleDeleteAppointment} onReactivateClick={handleReactivateAppointment} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
+        return <Appointments appointments={appointments} onAddClick={handleAddAppointment} onEditClick={handleEditAppointment} onDeleteClick={handleDeleteAppointment} onReactivateClick={handleReactivateAppointment} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
       case 'add-appointment':
         return <AddAppointment onSave={handleSaveAppointment} onCancel={() => setView('appointments')} initialData={editingAppointment} />;
       case 'calendar':
