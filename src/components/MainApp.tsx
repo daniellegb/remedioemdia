@@ -15,6 +15,7 @@ import Privacy from '../../components/Privacy';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { PlanMismatchModal } from '../../components/PlanMismatchModal';
 import { DeleteConfirmationModal } from '../../components/DeleteConfirmationModal';
+import { LimitReachedModal } from '../../components/LimitReachedModal';
 import { ViewType, Medication, DoseEvent, Appointment, AppSettings, UsageCategory, UserPreferences } from '../../types';
 import { COLORS, FREE_PLAN_LIMITS } from '../../constants';
 import { useAuthContext } from '../context/AuthContext';
@@ -62,6 +63,7 @@ const MainApp: React.FC = () => {
     return 'dashboard';
   });
   const [dataLoading, setDataLoading] = useState(true);
+  const [limitModalOpen, setLimitModalOpen] = useState(false);
 
   useEffect(() => {
     if (location.state?.openAddMed) {
@@ -538,16 +540,22 @@ const MainApp: React.FC = () => {
     try {
       const exists = meds.some(m => m.id === newMed.id);
       if (exists) {
+        const oldMed = meds.find(m => m.id === newMed.id);
+        if (oldMed && oldMed.active === false && newMed.active !== false) {
+          const activeMedsCount = meds.filter(m => m.active !== false && m.deleted !== true).length;
+          if (!isPremium && activeMedsCount >= FREE_PLAN_LIMITS.medications) {
+            setLimitModalOpen(true);
+            return;
+          }
+        }
         const updated = await medicationService.updateMedication(user.id, newMed.id, newMed);
         const newMeds = meds.map(m => m.id === updated.id ? updated : m);
         setMeds(newMeds);
         await pushService.syncMedicationReminders(user.id, newMeds);
       } else {
-        if (!isPremium && meds.length >= FREE_PLAN_LIMITS.medications) {
-          showUpgradeModal(
-            'Limite do Plano Gratuito atingido',
-            'Você já cadastrou os 3 medicamentos disponíveis no Plano Gratuito. Torne-se Premium para cadastrar medicamentos ilimitados e continuar organizando seus tratamentos.'
-          );
+        const activeMedsCount = meds.filter(m => m.active !== false && m.deleted !== true).length;
+        if (!isPremium && activeMedsCount >= FREE_PLAN_LIMITS.medications) {
+          setLimitModalOpen(true);
           return;
         }
         const finalMed = { ...newMed, color: newMed.color || COLORS[Math.floor(Math.random() * COLORS.length)] };
@@ -585,12 +593,48 @@ const MainApp: React.FC = () => {
     setView('add-appointment');
   }, []);
 
+  const handleReactivateMed = useCallback(async (id: string) => {
+    if (!user) return;
+    const activeMedsCount = meds.filter(m => m.active !== false && m.deleted !== true).length;
+    if (!isPremium && activeMedsCount >= FREE_PLAN_LIMITS.medications) {
+      setLimitModalOpen(true);
+      return;
+    }
+    try {
+      const med = meds.find(m => m.id === id);
+      if (med) {
+        const updated = await medicationService.updateMedication(user.id, id, { ...med, active: true });
+        const newMeds = meds.map(m => m.id === updated.id ? updated : m);
+        setMeds(newMeds);
+        await pushService.syncMedicationReminders(user.id, newMeds);
+      }
+    } catch (error) {
+      console.error('Erro ao reativar medicamento:', error);
+    }
+  }, [user, meds, isPremium]);
+
+  const handleReactivateAppointment = useCallback(async (id: string) => {
+    if (!user) return;
+    const activeAppsCount = appointments.filter(a => a.active !== false && a.deleted !== true).length;
+    if (!isPremium && activeAppsCount >= FREE_PLAN_LIMITS.appointments) {
+      setLimitModalOpen(true);
+      return;
+    }
+    try {
+      const app = appointments.find(a => a.id === id);
+      if (app) {
+        const updated = await appointmentService.updateAppointment(user.id, id, { ...app, active: true });
+        setAppointments(prev => prev.map(a => a.id === updated.id ? updated : a));
+      }
+    } catch (error) {
+      console.error('Erro ao reativar compromisso:', error);
+    }
+  }, [user, appointments, isPremium]);
+
   const handleAddMed = useCallback((category?: UsageCategory) => {
-    if (!isPremium && meds.length >= FREE_PLAN_LIMITS.medications) {
-      showUpgradeModal(
-        'Limite do Plano Gratuito atingido',
-        'Você já cadastrou os 3 medicamentos disponíveis no Plano Gratuito. Torne-se Premium para cadastrar medicamentos ilimitados e continuar organizando seus tratamentos.'
-      );
+    const activeMedsCount = meds.filter(m => m.active !== false && m.deleted !== true).length;
+    if (!isPremium && activeMedsCount >= FREE_PLAN_LIMITS.medications) {
+      setLimitModalOpen(true);
       return;
     }
     setEditingMedication(null);
@@ -634,11 +678,9 @@ const MainApp: React.FC = () => {
   }, [user]);
 
   const handleAddAppointment = useCallback(() => {
-    if (!isPremium && appointments.length >= FREE_PLAN_LIMITS.appointments) {
-      showUpgradeModal(
-        'Limite do Plano Gratuito atingido',
-        'Você já cadastrou os 5 compromissos disponíveis no Plano Gratuito. Torne-se Premium para cadastrar compromissos ilimitados.'
-      );
+    const activeAppsCount = appointments.filter(a => a.active !== false && a.deleted !== true).length;
+    if (!isPremium && activeAppsCount >= FREE_PLAN_LIMITS.appointments) {
+      setLimitModalOpen(true);
       return;
     }
     setEditingAppointment(null);
@@ -650,14 +692,20 @@ const MainApp: React.FC = () => {
     try {
       const exists = appointments.some(app => app.id === newApp.id);
       if (exists) {
+        const oldApp = appointments.find(a => a.id === newApp.id);
+        if (oldApp && oldApp.active === false && newApp.active !== false) {
+          const activeAppsCount = appointments.filter(a => a.active !== false && a.deleted !== true).length;
+          if (!isPremium && activeAppsCount >= FREE_PLAN_LIMITS.appointments) {
+            setLimitModalOpen(true);
+            return;
+          }
+        }
         const updated = await appointmentService.updateAppointment(user.id, newApp.id, newApp);
         setAppointments(prev => prev.map(app => app.id === updated.id ? updated : app));
       } else {
-        if (!isPremium && appointments.length >= FREE_PLAN_LIMITS.appointments) {
-          showUpgradeModal(
-            'Limite do Plano Gratuito atingido',
-            'Você já cadastrou os 5 compromissos disponíveis no Plano Gratuito. Torne-se Premium para cadastrar compromissos ilimitados.'
-          );
+        const activeAppsCount = appointments.filter(a => a.active !== false && a.deleted !== true).length;
+        if (!isPremium && activeAppsCount >= FREE_PLAN_LIMITS.appointments) {
+          setLimitModalOpen(true);
           return;
         }
         const created = await appointmentService.createAppointment(user.id, newApp);
@@ -786,11 +834,11 @@ const MainApp: React.FC = () => {
           onAddMed={handleAddMed}
         />;
       case 'meds':
-        return <Medications meds={nonDeletedMeds} settings={settings} onAdd={() => handleAddMed()} onEdit={handleEditMedication} onDelete={handleDeleteMed} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
+        return <Medications meds={nonDeletedMeds} settings={settings} onAdd={() => handleAddMed()} onEdit={handleEditMedication} onDelete={handleDeleteMed} onReactivate={handleReactivateMed} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
       case 'add-med':
         return <AddMedication onSave={handleSaveMedication} onCancel={() => setView('meds')} initialData={editingMedication} initialCategory={initialMedCategory} />;
       case 'appointments':
-        return <Appointments appointments={nonDeletedAppointments} onAddClick={handleAddAppointment} onEditClick={handleEditAppointment} onDeleteClick={handleDeleteAppointment} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
+        return <Appointments appointments={nonDeletedAppointments} onAddClick={handleAddAppointment} onEditClick={handleEditAppointment} onDeleteClick={handleDeleteAppointment} onReactivateClick={handleReactivateAppointment} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
       case 'add-appointment':
         return <AddAppointment onSave={handleSaveAppointment} onCancel={() => setView('appointments')} initialData={editingAppointment} />;
       case 'calendar':
@@ -940,6 +988,17 @@ const MainApp: React.FC = () => {
             meds={meds}
             appointments={appointments}
             onConfirm={handlePlanMismatchConfirm}
+          />
+        )}
+
+        {limitModalOpen && (
+          <LimitReachedModal
+            isOpen={limitModalOpen}
+            onClose={() => setLimitModalOpen(false)}
+            onUpgrade={() => {
+              setLimitModalOpen(false);
+              setView('subscription');
+            }}
           />
         )}
 

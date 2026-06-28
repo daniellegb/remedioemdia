@@ -247,6 +247,15 @@ async function runSchemaMigration() {
     `;
 
     console.log('[Migration] Colunas de exclusão e tabela de sessões verificadas/criadas com sucesso no banco de dados!');
+    
+    // Force Supabase API cache (PostgREST) to reload and pick up the new columns immediately
+    try {
+      console.log('[Migration] Notificando PostgREST para recarregar o cache do schema...');
+      await sql`NOTIFY pgrst, 'reload schema';`;
+    } catch (notifyErr: any) {
+      console.warn('[Migration] Não foi possível enviar NOTIFY pgrst (não crítico):', notifyErr.message || notifyErr);
+    }
+
     await sql.end();
   } catch (err: any) {
     console.error('[Migration] Erro ao rodar migração de colunas:', err.message || err);
