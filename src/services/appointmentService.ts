@@ -11,7 +11,7 @@ export const mapAppToCamelCase = (app: any): Appointment => ({
   time: app.time,
   location: app.location,
   notes: app.notes,
-  active: app.active !== false,
+  active: app.active !== false && app.active !== 'false' && app.active !== 0,
   deleted: app.deleted === true,
   keep_history: app.keep_history !== false,
   deleted_at: app.deleted_at

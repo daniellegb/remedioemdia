@@ -18,8 +18,8 @@ interface Props {
 }
 
 const Medications: React.FC<Props> = React.memo(({ meds, settings, onAdd, onEdit, onDelete, onReactivate, isPremium = false, onUpgradeClick }) => {
-  const activeMeds = meds.filter(m => m.active !== false);
-  const inactiveMeds = meds.filter(m => m.active === false);
+  const activeMeds = meds.filter(m => m.active !== false && m.active !== 'false' && m.active !== 0);
+  const inactiveMeds = meds.filter(m => m.active === false || m.active === 'false' || m.active === 0);
   
   const currentCount = activeMeds.length;
   const maxLimit = FREE_PLAN_LIMITS.medications;
@@ -206,7 +206,7 @@ const Medications: React.FC<Props> = React.memo(({ meds, settings, onAdd, onEdit
 
   return (
     <div className="space-y-6 pb-20 md:pb-0">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-bold text-slate-900">Meus Medicamentos</h2>
           <p className="text-slate-500 text-sm">Alertas: Vencimento ({settings.thresholdExpiring}d) • Estoque ({settings.thresholdRunningOut}d)</p>

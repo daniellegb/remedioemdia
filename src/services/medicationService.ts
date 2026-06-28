@@ -24,7 +24,7 @@ export const mapMedToCamelCase = (med: any): Medication => ({
   color: med.color,
   frequency: med.frequency || 1,
   next_dose_at: med.next_dose_at,
-  active: med.active !== false,
+  active: med.active !== false && med.active !== 'false' && med.active !== 0,
   deleted: med.deleted === true,
   keep_history: med.keep_history !== false,
   deleted_at: med.deleted_at
