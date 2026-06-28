@@ -56,7 +56,7 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
   // Usando en-CA para garantir o formato YYYY-MM-DD local para comparação com o input date
   const todayDateStr = now.toLocaleDateString('en-CA');
 
-  const prnMeds = useMemo(() => meds.filter(m => m.usageCategory === 'prn'), [meds]);
+  const prnMeds = useMemo(() => meds.filter(m => m.usageCategory === 'prn' && m.active !== false && !m.deleted), [meds]);
 
   const handlePrnDose = (medId: string, date?: string, time?: string) => {
     const now = new Date();
@@ -83,9 +83,10 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
     const currentTime = new Date();
     return [...appointments]
       .filter(app => {
+        if (app.deleted) return false;
         // Cria objeto de data considerando o horário da consulta
         const appDate = new Date(`${app.date}T${app.time}`);
-        return appDate >= currentTime;
+        return appDate >= currentTime && app.active !== false;
       })
       .sort((a, b) => {
         const dateA = new Date(`${a.date}T${a.time}`);
@@ -105,6 +106,8 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
     }> = [];
 
     meds.forEach(med => {
+      if (med.deleted) return; // Se excluído, não gera eventos
+      if (med.active === false) return; // Inativo não gera eventos na agenda de hoje
       if (med.usageCategory === 'prn') return; // PRN não aparece na agenda fixa
 
       const startDate = med.startDate ? new Date(med.startDate + 'T00:00:00') : today;
@@ -209,7 +212,7 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
     const todayDate = new Date();
     todayDate.setHours(0, 0, 0, 0);
 
-    return meds.map(med => {
+    return meds.filter(med => med.active !== false && !med.deleted).map(med => {
       const daysStockLeft = calculateDaysOfStockLeft(med);
       const diffExpiryDays = getDaysUntilExpiry(med.expiryDate, todayDate);
 
@@ -693,11 +696,11 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
 
         </div>
 
-        {/* Próximas Consultas */}
+        {/* Próximos Compromissos */}
         <section>
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-xl font-bold flex items-center gap-2">
-              <CalendarIcon size={22} className="text-blue-500" /> Próximas Consultas
+              <CalendarIcon size={22} className="text-blue-500" /> Próximos Compromissos
             </h3>
           </div>
           <div className="space-y-4">

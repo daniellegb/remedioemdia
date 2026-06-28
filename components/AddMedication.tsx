@@ -32,7 +32,8 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
     currentStock: 30,
     expiryDate: '',
     notes: '',
-    color: COLORS[0]
+    color: COLORS[0],
+    active: true
   });
 
   useEffect(() => {
@@ -55,7 +56,8 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
         currentStock: initialData.currentStock ?? 30,
         expiryDate: initialData.expiryDate || '',
         notes: initialData.notes || '',
-        color: initialData.color || COLORS[0]
+        color: initialData.color || COLORS[0],
+        active: initialData.active !== false
       });
     }
   }, [initialData]);
@@ -479,6 +481,29 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
           <label className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2"><FileText size={14} /> Observações</label>
           <textarea className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none resize-none transition-all" rows={3} placeholder="Instruções extras (Ex: Ingerir com água)" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} />
         </div>
+
+        {/* STATUS DO MEDICAMENTO (ATIVO / INATIVO) */}
+        {initialData && (
+          <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-4">
+            <div className="flex justify-between items-center">
+              <div className="pr-4">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Status do Medicamento</label>
+                <span className="text-[11px] text-slate-400 font-medium">Medicamentos inativos não geram lembretes nem aparecem no calendário futuro.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, active: !formData.active })}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 ${
+                  formData.active
+                    ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {formData.active ? 'Ativo' : 'Inativo'}
+              </button>
+            </div>
+          </div>
+        )}
 
         <button 
           type="submit" 

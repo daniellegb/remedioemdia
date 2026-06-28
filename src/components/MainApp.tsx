@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { ShieldCheck, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import Navigation from '../../components/Navigation';
@@ -13,6 +13,8 @@ import Subscription from '../../components/Subscription';
 import Security from '../../components/Security';
 import Privacy from '../../components/Privacy';
 import ConfirmationModal from '../../components/ConfirmationModal';
+import { PlanMismatchModal } from '../../components/PlanMismatchModal';
+import { DeleteConfirmationModal } from '../../components/DeleteConfirmationModal';
 import { ViewType, Medication, DoseEvent, Appointment, AppSettings, UsageCategory, UserPreferences } from '../../types';
 import { COLORS, FREE_PLAN_LIMITS } from '../../constants';
 import { useAuthContext } from '../context/AuthContext';
@@ -44,7 +46,7 @@ const DEFAULT_SETTINGS: AppSettings = {
 };
 
 const MainApp: React.FC = () => {
-  const { user, onboardingCompleted, loading: authLoading, refreshProfile, isPremium } = useAuth();
+  const { user, onboardingCompleted, loading: authLoading, refreshProfile, isPremium, profile } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -359,6 +361,75 @@ const MainApp: React.FC = () => {
     }
   };
 
+  // Detecção automática de pendência de plano pós-downgrade
+  useEffect(() => {
+    if (!user || !profile || dataLoading) return;
+    
+    // Se o usuário não tem acesso premium
+    if (!isPremium) {
+      const activeMedsCount = meds.filter(m => m.active !== false).length;
+      const activeAppsCount = appointments.filter(a => a.active !== false).length;
+      
+      const shouldBePending = activeMedsCount > 3 || activeAppsCount > 5;
+      
+      if (shouldBePending && !profile.plan_mismatch_pending) {
+        console.log('[Plan Control] Mismatch detected! Setting plan_mismatch_pending to true.');
+        supabase
+          .from('profiles')
+          .update({ plan_mismatch_pending: true })
+          .eq('id', user.id)
+          .then(({ error }) => {
+            if (!error) {
+              refreshProfile();
+            }
+          });
+      }
+    }
+  }, [user, profile, isPremium, meds, appointments, dataLoading, refreshProfile]);
+
+  const handlePlanMismatchConfirm = async (selectedMeds: Medication[], selectedAppointments: Appointment[]) => {
+    if (!user) return;
+    try {
+      // 1. Atualizar medicamentos no Supabase
+      const medPromises = selectedMeds.map(med => 
+        supabase
+          .from('medications')
+          .update({ active: med.active !== false })
+          .eq('id', med.id)
+          .eq('user_id', user.id)
+      );
+
+      // 2. Atualizar compromissos no Supabase
+      const appPromises = selectedAppointments.map(app => 
+        supabase
+          .from('appointments')
+          .update({ active: app.active !== false })
+          .eq('id', app.id)
+          .eq('user_id', user.id)
+      );
+
+      await Promise.all([...medPromises, ...appPromises]);
+
+      // 3. Limpar pendência no profile
+      const { error: profileError } = await supabase
+        .from('profiles')
+        .update({ plan_mismatch_pending: false })
+        .eq('id', user.id);
+
+      if (profileError) throw profileError;
+
+      // 4. Atualizar estados locais e sincronizar lembretes
+      setMeds(selectedMeds);
+      setAppointments(selectedAppointments);
+      await pushService.syncMedicationReminders(user.id, selectedMeds);
+
+      await refreshProfile();
+    } catch (err) {
+      console.error('Erro ao salvar seleção de itens pós-downgrade:', err);
+      alert('Houve um erro ao salvar as configurações. Por favor, tente novamente.');
+    }
+  };
+
   const [confirmModal, setConfirmModal] = useState<{
     isOpen: boolean;
     title: string;
@@ -373,6 +444,17 @@ const MainApp: React.FC = () => {
     title: '',
     message: '',
     onConfirm: () => {},
+  });
+
+  const [deleteModal, setDeleteModal] = useState<{
+    isOpen: boolean;
+    type: 'medication' | 'appointment';
+    id: string;
+    name?: string;
+  }>({
+    isOpen: false,
+    type: 'medication',
+    id: '',
   });
 
   const openConfirm = (title: string, message: string, onConfirm: () => void) => {
@@ -484,21 +566,13 @@ const MainApp: React.FC = () => {
 
   const handleDeleteMed = useCallback(async (id: string) => {
     if (!user) return;
-    openConfirm(
-      'Excluir Medicamento',
-      'Tem certeza que deseja excluir este medicamento? Esta ação não pode ser desfeita. (O histórico do medicamento também será apagado)',
-      async () => {
-        try {
-          await medicationService.deleteMedication(user.id, id);
-          const newMeds = meds.filter(m => m.id !== id);
-          setMeds(newMeds);
-          setDoses(prev => prev.filter(d => d.medicationId !== id));
-          await pushService.syncMedicationReminders(user.id, newMeds);
-        } catch (error) {
-          console.error('Erro ao excluir medicamento:', error);
-        }
-      }
-    );
+    const med = meds.find(m => m.id === id);
+    setDeleteModal({
+      isOpen: true,
+      type: 'medication',
+      id,
+      name: med?.name,
+    });
   }, [user, meds]);
 
   const handleEditMedication = useCallback((med: Medication) => {
@@ -598,19 +672,15 @@ const MainApp: React.FC = () => {
 
   const handleDeleteAppointment = useCallback(async (id: string) => {
     if (!user) return;
-    openConfirm(
-      'Excluir Compromisso',
-      'Tem certeza que deseja excluir este compromisso?',
-      async () => {
-        try {
-          await appointmentService.deleteAppointment(user.id, id);
-          setAppointments(prev => prev.filter(app => app.id !== id));
-        } catch (error) {
-          console.error('Erro ao excluir compromisso:', error);
-        }
-      }
-    );
-  }, [user]);
+    const app = appointments.find(a => a.id === id);
+    const doctorName = app ? `Dr(a). ${app.doctor || app.specialty || 'Consulta/Exame'}` : '';
+    setDeleteModal({
+      isOpen: true,
+      type: 'appointment',
+      id,
+      name: doctorName,
+    });
+  }, [user, appointments]);
 
   const handleToggleDose = useCallback(async (doseId: string, medicationId?: string, time?: string, date?: string) => {
     if (!user) return;
@@ -697,6 +767,9 @@ const MainApp: React.FC = () => {
     }
   }, [user, doses, meds]);
 
+  const nonDeletedMeds = useMemo(() => meds.filter(m => m.deleted !== true), [meds]);
+  const nonDeletedAppointments = useMemo(() => appointments.filter(a => a.deleted !== true), [appointments]);
+
   const renderView = () => {
     switch (view) {
       case 'dashboard':
@@ -713,11 +786,11 @@ const MainApp: React.FC = () => {
           onAddMed={handleAddMed}
         />;
       case 'meds':
-        return <Medications meds={meds} settings={settings} onAdd={() => handleAddMed()} onEdit={handleEditMedication} onDelete={handleDeleteMed} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
+        return <Medications meds={nonDeletedMeds} settings={settings} onAdd={() => handleAddMed()} onEdit={handleEditMedication} onDelete={handleDeleteMed} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
       case 'add-med':
         return <AddMedication onSave={handleSaveMedication} onCancel={() => setView('meds')} initialData={editingMedication} initialCategory={initialMedCategory} />;
       case 'appointments':
-        return <Appointments appointments={appointments} onAddClick={handleAddAppointment} onEditClick={handleEditAppointment} onDeleteClick={handleDeleteAppointment} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
+        return <Appointments appointments={nonDeletedAppointments} onAddClick={handleAddAppointment} onEditClick={handleEditAppointment} onDeleteClick={handleDeleteAppointment} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
       case 'add-appointment':
         return <AddAppointment onSave={handleSaveAppointment} onCancel={() => setView('appointments')} initialData={editingAppointment} />;
       case 'calendar':
@@ -811,7 +884,65 @@ const MainApp: React.FC = () => {
         onCancel={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
       />
 
+      <DeleteConfirmationModal
+        isOpen={deleteModal.isOpen}
+        type={deleteModal.type}
+        name={deleteModal.name}
+        onConfirm={async (keepHistory) => {
+          if (!user) return;
+          const id = deleteModal.id;
+          const type = deleteModal.type;
+          
+          setDeleteModal(prev => ({ ...prev, isOpen: false }));
+          
+          try {
+            if (type === 'medication') {
+              await medicationService.deleteMedication(user.id, id, keepHistory);
+              
+              if (keepHistory) {
+                // Soft Delete: mantemos no estado local, mas marcamos como deletado
+                setMeds(prev => prev.map(m => m.id === id ? { ...m, deleted: true, active: false } : m));
+              } else {
+                // Hard Delete: removemos totalmente
+                setMeds(prev => prev.filter(m => m.id !== id));
+                setDoses(prev => prev.filter(d => d.medicationId !== id));
+              }
+              
+              // Sincronizar lembretes atualizados
+              const updatedMeds = meds.map(m => m.id === id ? { ...m, deleted: true, active: false } : m);
+              const activeMedsOnly = keepHistory 
+                ? updatedMeds.filter(m => m.deleted !== true)
+                : meds.filter(m => m.id !== id);
+              await pushService.syncMedicationReminders(user.id, activeMedsOnly);
+              
+            } else {
+              await appointmentService.deleteAppointment(user.id, id, keepHistory);
+              
+              if (keepHistory) {
+                // Soft Delete: mantemos no estado local, mas marcamos como deletado
+                setAppointments(prev => prev.map(a => a.id === id ? { ...a, deleted: true, active: false } : a));
+              } else {
+                // Hard Delete: removemos totalmente
+                setAppointments(prev => prev.filter(a => a.id !== id));
+              }
+            }
+          } catch (error) {
+            console.error(`Erro ao deletar ${type}:`, error);
+          }
+        }}
+        onCancel={() => setDeleteModal(prev => ({ ...prev, isOpen: false }))}
+      />
+
       <AnimatePresence>
+        {profile?.plan_mismatch_pending && (
+          <PlanMismatchModal
+            isOpen={true}
+            meds={meds}
+            appointments={appointments}
+            onConfirm={handlePlanMismatchConfirm}
+          />
+        )}
+
         {reactivationAlert && (
           <div className="fixed inset-0 z-[110] flex items-center justify-center p-4 sm:p-6">
             {/* Backdrop */}

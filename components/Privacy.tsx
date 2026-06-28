@@ -78,15 +78,17 @@ const Privacy: React.FC<Props> = ({ setView }) => {
 
     try {
       // 1. Fetch user data in parallel
-      const [medications, appointments, { data: reminders, error: remindersError }, { data: preferences, error: preferencesError }] = await Promise.all([
+      const [medications, appointments, { data: reminders, error: remindersError }, { data: preferences, error: preferencesError }, { data: consumptionRecords, error: consumptionError }] = await Promise.all([
         medicationService.getMedications(user.id).catch(() => []),
         appointmentService.getAppointments(user.id).catch(() => []),
         supabase.from('medication_reminders').select('*').eq('user_id', user.id),
-        supabase.from('user_preferences').select('*').eq('user_id', user.id).maybeSingle()
+        supabase.from('user_preferences').select('*').eq('user_id', user.id).maybeSingle(),
+        supabase.from('consumption_records').select('*').eq('user_id', user.id).order('date', { ascending: false })
       ]);
 
       if (remindersError) console.error('[Privacy] Error fetching reminders:', remindersError.message);
       if (preferencesError) console.error('[Privacy] Error fetching preferences:', preferencesError.message);
+      if (consumptionError) console.error('[Privacy] Error fetching consumption records:', consumptionError);
 
       // Create PDF Document
       const doc = new jsPDF({
@@ -177,15 +179,31 @@ const Privacy: React.FC<Props> = ({ setView }) => {
 
       if (medications && medications.length > 0) {
         medications.forEach((med, index) => {
-          addText(`${index + 1}. ${med.name}`, 18, { fontSize: 11, fontStyle: 'bold', color: [37, 99, 235] });
+          const statusSuffix = med.deleted ? ' (Excluído)' : med.active === false ? ' (Inativo)' : ' (Ativo)';
+          addText(`${index + 1}. ${med.name}${statusSuffix}`, 18, { fontSize: 11, fontStyle: 'bold', color: med.deleted ? [239, 68, 68] : med.active === false ? [100, 116, 139] : [37, 99, 235] });
           const dosageInfo = med.dosage ? `${med.dosage} ${formatUnit(med.unit, 2)}` : 'Não informada';
           addText(`   • Dosagem: ${dosageInfo}`, 18, { fontSize: 10 });
           addText(`   • Categoria: ${getUsageCategoryLabel(med.usageCategory)}`, 18, { fontSize: 10 });
           if (med.times && med.times.length > 0) {
             addText(`   • Horários agendados: ${med.times.join(', ')}`, 18, { fontSize: 10 });
           }
+          if (med.deleted && med.deleted_at) {
+            addText(`   • Data da exclusão: ${formatBrazilianDate(med.deleted_at)}`, 18, { fontSize: 10, color: [220, 38, 38] });
+          }
           if (med.notes) {
             addText(`   • Anotações: ${med.notes}`, 18, { fontSize: 10, maxWidth: 165 });
+          }
+          
+          // Adiciona histórico de consumo
+          const records = (consumptionRecords || []).filter((r: any) => r.medication_id === med.id);
+          if (records.length > 0) {
+            const formattedHistory = records.slice(0, 8).map((r: any) => {
+              const statusLabel = r.status === 'taken' ? 'Tomado' : r.status === 'skipped' ? 'Pulado' : 'Atrasado';
+              return `${formatBrazilianDate(r.date)} às ${r.scheduled_time} (${statusLabel})`;
+            }).join(', ');
+            addText(`   • Histórico de consumo: ${formattedHistory}${records.length > 8 ? '...' : ''}`, 18, { fontSize: 9, color: [100, 116, 139], maxWidth: 165 });
+          } else {
+            addText(`   • Histórico de consumo: Nenhum registro de consumo`, 18, { fontSize: 9, color: [148, 163, 184] });
           }
           currentY += 2;
         });
@@ -268,8 +286,12 @@ const Privacy: React.FC<Props> = ({ setView }) => {
         addText("6. Compromissos e Consultas", 15, { fontSize: 14, fontStyle: 'bold', color: [30, 41, 59] });
         currentY += 2;
         appointments.forEach((app, index) => {
-          addText(`• ${app.type} com Dr(a). ${app.doctor || 'Não informado'} (${app.specialty || 'Especialidade não especificada'})`, 18, { fontSize: 10, fontStyle: 'bold' });
+          const statusSuffix = app.deleted ? ' (Excluído)' : app.active === false ? ' (Inativo)' : ' (Agendado)';
+          addText(`• ${app.type} com Dr(a). ${app.doctor || 'Não informado'} (${app.specialty || 'Especialidade não especificada'})${statusSuffix}`, 18, { fontSize: 10, fontStyle: 'bold', color: app.deleted ? [239, 68, 68] : [30, 41, 59] });
           addText(`  Data: ${formatBrazilianDate(app.date)} às ${app.time}`, 18, { fontSize: 9 });
+          if (app.deleted && app.deleted_at) {
+            addText(`  Data da exclusão: ${formatBrazilianDate(app.deleted_at)}`, 18, { fontSize: 9, color: [220, 38, 38] });
+          }
           if (app.location) addText(`  Local: ${app.location}`, 18, { fontSize: 9 });
           if (app.notes) addText(`  Notas adicionais: ${app.notes}`, 18, { fontSize: 9, maxWidth: 165 });
           currentY += 1;

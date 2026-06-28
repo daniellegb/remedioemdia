@@ -128,7 +128,13 @@ const Medications: React.FC<Props> = React.memo(({ meds, settings, onAdd, onEdit
           const stockPercent = Math.min(100, (med.currentStock / med.totalStock) * 100);
 
           return (
-            <div key={med.id} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-md relative overflow-hidden group transition-all hover:shadow-xl hover:border-slate-200">
+            <div key={med.id} className={`bg-white p-6 rounded-[32px] border border-slate-100 shadow-md relative overflow-hidden group transition-all hover:shadow-xl hover:border-slate-200 ${med.active === false ? 'opacity-65 border-dashed border-slate-300 bg-slate-50/20' : ''}`}>
+              {med.active === false && (
+                <span className="absolute right-4 top-4 flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200 z-10">
+                  Inativo
+                </span>
+              )}
+
               <div className="flex justify-between items-start mb-4">
                 <div className="flex flex-col gap-1.5">
                   <div className={`flex items-center gap-1 px-2 py-0.5 rounded-full text-[9px] font-bold uppercase tracking-wider ${stockStatus.bg} ${stockStatus.color}`}>
@@ -175,6 +181,15 @@ const Medications: React.FC<Props> = React.memo(({ meds, settings, onAdd, onEdit
                     <CalendarDays size={14} className="text-slate-400" />
                     <div className="text-[11px] font-semibold text-slate-600">
                       Vence em: {new Date(med.expiryDate + 'T12:00:00').toLocaleDateString('pt-BR')}
+                    </div>
+                  </div>
+                )}
+
+                {med.active === false && (
+                  <div className="flex items-start gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-100 w-full mt-4">
+                    <AlertTriangle size={14} className="text-slate-500 shrink-0 mt-0.5" />
+                    <div className="text-[11px] text-slate-500 font-medium leading-relaxed">
+                      Este medicamento está <strong>inativo</strong>. Ele não gerará lembretes nem aparecerá no cronograma diário. Edite-o para reativá-lo.
                     </div>
                   </div>
                 )}

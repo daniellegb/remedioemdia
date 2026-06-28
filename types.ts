@@ -26,6 +26,10 @@ export interface Medication {
   notes?: string;
   color: string;
   next_dose_at?: string; // ISO string
+  active?: boolean;
+  deleted?: boolean;
+  keep_history?: boolean;
+  deleted_at?: string;
 }
 
 export interface PushSubscriptionData {
@@ -47,6 +51,10 @@ export interface Appointment {
   time: string;
   location: string;
   notes?: string;
+  active?: boolean;
+  deleted?: boolean;
+  keep_history?: boolean;
+  deleted_at?: string;
 }
 
 export interface DoseEvent {
@@ -96,6 +104,7 @@ export interface Profile {
   account_status?: 'active' | 'pending_deletion';
   deletion_requested_at?: string | null;
   scheduled_deletion_at?: string | null;
+  plan_mismatch_pending?: boolean;
 }
 
 export interface UserPreferences {

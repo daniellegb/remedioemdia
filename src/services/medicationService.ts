@@ -23,7 +23,11 @@ export const mapMedToCamelCase = (med: any): Medication => ({
   notes: med.notes,
   color: med.color,
   frequency: med.frequency || 1,
-  next_dose_at: med.next_dose_at
+  next_dose_at: med.next_dose_at,
+  active: med.active !== false,
+  deleted: med.deleted === true,
+  keep_history: med.keep_history !== false,
+  deleted_at: med.deleted_at
 });
 
 const nullIfEmpty = (val: string | undefined | null) => {
@@ -72,7 +76,8 @@ export const medicationService = {
         color: data.color,
         frequency: data.frequency || 1,
         user_id: userId,
-        next_dose_at: nextDoseAt
+        next_dose_at: nextDoseAt,
+        active: data.active !== false
       }])
       .select()
       .single();
@@ -105,6 +110,7 @@ export const medicationService = {
     if (data.notes !== undefined) updateData.notes = data.notes;
     if (data.color !== undefined) updateData.color = data.color;
     if (data.frequency !== undefined) updateData.frequency = data.frequency;
+    if (data.active !== undefined) updateData.active = data.active;
 
     // Recalcular próxima dose se campos relevantes mudarem
     if (data.times || data.intervalDays || data.usageCategory || data.startDate) {
@@ -130,13 +136,36 @@ export const medicationService = {
     return mapMedToCamelCase(updated);
   },
 
-  async deleteMedication(userId: string, id: string) {
-    const { error } = await supabase
-      .from('medications')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userId);
+  async deleteMedication(userId: string, id: string, keepHistory: boolean = true) {
+    if (keepHistory) {
+      const { error } = await supabase
+        .from('medications')
+        .update({
+          deleted: true,
+          keep_history: true,
+          deleted_at: new Date().toISOString(),
+          active: false,
+          next_dose_at: null
+        })
+        .eq('id', id)
+        .eq('user_id', userId);
 
-    if (error) throw error;
+      if (error) throw error;
+
+      // Inativar também os lembretes automáticos na tabela medication_reminders
+      await supabase
+        .from('medication_reminders')
+        .update({ active: false })
+        .eq('medication_id', id)
+        .eq('user_id', userId);
+    } else {
+      const { error } = await supabase
+        .from('medications')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (error) throw error;
+    }
   }
 };

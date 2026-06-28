@@ -61,7 +61,25 @@ const Calendar: React.FC<Props> = React.memo(({ appointments, meds, doses, onTog
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
     const dateStr = `${year}-${month}-${day}`;
-    return appointments.filter(app => app.date === dateStr);
+    
+    return appointments.filter(app => {
+      if (app.date !== dateStr) return false;
+      
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      
+      const eventDate = new Date(date);
+      eventDate.setHours(0, 0, 0, 0);
+      
+      if (app.deleted && eventDate >= today) {
+        return false;
+      }
+      
+      if (eventDate > today && app.active === false) {
+        return false;
+      }
+      return true;
+    });
   };
 
   const getMedsForDate = (date: Date) => {
@@ -75,6 +93,14 @@ const Calendar: React.FC<Props> = React.memo(({ appointments, meds, doses, onTog
     const isToday = isTodayDate(date, today);
 
     return meds.filter(med => {
+      if (med.deleted) {
+        return doses.some(d => d.medicationId === med.id && d.date === dateStr);
+      }
+
+      if (isFuture && med.active === false) {
+        return false;
+      }
+
       // Se for PRN, só exibe se houver dose registrada para esta data
       if (med.usageCategory === 'prn') {
         return doses.some(d => d.medicationId === med.id && d.date === dateStr);
@@ -267,6 +293,11 @@ const Calendar: React.FC<Props> = React.memo(({ appointments, meds, doses, onTog
     const med = meds.find(m => m.id === medicationId);
     const dose = doses.find(d => d.id === doseId);
     const isTaken = dose?.status === 'taken';
+
+    if (med?.deleted) {
+      alert('Este medicamento foi removido e seu histórico está preservado apenas para consulta.');
+      return;
+    }
 
     if (!isTaken && med) {
       // Check expiration
@@ -513,6 +544,11 @@ const Calendar: React.FC<Props> = React.memo(({ appointments, meds, doses, onTog
                           <div className="flex-1 min-w-0">
                             <div className="flex items-center gap-2">
                               <div className="font-bold text-slate-900 truncate">{med.name}</div>
+                              {med.deleted && (
+                                <span className="flex items-center gap-1 text-[8px] font-black uppercase text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded shadow-sm border border-slate-200">
+                                  Removido
+                                </span>
+                              )}
                               {expired && (
                                 <span className="flex items-center gap-1 text-[8px] font-black uppercase text-red-600 bg-red-100 px-1.5 py-0.5 rounded shadow-sm">
                                   <AlertCircle size={10} />
@@ -564,7 +600,14 @@ const Calendar: React.FC<Props> = React.memo(({ appointments, meds, doses, onTog
                     {app.time}
                   </div>
                   <div>
-                    <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{app.doctor}</div>
+                    <div className="flex items-center gap-2">
+                      <div className="font-bold text-slate-900 group-hover:text-blue-600 transition-colors">{app.doctor}</div>
+                      {app.deleted && (
+                        <span className="text-[8px] font-black uppercase text-slate-500 bg-slate-100 px-1.5 py-0.5 rounded shadow-sm border border-slate-200">
+                          Removido
+                        </span>
+                      )}
+                    </div>
                     <div className="text-xs text-slate-500">{app.type} • {app.specialty}</div>
                   </div>
                 </div>

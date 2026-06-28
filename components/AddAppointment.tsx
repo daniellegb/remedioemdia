@@ -17,7 +17,8 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
     date: '',
     time: '',
     location: '',
-    notes: ''
+    notes: '',
+    active: true
   });
 
   const [suggestions, setSuggestions] = useState<string[]>([]);
@@ -35,7 +36,8 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
         date: initialData.date,
         time: initialData.time,
         location: initialData.location,
-        notes: initialData.notes || ''
+        notes: initialData.notes || '',
+        active: initialData.active !== false
       });
       setLastSelectedLocation(initialData.location);
     }
@@ -103,7 +105,13 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
     const appToSave: Appointment = {
       id: initialData ? initialData.id : Math.random().toString(36).substr(2, 9),
       type,
-      ...formData
+      doctor: formData.doctor,
+      specialty: formData.specialty,
+      date: formData.date,
+      time: formData.time,
+      location: formData.location,
+      notes: formData.notes,
+      active: formData.active
     };
     onSave(appToSave);
   };
@@ -254,6 +262,27 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
               </div>
             )}
           </div>
+
+          {/* Status (Ativo / Inativo) */}
+          {initialData && (
+            <div className="flex justify-between items-center bg-slate-50 p-4 rounded-xl border border-slate-100">
+              <div className="pr-4">
+                <label className="text-xs font-bold text-slate-500 uppercase tracking-widest block">Status do Compromisso</label>
+                <span className="text-[11px] text-slate-400 font-medium">Compromissos inativos não geram lembretes nem aparecem no calendário futuro.</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setFormData({ ...formData, active: !formData.active })}
+                className={`px-4 py-2 rounded-xl text-xs font-bold transition-all border shrink-0 ${
+                  formData.active
+                    ? 'bg-green-50 text-green-700 border-green-200 hover:bg-green-100'
+                    : 'bg-slate-50 text-slate-600 border-slate-200 hover:bg-slate-100'
+                }`}
+              >
+                {formData.active ? 'Ativo' : 'Inativo'}
+              </button>
+            </div>
+          )}
         </div>
 
         <button

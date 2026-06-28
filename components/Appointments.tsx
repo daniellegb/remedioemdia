@@ -95,10 +95,16 @@ const Appointments: React.FC<Props> = React.memo(({ appointments, onAddClick, on
 
       <div className="space-y-4">
         {appointments.map((app) => (
-          <div key={app.id} className="bg-white p-6 rounded-[32px] border border-slate-100 shadow-md flex flex-col md:flex-row md:items-center gap-6 group hover:border-blue-200 transition-all relative overflow-hidden">
+          <div key={app.id} className={`bg-white p-6 rounded-[32px] border border-slate-100 shadow-md flex flex-col md:flex-row md:items-center gap-6 group hover:border-blue-200 transition-all relative overflow-hidden ${app.active === false ? 'opacity-65 border-dashed border-slate-300' : ''}`}>
             {/* Indicador de Tipo Lateral */}
             <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${app.type === 'Consulta' ? 'bg-blue-500' : 'bg-purple-500'}`} />
             
+            {app.active === false && (
+              <span className="absolute right-4 top-4 flex items-center gap-1 px-2.5 py-1 rounded-full text-[10px] font-bold uppercase bg-slate-100 text-slate-500 border border-slate-200">
+                Inativo
+              </span>
+            )}
+
             <div className="flex items-center gap-4 flex-1">
               <div className={`w-16 h-16 rounded-2xl flex items-center justify-center flex-shrink-0 transition-all ${
                 app.type === 'Consulta' 
@@ -169,7 +175,16 @@ const Appointments: React.FC<Props> = React.memo(({ appointments, onAddClick, on
               </div>
             </div>
 
-            <div className="flex gap-3 pt-4 border-t border-slate-50">
+            {app.active === false && (
+              <div className="flex items-start gap-2 p-3 rounded-2xl bg-slate-50 border border-slate-100 w-full mt-4 md:mt-0">
+                <Calendar size={14} className="text-slate-500 shrink-0 mt-0.5" />
+                <p className="text-[11px] font-medium text-slate-500 leading-relaxed">
+                  Este item está inativo e, por isso, não gera notificações nem aparece em eventos futuros do calendário.
+                </p>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-4 border-t border-slate-50 w-full md:w-auto">
               <button 
                 type="button"
                 onClick={(e) => { e.stopPropagation(); onEditClick(app); }}

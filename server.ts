@@ -34,7 +34,24 @@ async function runSchemaMigration() {
       ALTER TABLE public.profiles 
       ADD COLUMN IF NOT EXISTS account_status TEXT DEFAULT 'active' CHECK (account_status IN ('active', 'pending_deletion')),
       ADD COLUMN IF NOT EXISTS deletion_requested_at TIMESTAMP WITH TIME ZONE,
-      ADD COLUMN IF NOT EXISTS scheduled_deletion_at TIMESTAMP WITH TIME ZONE;
+      ADD COLUMN IF NOT EXISTS scheduled_deletion_at TIMESTAMP WITH TIME ZONE,
+      ADD COLUMN IF NOT EXISTS plan_mismatch_pending BOOLEAN DEFAULT FALSE;
+    `;
+
+    await sql`
+      ALTER TABLE public.medications
+      ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS keep_history BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;
+    `;
+
+    await sql`
+      ALTER TABLE public.appointments
+      ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE,
+      ADD COLUMN IF NOT EXISTS keep_history BOOLEAN DEFAULT TRUE,
+      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;
     `;
     
     console.log('[Migration] Configurando limites de plano (Gratuito vs Premium) e triggers...');
@@ -95,13 +112,13 @@ async function runSchemaMigration() {
       BEGIN
           is_premium := public.has_premium_access(NEW.user_id);
           
-          IF NOT is_premium THEN
+          IF NOT is_premium AND COALESCE(NEW.active, true) = true AND (TG_OP = 'INSERT' OR COALESCE(OLD.active, true) = false) THEN
               SELECT COUNT(*) INTO med_count
               FROM public.medications
-              WHERE user_id = NEW.user_id;
+              WHERE user_id = NEW.user_id AND COALESCE(active, true) = true AND COALESCE(deleted, false) = false;
               
               IF med_count >= 3 THEN
-                  RAISE EXCEPTION 'Limite do Plano Gratuito atingido: Você já cadastrou os 3 medicamentos disponíveis.'
+                  RAISE EXCEPTION 'Limite do Plano Gratuito atingido: Você já cadastrou os 3 medicamentos ativos disponíveis.'
                       USING ERRCODE = 'P9999';
               END IF;
           END IF;
@@ -120,13 +137,13 @@ async function runSchemaMigration() {
       BEGIN
           is_premium := public.has_premium_access(NEW.user_id);
           
-          IF NOT is_premium THEN
+          IF NOT is_premium AND COALESCE(NEW.active, true) = true AND (TG_OP = 'INSERT' OR COALESCE(OLD.active, true) = false) THEN
               SELECT COUNT(*) INTO app_count
               FROM public.appointments
-              WHERE user_id = NEW.user_id;
+              WHERE user_id = NEW.user_id AND COALESCE(active, true) = true AND COALESCE(deleted, false) = false;
               
               IF app_count >= 5 THEN
-                  RAISE EXCEPTION 'Limite do Plano Gratuito atingido: Você já cadastrou os 5 compromissos disponíveis.'
+                  RAISE EXCEPTION 'Limite do Plano Gratuito atingido: Você já cadastrou os 5 compromissos ativos disponíveis.'
                       USING ERRCODE = 'P9998';
               END IF;
           END IF;
@@ -139,7 +156,7 @@ async function runSchemaMigration() {
     await sql`
       DROP TRIGGER IF EXISTS trigger_enforce_medications_limit ON public.medications;
       CREATE TRIGGER trigger_enforce_medications_limit
-          BEFORE INSERT ON public.medications
+          BEFORE INSERT OR UPDATE ON public.medications
           FOR EACH ROW
           EXECUTE FUNCTION public.enforce_medications_limit();
     `;
@@ -147,7 +164,7 @@ async function runSchemaMigration() {
     await sql`
       DROP TRIGGER IF EXISTS trigger_enforce_appointments_limit ON public.appointments;
       CREATE TRIGGER trigger_enforce_appointments_limit
-          BEFORE INSERT ON public.appointments
+          BEFORE INSERT OR UPDATE ON public.appointments
           FOR EACH ROW
           EXECUTE FUNCTION public.enforce_appointments_limit();
     `;

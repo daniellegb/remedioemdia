@@ -10,7 +10,11 @@ export const mapAppToCamelCase = (app: any): Appointment => ({
   date: app.date,
   time: app.time,
   location: app.location,
-  notes: app.notes
+  notes: app.notes,
+  active: app.active !== false,
+  deleted: app.deleted === true,
+  keep_history: app.keep_history !== false,
+  deleted_at: app.deleted_at
 });
 
 const nullIfEmpty = (val: string | undefined | null) => {
@@ -42,7 +46,8 @@ export const appointmentService = {
         time: data.time,
         location: data.location,
         notes: data.notes,
-        user_id: userId 
+        user_id: userId,
+        active: data.active !== false
       }])
       .select()
       .single();
@@ -50,7 +55,7 @@ export const appointmentService = {
     if (error) throw error;
 
     // Agendar notificação para o dia anterior às 08:00
-    if (created.date) {
+    if (created.date && created.active !== false) {
       const triggerDate = new Date(created.date);
       triggerDate.setDate(triggerDate.getDate() - 1);
       triggerDate.setHours(8, 0, 0, 0);
@@ -81,8 +86,22 @@ export const appointmentService = {
 
     if (error) throw error;
 
-    // Re-agendar se a data mudou
-    if (data.date) {
+    // Se ficou inativo, remover notificações futuras agendadas
+    if (updated.active === false) {
+      await supabase
+        .from('notification_queue')
+        .delete()
+        .eq('appointment_id', id)
+        .eq('sent', false);
+    } else if (updated.date) {
+      // Re-agendar se a data mudou ou se reativado
+      // Remover anteriores primeiro para evitar duplicatas
+      await supabase
+        .from('notification_queue')
+        .delete()
+        .eq('appointment_id', id)
+        .eq('sent', false);
+
       const triggerDate = new Date(updated.date);
       triggerDate.setDate(triggerDate.getDate() - 1);
       triggerDate.setHours(8, 0, 0, 0);
@@ -99,13 +118,35 @@ export const appointmentService = {
     return mapAppToCamelCase(updated);
   },
 
-  async deleteAppointment(userId: string, id: string) {
-    const { error } = await supabase
-      .from('appointments')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userId);
+  async deleteAppointment(userId: string, id: string, keepHistory: boolean = true) {
+    if (keepHistory) {
+      const { error } = await supabase
+        .from('appointments')
+        .update({
+          deleted: true,
+          keep_history: true,
+          deleted_at: new Date().toISOString(),
+          active: false
+        })
+        .eq('id', id)
+        .eq('user_id', userId);
 
-    if (error) throw error;
+      if (error) throw error;
+
+      // Remover notificações futuras agendadas
+      await supabase
+        .from('notification_queue')
+        .delete()
+        .eq('appointment_id', id)
+        .eq('sent', false);
+    } else {
+      const { error } = await supabase
+        .from('appointments')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', userId);
+
+      if (error) throw error;
+    }
   }
 };

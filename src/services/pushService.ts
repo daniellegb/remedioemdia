@@ -61,6 +61,11 @@ export const pushService = {
         const reminders: any[] = [];
         
         medications.forEach(med => {
+          // REGRA: Medicamentos inativos não geram notificações
+          if (med.active === false) {
+            return;
+          }
+
           // REGRA: Medicamentos da categoria 'Se Necessário' (prn) não geram notificações agendadas
           if (med.usageCategory === 'prn') {
             return;
