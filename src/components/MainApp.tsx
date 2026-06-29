@@ -363,28 +363,51 @@ const MainApp: React.FC = () => {
     }
   };
 
+  // Diagnostic logs
+  useEffect(() => {
+    if (!user || !profile || dataLoading) return;
+    const activeMeds = meds.filter(m => !m.deleted && m.active !== false);
+    const activeApps = appointments.filter(a => !a.deleted && a.active !== false);
+    console.log('[Plan Control] Diagnostics:', {
+      userId: user.id,
+      plan: profile.plan,
+      isPremium,
+      planMismatchPending: profile.plan_mismatch_pending,
+      activeMedsCount: activeMeds.length,
+      activeAppsCount: activeApps.length,
+      shouldBePending: !isPremium && (activeMeds.length > 3 || activeApps.length > 5)
+    });
+  }, [user, profile, isPremium, meds, appointments, dataLoading]);
+
   // Detecção automática de pendência de plano pós-downgrade
   useEffect(() => {
     if (!user || !profile || dataLoading) return;
     
     // Se o usuário não tem acesso premium
     if (!isPremium) {
-      const activeMedsCount = meds.filter(m => m.active !== false).length;
-      const activeAppsCount = appointments.filter(a => a.active !== false).length;
+      const activeMedsCount = meds.filter(m => !m.deleted && m.active !== false).length;
+      const activeAppsCount = appointments.filter(a => !a.deleted && a.active !== false).length;
       
       const shouldBePending = activeMedsCount > 3 || activeAppsCount > 5;
       
       if (shouldBePending && !profile.plan_mismatch_pending) {
         console.log('[Plan Control] Mismatch detected! Setting plan_mismatch_pending to true.');
-        supabase
-          .from('profiles')
-          .update({ plan_mismatch_pending: true })
-          .eq('id', user.id)
-          .then(({ error }) => {
+        const updatePending = async () => {
+          try {
+            const { error } = await supabase
+              .from('profiles')
+              .update({ plan_mismatch_pending: true })
+              .eq('id', user.id);
             if (!error) {
               refreshProfile();
+            } else {
+              console.warn('[Plan Control] Error updating plan_mismatch_pending in DB:', error);
             }
-          });
+          } catch (err) {
+            console.warn('[Plan Control] Exception updating plan_mismatch_pending in DB:', err);
+          }
+        };
+        updatePending();
       }
     }
   }, [user, profile, isPremium, meds, appointments, dataLoading, refreshProfile]);
@@ -412,13 +435,15 @@ const MainApp: React.FC = () => {
 
       await Promise.all([...medPromises, ...appPromises]);
 
-      // 3. Limpar pendência no profile
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .update({ plan_mismatch_pending: false })
-        .eq('id', user.id);
-
-      if (profileError) throw profileError;
+      // 3. Limpar pendência no profile (tratado com try-catch independente para evitar bloquear se a coluna/RLS falhar)
+      try {
+        await supabase
+          .from('profiles')
+          .update({ plan_mismatch_pending: false })
+          .eq('id', user.id);
+      } catch (profileErr) {
+        console.warn('Could not clear plan_mismatch_pending on profiles table (column may not exist):', profileErr);
+      }
 
       // 4. Atualizar estados locais e sincronizar lembretes
       setMeds(selectedMeds);
@@ -982,7 +1007,7 @@ const MainApp: React.FC = () => {
       />
 
       <AnimatePresence>
-        {profile?.plan_mismatch_pending && (
+        {(profile?.plan_mismatch_pending || (!isPremium && !dataLoading && (meds.filter(m => !m.deleted && m.active !== false).length > 3 || appointments.filter(a => !a.deleted && a.active !== false).length > 5))) && (
           <PlanMismatchModal
             isOpen={true}
             meds={meds}
