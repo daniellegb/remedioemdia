@@ -735,7 +735,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
             addText(`   • Horários agendados: ${med.times.join(', ')}`, 18, { fontSize: 10 });
           }
           if (med.deleted && med.deleted_at) {
-            addText(`   • Data da exclusão: ${formatBrazilianDate(med.deleted_at)}`, 18, { fontSize: 10, color: [220, 38, 38] });
+            addText(`   • Data da inativação: ${formatBrazilianDate(med.deleted_at)}`, 18, { fontSize: 10, color: [100, 116, 139] });
           }
           if (med.notes) {
             addText(`   • Anotações: ${med.notes}`, 18, { fontSize: 10, maxWidth: 165 });
@@ -837,7 +837,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
           addText(`• ${app.type} com Dr(a). ${app.doctor || 'Não informado'} (${app.specialty || 'Especialidade não especificada'})${statusSuffix}`, 18, { fontSize: 10, fontStyle: 'bold', color: (app.deleted || app.active === false) ? [100, 116, 139] : [30, 41, 59] });
           addText(`  Data: ${formatBrazilianDate(app.date)} às ${app.time}`, 18, { fontSize: 9 });
           if (app.deleted && app.deleted_at) {
-            addText(`  Data da exclusão: ${formatBrazilianDate(app.deleted_at)}`, 18, { fontSize: 9, color: [220, 38, 38] });
+            addText(`  Data da inativação: ${formatBrazilianDate(app.deleted_at)}`, 18, { fontSize: 9, color: [100, 116, 139] });
           }
           if (app.location) addText(`  Local: ${app.location}`, 18, { fontSize: 9 });
           if (app.notes) addText(`  Notas adicionais: ${app.notes}`, 18, { fontSize: 9, maxWidth: 165 });
