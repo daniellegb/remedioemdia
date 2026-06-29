@@ -16,12 +16,43 @@ export const PlanMismatchModal: React.FC<Props> = ({ isOpen, meds, appointments,
 
   // Local active states mapping
   const [localMeds, setLocalMeds] = useState<Medication[]>(() => 
-    meds.map(m => ({ ...m, active: m.active ?? true }))
+    meds.filter(m => !m.deleted).map(m => ({ ...m, active: m.active ?? true }))
   );
   
   const [localApps, setLocalApps] = useState<Appointment[]>(() => 
-    appointments.map(a => ({ ...a, active: a.active ?? true }))
+    appointments.filter(a => !a.deleted).map(a => ({ ...a, active: a.active ?? true }))
   );
+
+  // Sync state if props change (especially when loading from empty array)
+  React.useEffect(() => {
+    const nonDeletedMeds = meds.filter(m => !m.deleted);
+    if (nonDeletedMeds.length > 0) {
+      setLocalMeds(prev => {
+        const map = new Map(prev.map(item => [item.id, item]));
+        nonDeletedMeds.forEach(m => {
+          if (!map.has(m.id)) {
+            map.set(m.id, { ...m, active: m.active ?? true });
+          }
+        });
+        return Array.from(map.values());
+      });
+    }
+  }, [meds]);
+
+  React.useEffect(() => {
+    const nonDeletedApps = appointments.filter(a => !a.deleted);
+    if (nonDeletedApps.length > 0) {
+      setLocalApps(prev => {
+        const map = new Map(prev.map(item => [item.id, item]));
+        nonDeletedApps.forEach(a => {
+          if (!map.has(a.id)) {
+            map.set(a.id, { ...a, active: a.active ?? true });
+          }
+        });
+        return Array.from(map.values());
+      });
+    }
+  }, [appointments]);
 
   if (!isOpen) return null;
 
@@ -88,12 +119,12 @@ export const PlanMismatchModal: React.FC<Props> = ({ isOpen, meds, appointments,
 
               <div className="grid grid-cols-2 gap-4 w-full max-w-md pt-2">
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center space-y-1">
-                  <div className="text-2xl font-black text-slate-800">{meds.length}</div>
+                  <div className="text-2xl font-black text-slate-800">{meds.filter(m => !m.deleted).length}</div>
                   <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Medicamentos</div>
                   <div className="text-[10px] font-bold text-slate-400">Limite: 3 Ativos</div>
                 </div>
                 <div className="bg-slate-50 p-4 rounded-2xl border border-slate-100 text-center space-y-1">
-                  <div className="text-2xl font-black text-slate-800">{appointments.length}</div>
+                  <div className="text-2xl font-black text-slate-800">{appointments.filter(a => !a.deleted).length}</div>
                   <div className="text-xs font-semibold text-slate-500 uppercase tracking-wider">Compromissos</div>
                   <div className="text-[10px] font-bold text-slate-400">Limite: 5 Ativos</div>
                 </div>
