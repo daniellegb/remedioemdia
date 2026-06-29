@@ -25,13 +25,15 @@ const Medications: React.FC<Props> = React.memo(({ meds, settings, onAdd, onEdit
   const maxLimit = FREE_PLAN_LIMITS.medications;
   const percentage = Math.min(100, (currentCount / maxLimit) * 100);
 
-  const [showInactive, setShowInactive] = React.useState(false);
+  const [showInactive, setShowInactive] = React.useState(true);
   const hasInactive = inactiveMeds.length > 0;
 
-  // Auto-hide inactive section if there are none left
+  // Auto-hide inactive section if there are none left, or auto-show when an inactive item appears
   React.useEffect(() => {
     if (!hasInactive) {
       setShowInactive(false);
+    } else {
+      setShowInactive(true);
     }
   }, [hasInactive]);
 
@@ -221,7 +223,7 @@ const Medications: React.FC<Props> = React.memo(({ meds, settings, onAdd, onEdit
                   : 'bg-white hover:bg-slate-50 text-slate-600 border-slate-200 shadow-md'
               }`}
             >
-              <span>Inativos</span>
+              <span>{showInactive ? 'Ocultar inativos' : 'Mostrar inativos'}</span>
               <span className="bg-slate-100 text-slate-600 text-xs px-2.5 py-0.5 rounded-full font-black">
                 {inactiveMeds.length}
               </span>
