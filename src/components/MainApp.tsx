@@ -446,8 +446,22 @@ const MainApp: React.FC = () => {
       }
 
       // 4. Atualizar estados locais e sincronizar lembretes
-      setMeds(selectedMeds);
-      setAppointments(selectedAppointments);
+      setMeds(prev => {
+        const selectedMap = new Map(selectedMeds.map(m => [m.id, m]));
+        return prev.map(m => {
+          if (m.deleted) return m;
+          const updated = selectedMap.get(m.id);
+          return updated ? updated : m;
+        });
+      });
+      setAppointments(prev => {
+        const selectedMap = new Map(selectedAppointments.map(a => [a.id, a]));
+        return prev.map(a => {
+          if (a.deleted) return a;
+          const updated = selectedMap.get(a.id);
+          return updated ? updated : a;
+        });
+      });
       await pushService.syncMedicationReminders(user.id, selectedMeds);
 
       await refreshProfile();

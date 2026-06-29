@@ -389,7 +389,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(13);
         doc.setTextColor(30, 58, 138); // Primary Navy
-        const medStatusSuffix = med.deleted ? ' (Excluído)' : med.active === false ? ' (Inativo)' : '';
+        const medStatusSuffix = med.deleted ? ' (Inativo - Histórico)' : med.active === false ? ' (Inativo)' : '';
         doc.text(`${med.name}${medStatusSuffix}`, 15, currentY);
         currentY += 5;
 
@@ -726,8 +726,8 @@ const Privacy: React.FC<Props> = ({ setView }) => {
 
       if (medications && medications.length > 0) {
         medications.forEach((med, index) => {
-          const statusSuffix = med.deleted ? ' (Excluído)' : med.active === false ? ' (Inativo)' : ' (Ativo)';
-          addText(`${index + 1}. ${med.name}${statusSuffix}`, 18, { fontSize: 11, fontStyle: 'bold', color: med.deleted ? [239, 68, 68] : med.active === false ? [100, 116, 139] : [37, 99, 235] });
+          const statusSuffix = med.deleted ? ' (Inativo - Histórico)' : med.active === false ? ' (Inativo)' : ' (Ativo)';
+          addText(`${index + 1}. ${med.name}${statusSuffix}`, 18, { fontSize: 11, fontStyle: 'bold', color: (med.deleted || med.active === false) ? [100, 116, 139] : [37, 99, 235] });
           const dosageInfo = med.dosage ? `${med.dosage} ${formatUnit(med.unit, 2)}` : 'Não informada';
           addText(`   • Dosagem: ${dosageInfo}`, 18, { fontSize: 10 });
           addText(`   • Categoria: ${getUsageCategoryLabel(med.usageCategory)}`, 18, { fontSize: 10 });
@@ -833,8 +833,8 @@ const Privacy: React.FC<Props> = ({ setView }) => {
         addText("6. Compromissos e Consultas", 15, { fontSize: 14, fontStyle: 'bold', color: [30, 41, 59] });
         currentY += 2;
         appointments.forEach((app, index) => {
-          const statusSuffix = app.deleted ? ' (Excluído)' : app.active === false ? ' (Inativo)' : ' (Agendado)';
-          addText(`• ${app.type} com Dr(a). ${app.doctor || 'Não informado'} (${app.specialty || 'Especialidade não especificada'})${statusSuffix}`, 18, { fontSize: 10, fontStyle: 'bold', color: app.deleted ? [239, 68, 68] : [30, 41, 59] });
+          const statusSuffix = app.deleted ? ' (Inativo - Histórico)' : app.active === false ? ' (Inativo)' : ' (Agendado)';
+          addText(`• ${app.type} com Dr(a). ${app.doctor || 'Não informado'} (${app.specialty || 'Especialidade não especificada'})${statusSuffix}`, 18, { fontSize: 10, fontStyle: 'bold', color: (app.deleted || app.active === false) ? [100, 116, 139] : [30, 41, 59] });
           addText(`  Data: ${formatBrazilianDate(app.date)} às ${app.time}`, 18, { fontSize: 9 });
           if (app.deleted && app.deleted_at) {
             addText(`  Data da exclusão: ${formatBrazilianDate(app.deleted_at)}`, 18, { fontSize: 9, color: [220, 38, 38] });
@@ -1170,7 +1170,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
                             <p className="text-xs text-slate-400 truncate">
                               {med.dosage ? `${med.dosage} ${formatUnit(med.unit, 1)}` : 'Sem dosagem'} 
                               {med.deleted ? (
-                                <span className="ml-2 text-red-500 font-semibold">(Excluído)</span>
+                                <span className="ml-2 text-slate-500 font-semibold">(Inativo - Histórico)</span>
                               ) : med.active === false ? (
                                 <span className="ml-2 text-slate-400 font-semibold">(Inativo)</span>
                               ) : null}
