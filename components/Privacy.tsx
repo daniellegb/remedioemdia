@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { ArrowLeft, Shield, Download, FileText, CheckCircle2, AlertTriangle, Clock } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { ArrowLeft, Shield, Download, FileText, CheckCircle2, AlertTriangle, Clock, Calendar, CheckSquare, Square, FileDown } from 'lucide-react';
 import { useAuth } from '../src/hooks/useAuth';
 import { ViewType } from '../types';
 import { motion } from 'motion/react';
@@ -7,6 +7,7 @@ import { supabase } from '../src/lib/supabase';
 import { medicationService } from '../src/services/medicationService';
 import { appointmentService } from '../src/services/appointmentService';
 import { jsPDF } from 'jspdf';
+import { isContraceptivePauseDay, calculatePeriodDoses } from '../src/domain/medicationRules';
 
 interface Props {
   setView: (view: ViewType) => void;
@@ -18,6 +19,552 @@ const Privacy: React.FC<Props> = ({ setView }) => {
   const [success, setSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showPolicy, setShowPolicy] = useState(false);
+
+  // States for medications and consumption records loaded from DB
+  const [medications, setMedications] = useState<any[]>([]);
+  const [consumptionRecords, setConsumptionRecords] = useState<any[]>([]);
+  const [dbLoading, setDbLoading] = useState(false);
+
+  // States for report config
+  const [showReportConfig, setShowReportConfig] = useState(false);
+  const [periodOption, setPeriodOption] = useState<'7' | '30' | '90' | 'all' | 'custom'>('30');
+  const [customStartDate, setCustomStartDate] = useState('');
+  const [customEndDate, setCustomEndDate] = useState('');
+  const [medsSelection, setMedsSelection] = useState<'all' | 'specific'>('all');
+  const [selectedMeds, setSelectedMeds] = useState<string[]>([]);
+  const [reportGenerating, setReportGenerating] = useState(false);
+  const [reportSuccess, setReportSuccess] = useState(false);
+
+  // Fetch medications and records on user mount/change
+  useEffect(() => {
+    if (!user) return;
+    const loadData = async () => {
+      setDbLoading(true);
+      try {
+        const [meds, records] = await Promise.all([
+          medicationService.getMedications(user.id).catch(() => []),
+          supabase.from('consumption_records').select('*').eq('user_id', user.id).order('date', { ascending: false })
+        ]);
+        setMedications(meds);
+        if (records.data) {
+          setConsumptionRecords(records.data);
+        }
+      } catch (err) {
+        console.error('Error loading privacy data:', err);
+      } finally {
+        setDbLoading(false);
+      }
+    };
+    loadData();
+  }, [user]);
+
+  const getDatesInRange = (startDateStr: string, endDateStr: string): string[] => {
+    const dates: string[] = [];
+    const start = new Date(startDateStr + 'T12:00:00');
+    const end = new Date(endDateStr + 'T12:00:00');
+    const current = new Date(start);
+    
+    while (current <= end) {
+      dates.push(current.toISOString().split('T')[0]);
+      current.setDate(current.getDate() + 1);
+    }
+    return dates;
+  };
+
+  const getMedicationDosesForPeriod = (med: any, startDateStr: string, endDateStr: string, records: any[]) => {
+    const dates = getDatesInRange(startDateStr, endDateStr);
+    const medDoses: Array<{
+      date: string;
+      scheduledTime: string;
+      confirmationTime: string;
+      status: 'taken' | 'skipped' | 'missed' | 'pending';
+      statusLabel: string;
+    }> = [];
+
+    const todayObj = new Date();
+    const todayStr = todayObj.toISOString().split('T')[0];
+    const currentHours = String(todayObj.getHours()).padStart(2, '0');
+    const currentMinutes = String(todayObj.getMinutes()).padStart(2, '0');
+    const currentTimeStr = `${currentHours}:${currentMinutes}`;
+
+    // PRN (As needed) medications
+    if (med.usageCategory === 'prn') {
+      const prnRecords = records.filter(r => r.medication_id === med.id && r.date >= startDateStr && r.date <= endDateStr && r.status === 'taken');
+      // Sort chronologically
+      prnRecords.sort((a, b) => {
+        if (a.date !== b.date) return a.date.localeCompare(b.date);
+        return a.scheduled_time.localeCompare(b.scheduled_time);
+      });
+
+      return prnRecords.map(r => {
+        let confTime = '-';
+        if (r.created_at) {
+          try {
+            const date = new Date(r.created_at);
+            const hours = String(date.getHours()).padStart(2, '0');
+            const minutes = String(date.getMinutes()).padStart(2, '0');
+            confTime = `${hours}:${minutes}`;
+          } catch (e) {
+            confTime = r.scheduled_time || '-';
+          }
+        } else {
+          confTime = r.scheduled_time || '-';
+        }
+
+        return {
+          date: r.date,
+          scheduledTime: '-',
+          confirmationTime: confTime,
+          status: 'taken' as const,
+          statusLabel: 'Tomado'
+        };
+      });
+    }
+
+    // Generate period doses if category is "period"
+    let periodDoses: any[] = [];
+    if (med.usageCategory === 'period' && med.startDate && med.times && med.times.length > 0) {
+      const sortedTimes = [...med.times].sort();
+      periodDoses = calculatePeriodDoses(
+        med.startDate,
+        med.times[0] || '',
+        sortedTimes,
+        (med.durationDays || 0) * sortedTimes.length
+      );
+    }
+
+    dates.forEach(dStr => {
+      const d = new Date(dStr + 'T12:00:00');
+      const medStartDate = med.startDate ? new Date(med.startDate + 'T00:00:00') : null;
+      const medEndDate = med.endDate ? new Date(med.endDate + 'T23:59:59') : null;
+
+      if (medStartDate && d < medStartDate) return;
+
+      // Contraceptive pause day rule
+      if (med.usageCategory === 'contraceptive' && isContraceptivePauseDay(med, d)) {
+        return;
+      }
+
+      if (med.usageCategory !== 'period' && medEndDate && d > medEndDate) return;
+
+      // Interval days rule
+      if (med.usageCategory === 'continuous' || med.usageCategory === 'intervals') {
+        if (medStartDate) {
+          const diffTime = d.getTime() - medStartDate.getTime();
+          const diffDays = Math.floor(diffTime / (1000 * 3600 * 24));
+          const interval = med.intervalDays || 1;
+          if (diffDays % interval !== 0) return;
+        }
+      }
+
+      // Determine expected times for this day
+      let timesOnDay: string[] = [];
+      if (med.usageCategory === 'period') {
+        timesOnDay = periodDoses.filter(p => p.date === dStr).map(p => p.time);
+      } else {
+        timesOnDay = med.times || [];
+      }
+
+      timesOnDay.forEach(tStr => {
+        // Find actual record
+        const record = records.find(r => r.medication_id === med.id && r.date === dStr && r.scheduled_time === tStr);
+
+        let status: 'taken' | 'skipped' | 'missed' | 'pending' = 'pending';
+        let statusLabel = 'Pendente';
+        let confTime = '-';
+
+        if (record) {
+          if (record.status === 'taken') {
+            status = 'taken';
+            statusLabel = 'Tomado';
+            if (record.created_at) {
+              try {
+                const rDate = new Date(record.created_at);
+                const hours = String(rDate.getHours()).padStart(2, '0');
+                const minutes = String(rDate.getMinutes()).padStart(2, '0');
+                confTime = `${hours}:${minutes}`;
+              } catch (e) {
+                confTime = record.scheduled_time || '-';
+              }
+            } else {
+              confTime = record.scheduled_time || '-';
+            }
+          } else if (record.status === 'skipped') {
+            status = 'skipped';
+            statusLabel = 'Não tomado';
+          } else if (record.status === 'missed') {
+            status = 'missed';
+            statusLabel = 'Atrasado';
+          }
+        } else {
+          // No record: check if past
+          if (dStr < todayStr) {
+            status = 'skipped';
+            statusLabel = 'Não tomado';
+          } else if (dStr === todayStr) {
+            if (tStr < currentTimeStr) {
+              status = 'missed';
+              statusLabel = 'Atrasado';
+            } else {
+              status = 'pending';
+              statusLabel = 'Pendente';
+            }
+          } else {
+            status = 'pending';
+            statusLabel = 'Pendente';
+          }
+        }
+
+        medDoses.push({
+          date: dStr,
+          scheduledTime: tStr,
+          confirmationTime: confTime,
+          status,
+          statusLabel
+        });
+      });
+    });
+
+    // Sort chronological
+    medDoses.sort((a, b) => {
+      if (a.date !== b.date) return a.date.localeCompare(b.date);
+      return a.scheduledTime.localeCompare(b.scheduledTime);
+    });
+
+    return medDoses;
+  };
+
+  const handleGenerateReport = async () => {
+    if (!user) {
+      setError('Você precisa estar autenticado para gerar o relatório.');
+      return;
+    }
+
+    setReportGenerating(true);
+    setReportSuccess(false);
+    setError(null);
+
+    try {
+      // Fetch latest medications and consumption records in parallel to ensure freshest data
+      const [freshMeds, recordsResult] = await Promise.all([
+        medicationService.getMedications(user.id).catch(() => []),
+        supabase.from('consumption_records').select('*').eq('user_id', user.id).order('date', { ascending: false })
+      ]);
+
+      const freshRecords = recordsResult.data || [];
+
+      // Determine period start and end dates
+      const todayObj = new Date();
+      const todayStr = todayObj.toISOString().split('T')[0];
+      const currentHours = String(todayObj.getHours()).padStart(2, '0');
+      const currentMinutes = String(todayObj.getMinutes()).padStart(2, '0');
+      const currentTimeStr = `${currentHours}:${currentMinutes}`;
+
+      let reportStartDate = todayStr;
+      let reportEndDate = todayStr;
+
+      if (periodOption === '7') {
+        const start = new Date();
+        start.setDate(start.getDate() - 6);
+        reportStartDate = start.toISOString().split('T')[0];
+      } else if (periodOption === '30') {
+        const start = new Date();
+        start.setDate(start.getDate() - 29);
+        reportStartDate = start.toISOString().split('T')[0];
+      } else if (periodOption === '90') {
+        const start = new Date();
+        start.setDate(start.getDate() - 89);
+        reportStartDate = start.toISOString().split('T')[0];
+      } else if (periodOption === 'all') {
+        let minDate = todayStr;
+        if (freshRecords.length > 0) {
+          freshRecords.forEach((r: any) => {
+            if (r.date && r.date < minDate) minDate = r.date;
+          });
+        }
+        if (freshMeds.length > 0) {
+          freshMeds.forEach((m: any) => {
+            if (m.startDate && m.startDate < minDate) minDate = m.startDate;
+          });
+        }
+        reportStartDate = minDate;
+      } else if (periodOption === 'custom') {
+        if (!customStartDate || !customEndDate) {
+          throw new Error('Por favor, informe as datas inicial e final para o período personalizado.');
+        }
+        if (customStartDate > customEndDate) {
+          throw new Error('A data inicial não pode ser posterior à data final.');
+        }
+        reportStartDate = customStartDate;
+        reportEndDate = customEndDate;
+      }
+
+      // Filter medications based on selection
+      const medsToReport = medsSelection === 'all' 
+        ? freshMeds 
+        : freshMeds.filter((m: any) => selectedMeds.includes(m.id));
+
+      if (medsToReport.length === 0) {
+        throw new Error('Nenhum medicamento selecionado ou disponível para o relatório.');
+      }
+
+      // Initialize jsPDF
+      const doc = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      let currentY = 20;
+      const pageHeight = 297;
+      const marginBottom = 25;
+
+      const checkPageOverflow = (neededHeight: number) => {
+        if (currentY + neededHeight > pageHeight - marginBottom) {
+          doc.addPage();
+          currentY = 20;
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'normal');
+          doc.setTextColor(148, 163, 184); // slate-400
+          doc.text("Remédio em Dia - Relatório de Histórico de Tomadas", 15, 12);
+          doc.line(15, 14, 195, 14);
+          currentY = 22;
+        }
+      };
+
+      // --- DOCUMENT HEADER ---
+      doc.setFillColor(30, 58, 138); // Navy accent bar
+      doc.rect(15, currentY, 180, 5, 'F');
+      currentY += 12;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(22);
+      doc.setTextColor(30, 41, 59); // slate-800
+      doc.text("Relatório de Histórico de Tomadas", 15, currentY);
+      currentY += 8;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(10);
+      doc.setTextColor(100, 116, 139); // slate-500
+      const formattedGenDate = new Date().toLocaleString('pt-BR');
+      doc.text(`Data de geração: ${formattedGenDate}`, 15, currentY);
+      currentY += 5;
+
+      const periodLabel = periodOption === '7' ? 'Últimos 7 dias' :
+                          periodOption === '30' ? 'Últimos 30 dias' :
+                          periodOption === '90' ? 'Últimos 90 dias' :
+                          periodOption === 'all' ? 'Todo o histórico' :
+                          `Personalizado (${formatBrazilianDate(reportStartDate)} a ${formatBrazilianDate(reportEndDate)})`;
+      doc.text(`Período selecionado: ${periodLabel}`, 15, currentY);
+      currentY += 8;
+
+      doc.setDrawColor(226, 232, 240); // slate-200
+      doc.line(15, currentY, 195, currentY);
+      currentY += 10;
+
+      // Stats for general summary
+      let totalMeds = 0;
+      let totalPlanned = 0;
+      let totalTaken = 0;
+      let totalMissed = 0;
+
+      // Generate data and draw for each medication
+      medsToReport.forEach((med: any) => {
+        // Compute doses
+        const medDoses = getMedicationDosesForPeriod(med, reportStartDate, reportEndDate, freshRecords);
+
+        // Calculate statistics
+        const plannedCount = med.usageCategory === 'prn' ? 0 : medDoses.length;
+        const takenCount = medDoses.filter(d => d.status === 'taken').length;
+        const missedCount = med.usageCategory === 'prn' ? 0 : medDoses.filter(d => d.status === 'skipped' || d.status === 'missed').length;
+
+        // Add to general totals
+        totalMeds++;
+        totalPlanned += plannedCount;
+        totalTaken += takenCount;
+        totalMissed += missedCount;
+
+        // DRAW MEDICATION SECTION
+        checkPageOverflow(30);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
+        doc.setTextColor(30, 58, 138); // Primary Navy
+        const medStatusSuffix = med.deleted ? ' (Excluído)' : med.active === false ? ' (Inativo)' : '';
+        doc.text(`${med.name}${medStatusSuffix}`, 15, currentY);
+        currentY += 5;
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(71, 85, 105); // slate-600
+        const dosageStr = med.dosage ? `${med.dosage} ${formatUnit(med.unit, 2)}` : 'Não informada';
+        const frequencyStr = med.usageCategory === 'prn' ? 'Se necessário' : 
+                             med.times && med.times.length > 0 ? `${med.times.length}x ao dia (${med.times.join(', ')})` : '-';
+        const categoryStr = getUsageCategoryLabel(med.usageCategory);
+        doc.text(`Dosagem: ${dosageStr}   |   Frequência: ${frequencyStr}   |   Categoria: ${categoryStr}`, 15, currentY);
+        currentY += 7;
+
+        // Draw Table Header
+        checkPageOverflow(15);
+        doc.setFillColor(241, 245, 249); // slate-100
+        doc.rect(15, currentY - 4, 180, 8, 'F');
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(9);
+        doc.setTextColor(71, 85, 105);
+        doc.text("Data", 18, currentY + 1);
+        doc.text("Horário Previsto", 63, currentY + 1);
+        doc.text("Confirmação", 108, currentY + 1);
+        doc.text("Situação", 158, currentY + 1);
+        
+        doc.setDrawColor(203, 213, 225); // slate-300
+        doc.line(15, currentY + 4, 195, currentY + 4);
+        currentY += 8;
+
+        // Draw Table Body
+        if (medDoses.length === 0) {
+          checkPageOverflow(12);
+          doc.setFont('helvetica', 'italic');
+          doc.setFontSize(9);
+          doc.setTextColor(148, 163, 184); // slate-400
+          doc.text("Nenhum registro encontrado para este medicamento no período selecionado.", 18, currentY);
+          currentY += 8;
+        } else {
+          medDoses.forEach(dose => {
+            checkPageOverflow(8);
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(9);
+            doc.setTextColor(51, 65, 85); // slate-700
+            
+            doc.text(formatBrazilianDate(dose.date), 18, currentY);
+            doc.text(dose.scheduledTime, 63, currentY);
+            doc.text(dose.confirmationTime, 108, currentY);
+            
+            if (dose.status === 'taken') {
+              doc.setTextColor(16, 185, 129); // emerald-500
+              doc.text("Tomado", 158, currentY);
+            } else if (dose.status === 'missed') {
+              doc.setTextColor(245, 158, 11); // amber-500
+              doc.text("Atrasado", 158, currentY);
+            } else if (dose.status === 'skipped') {
+              doc.setTextColor(239, 68, 68); // red-500
+              doc.text("Não tomado", 158, currentY);
+            } else {
+              doc.setTextColor(100, 116, 139); // slate-500
+              doc.text("Pendente", 158, currentY);
+            }
+            
+            doc.setDrawColor(241, 245, 249); // slate-100
+            doc.line(15, currentY + 2, 195, currentY + 2);
+            currentY += 6;
+          });
+        }
+
+        // Draw Medication Summary Card
+        checkPageOverflow(26);
+        doc.setFillColor(248, 250, 252); // slate-50
+        doc.rect(15, currentY - 2, 180, 20, 'F');
+        doc.setDrawColor(226, 232, 240); // slate-200
+        doc.rect(15, currentY - 2, 180, 20, 'D');
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.setTextColor(71, 85, 105); // slate-600
+
+        doc.text(`Tomadas previstas: ${plannedCount}`, 20, currentY + 4);
+        doc.text(`Tomadas realizadas: ${takenCount}`, 20, currentY + 10);
+        doc.text(`Tomadas perdidas: ${missedCount}`, 20, currentY + 16);
+
+        // Adherence Rate on the right
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor(30, 41, 59); // slate-800
+        doc.text("Adesão:", 120, currentY + 10);
+
+        const rateStr = plannedCount > 0 ? `${((takenCount / plannedCount) * 100).toFixed(1)}%` : '-';
+        doc.setFontSize(14);
+        if (plannedCount === 0) {
+          doc.setTextColor(100, 116, 139); // slate-500
+        } else {
+          const pct = (takenCount / plannedCount) * 100;
+          if (pct >= 90) {
+            doc.setTextColor(16, 185, 129); // emerald-500
+          } else if (pct >= 70) {
+            doc.setTextColor(245, 158, 11); // amber-500
+          } else {
+            doc.setTextColor(239, 68, 68); // red-500
+          }
+        }
+        doc.text(rateStr, 138, currentY + 10.5);
+
+        currentY += 26; // Spacing before next medication
+      });
+
+      // --- GENERAL SUMMARY SECTION ---
+      checkPageOverflow(40);
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(14);
+      doc.setTextColor(30, 41, 59);
+      doc.text("Resumo Geral de Adesão", 15, currentY);
+      currentY += 6;
+
+      doc.setFillColor(239, 246, 255); // blue-50
+      doc.rect(15, currentY - 2, 180, 28, 'F');
+      doc.setDrawColor(191, 219, 254); // blue-200
+      doc.rect(15, currentY - 2, 180, 28, 'D');
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(30, 58, 138); // blue-800
+
+      doc.text(`Medicamentos incluídos: ${totalMeds}`, 20, currentY + 4);
+      doc.text(`Total de tomadas previstas: ${totalPlanned}`, 20, currentY + 10);
+      doc.text(`Total de tomadas realizadas: ${totalTaken}`, 20, currentY + 16);
+      doc.text(`Total de doses não tomadas: ${totalMissed}`, 20, currentY + 22);
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(30, 58, 138);
+      doc.text("Adesão Geral:", 120, currentY + 11);
+
+      const overallPctStr = totalPlanned > 0 ? `${((totalTaken / totalPlanned) * 100).toFixed(1)}%` : '-';
+      doc.setFontSize(18);
+      if (totalPlanned === 0) {
+        doc.setTextColor(100, 116, 139);
+      } else {
+        const pct = (totalTaken / totalPlanned) * 100;
+        if (pct >= 90) {
+          doc.setTextColor(16, 185, 129); // emerald-500
+        } else if (pct >= 70) {
+          doc.setTextColor(245, 158, 11); // amber-500
+        } else {
+          doc.setTextColor(239, 68, 68); // red-500
+        }
+      }
+      doc.text(overallPctStr, 146, currentY + 12);
+
+      // --- FOOTERS LOOP ---
+      const totalPages = doc.internal.pages.length - 1;
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'normal');
+        doc.setTextColor(148, 163, 184); // slate-400
+        doc.text(`Página ${i} de ${totalPages}`, 195, 287, { align: 'right' });
+        doc.text("Remédio em Dia - Relatório de Histórico de Tomadas", 15, 287);
+        doc.line(15, 283, 195, 283);
+      }
+
+      // Save the PDF
+      doc.save(`historico-tomadas-${reportStartDate}-a-${reportEndDate}.pdf`);
+      setReportSuccess(true);
+      setShowReportConfig(false); // Return and show success notification
+    } catch (err: any) {
+      console.error('[Privacy] Error generating report:', err);
+      setError(err.message || 'Falha ao gerar o relatório em PDF. Tente novamente.');
+    } finally {
+      setReportGenerating(false);
+    }
+  };
 
   const formatBrazilianDate = (dateStr?: string) => {
     if (!dateStr) return 'Não informada';
@@ -436,6 +983,244 @@ const Privacy: React.FC<Props> = ({ setView }) => {
     );
   }
 
+  if (showReportConfig) {
+    return (
+      <motion.div
+        id="report-config-container"
+        initial={{ opacity: 0, y: 15 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: 15 }}
+        transition={{ duration: 0.3 }}
+        className="max-w-2xl mx-auto space-y-6 pb-20 md:pb-0"
+      >
+        {/* Header with Back button */}
+        <div className="flex items-center gap-4">
+          <button
+            id="btn-back-from-report-config"
+            onClick={() => {
+              setShowReportConfig(false);
+              setReportSuccess(false);
+              setError(null);
+            }}
+            className="p-2.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl text-slate-500 hover:text-slate-800 transition-colors shadow-sm cursor-pointer flex items-center justify-center"
+            title="Voltar"
+          >
+            <ArrowLeft size={20} />
+          </button>
+          <div>
+            <h2 className="text-xl md:text-2xl font-bold text-slate-900 tracking-tight">Relatório de Tomadas</h2>
+            <p className="text-xs md:text-sm text-slate-500">Configure o período e medicamentos para exportar seu histórico</p>
+          </div>
+        </div>
+
+        {error && (
+          <div id="report-error-banner" className="bg-red-50 border border-red-100 rounded-2xl p-4 text-red-700 text-sm flex gap-3 items-start">
+            <AlertTriangle className="text-red-500 shrink-0 mt-0.5" size={18} />
+            <div>
+              <p className="font-bold">Ocorreu um erro</p>
+              <p className="text-red-600">{error}</p>
+            </div>
+          </div>
+        )}
+
+        <div className="bg-white rounded-3xl border border-slate-100 shadow-sm p-6 space-y-6">
+          {/* Section 1: Period Selection */}
+          <div className="space-y-3">
+            <h3 className="font-bold text-slate-800 text-base">1. Selecione o período</h3>
+            <div className="flex flex-wrap gap-2">
+              {[
+                { value: '7', label: '7 Dias' },
+                { value: '30', label: '30 Dias' },
+                { value: '90', label: '90 Dias' },
+                { value: 'all', label: 'Todo o histórico' },
+                { value: 'custom', label: 'Personalizado' }
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  id={`btn-period-opt-${opt.value}`}
+                  onClick={() => setPeriodOption(opt.value as any)}
+                  className={`px-4 py-2 text-sm font-semibold rounded-2xl border transition-all cursor-pointer ${
+                    periodOption === opt.value
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {periodOption === 'custom' && (
+              <div className="grid grid-cols-2 gap-4 pt-2 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Data Inicial</label>
+                  <input
+                    type="date"
+                    id="input-report-start-date"
+                    value={customStartDate}
+                    onChange={(e) => setCustomStartDate(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-slate-800 bg-slate-50 text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="text-xs font-bold text-slate-500">Data Final</label>
+                  <input
+                    type="date"
+                    id="input-report-end-date"
+                    value={customEndDate}
+                    onChange={(e) => setCustomEndDate(e.target.value)}
+                    className="w-full px-4 py-3 rounded-2xl border border-slate-200 text-slate-800 bg-slate-50 text-sm focus:outline-none focus:border-blue-500 transition-colors"
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
+          <hr className="border-slate-100" />
+
+          {/* Section 2: Medication Selection */}
+          <div className="space-y-3">
+            <h3 className="font-bold text-slate-800 text-base">2. Medicamentos para incluir</h3>
+            <div className="flex gap-2">
+              {[
+                { value: 'all', label: 'Todos os medicamentos' },
+                { value: 'specific', label: 'Selecionar específicos' }
+              ].map(opt => (
+                <button
+                  key={opt.value}
+                  type="button"
+                  id={`btn-meds-sel-${opt.value}`}
+                  onClick={() => {
+                    setMedsSelection(opt.value as any);
+                    if (opt.value === 'specific' && selectedMeds.length === 0) {
+                      setSelectedMeds(medications.map(m => m.id));
+                    }
+                  }}
+                  className={`px-4 py-2 text-sm font-semibold rounded-2xl border transition-all cursor-pointer ${
+                    medsSelection === opt.value
+                      ? 'bg-blue-600 border-blue-600 text-white shadow-sm'
+                      : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+                  }`}
+                >
+                  {opt.label}
+                </button>
+              ))}
+            </div>
+
+            {medsSelection === 'specific' && (
+              <div className="space-y-3 pt-2 max-h-72 overflow-y-auto pr-1 border border-slate-100 rounded-2xl p-4 bg-slate-50 animate-in fade-in slide-in-from-top-1 duration-200">
+                <div className="flex justify-between items-center pb-2 border-b border-slate-200/60">
+                  <span className="text-xs font-bold text-slate-500">
+                    {selectedMeds.length} de {medications.length} selecionados
+                  </span>
+                  <div className="flex gap-3">
+                    <button
+                      type="button"
+                      id="btn-select-all-meds"
+                      onClick={() => setSelectedMeds(medications.map(m => m.id))}
+                      className="text-xs font-bold text-blue-600 hover:text-blue-700"
+                    >
+                      Selecionar Todos
+                    </button>
+                    <span className="text-slate-300">|</span>
+                    <button
+                      type="button"
+                      id="btn-select-none-meds"
+                      onClick={() => setSelectedMeds([])}
+                      className="text-xs font-bold text-slate-500 hover:text-slate-700"
+                    >
+                      Limpar
+                    </button>
+                  </div>
+                </div>
+
+                {medications.length === 0 ? (
+                  <p className="text-sm text-slate-400 py-4 text-center italic">Nenhum medicamento encontrado.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {medications.map(med => {
+                      const isSelected = selectedMeds.includes(med.id);
+                      return (
+                        <div
+                          key={med.id}
+                          id={`med-item-select-${med.id}`}
+                          onClick={() => {
+                            if (isSelected) {
+                              setSelectedMeds(selectedMeds.filter(id => id !== med.id));
+                            } else {
+                              setSelectedMeds([...selectedMeds, med.id]);
+                            }
+                          }}
+                          className={`flex items-center gap-3 p-3 rounded-xl border transition-all cursor-pointer ${
+                            isSelected 
+                              ? 'bg-white border-blue-100 shadow-sm' 
+                              : 'bg-white/60 border-slate-100 hover:bg-white hover:border-slate-200'
+                          }`}
+                        >
+                          <div className="shrink-0 text-blue-600">
+                            {isSelected ? (
+                              <CheckSquare size={18} className="fill-blue-50" />
+                            ) : (
+                              <Square size={18} className="text-slate-300" />
+                            )}
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-bold text-sm text-slate-800 truncate">{med.name}</p>
+                            <p className="text-xs text-slate-400 truncate">
+                              {med.dosage ? `${med.dosage} ${formatUnit(med.unit, 1)}` : 'Sem dosagem'} 
+                              {med.deleted ? (
+                                <span className="ml-2 text-red-500 font-semibold">(Excluído)</span>
+                              ) : med.active === false ? (
+                                <span className="ml-2 text-slate-400 font-semibold">(Inativo)</span>
+                              ) : null}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          <hr className="border-slate-100" />
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 pt-2">
+            <button
+              id="btn-cancel-report"
+              type="button"
+              disabled={reportGenerating}
+              onClick={() => {
+                setShowReportConfig(false);
+                setError(null);
+              }}
+              className="flex-1 font-bold py-3.5 px-6 rounded-2xl bg-slate-100 hover:bg-slate-200 text-slate-700 transition-colors cursor-pointer disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              id="btn-submit-generate-report"
+              type="button"
+              disabled={reportGenerating}
+              onClick={handleGenerateReport}
+              className={`flex-1 font-bold py-3.5 px-6 rounded-2xl flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                reportGenerating
+                  ? 'bg-slate-100 text-slate-400 cursor-not-allowed'
+                  : 'bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-100 active:scale-[0.98]'
+              }`}
+            >
+              <FileDown size={18} className={reportGenerating ? 'animate-bounce' : ''} />
+              {reportGenerating ? 'Gerando Relatório...' : 'Gerar Relatório'}
+            </button>
+          </div>
+        </div>
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       id="privacy-page-container"
@@ -469,6 +1254,16 @@ const Privacy: React.FC<Props> = ({ setView }) => {
             <div>
               <p className="font-bold">PDF gerado com sucesso!</p>
               <p className="text-emerald-600">Seu relatório de dados pessoais está pronto para download.</p>
+            </div>
+          </div>
+        )}
+
+        {reportSuccess && (
+          <div id="report-success-banner" className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-emerald-800 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-300">
+            <CheckCircle2 className="text-emerald-500 shrink-0 mt-0.5" size={18} />
+            <div>
+              <p className="font-bold">Relatório de histórico gerado com sucesso!</p>
+              <p className="text-emerald-600">O download do PDF contendo o histórico de tomadas foi iniciado.</p>
             </div>
           </div>
         )}
@@ -519,6 +1314,34 @@ const Privacy: React.FC<Props> = ({ setView }) => {
           </button>
         </div>
 
+        {/* Card: Relatório de Histórico de Tomadas */}
+        <div id="privacy-report-card" className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 space-y-6">
+          <div className="flex gap-4 items-start">
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl shrink-0">
+              <FileText size={24} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-bold text-slate-800 text-lg">Relatório de Histórico de Tomadas</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                Gere um relatório em PDF com o histórico completo de tomadas dos seus medicamentos no período configurado.
+              </p>
+            </div>
+          </div>
+
+          <button
+            id="btn-open-report-config"
+            onClick={() => {
+              setSuccess(false);
+              setReportSuccess(false);
+              setError(null);
+              setShowReportConfig(true);
+            }}
+            className="w-full font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-100 active:scale-[0.98] cursor-pointer"
+          >
+            Configurar e Gerar Relatório
+          </button>
+        </div>
+
         {/* Card: Política de Privacidade */}
         <div id="privacy-policy-card" className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 space-y-6">
           <div className="flex gap-4 items-start">
@@ -537,6 +1360,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
             id="btn-access-privacy-policy"
             onClick={() => {
               setSuccess(false);
+              setReportSuccess(false);
               setError(null);
               setShowPolicy(true);
             }}
