@@ -20,7 +20,6 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
   const [keepHistory, setKeepHistory] = useState(true);
 
   const isMed = type === 'medication';
-  const title = isMed ? 'Excluir medicamento' : 'Excluir compromisso';
   const subtitle = isMed
     ? 'O medicamento será removido da sua lista e seus lembretes serão cancelados.'
     : 'O compromisso será removido da sua lista.';
@@ -59,8 +58,10 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
               </div>
 
               <div className="space-y-2 mb-6">
-                <h3 className="text-xl font-bold text-slate-900">
-                  {title} {name ? `"${name}"` : ''}
+                <h3 className="text-xl font-bold text-slate-900 leading-snug">
+                  {isMed
+                    ? `Deseja excluir ou inativar o medicamento ${name ? `"${name}"` : 'este medicamento'}?`
+                    : `Deseja excluir ou inativar o compromisso ${name ? `"${name}"` : 'este compromisso'}?`}
                 </h3>
                 <p className="text-slate-500 text-sm leading-relaxed">
                   {subtitle}
