@@ -87,11 +87,11 @@ const Subscription: React.FC<Props> = ({ setView }) => {
   };
 
   const premiumFeatures = [
-    'Cadastro ilimitado de remédios e consultas',
-    'Uso simultâneo no celular, tablet e computador',
-    'Aviso antecipado de notificações extremamente preciso',
-    'Monitoramento avançado de conformidade e atraso',
-    'Modo Cuidador Premium desbloqueado'
+    'Cadastro ilimitado de medicamentos.',
+    'Cadastro ilimitado de compromissos.',
+    'Ideal para quem faz tratamentos contínuos ou acompanha várias condições de saúde.',
+    'Permite centralizar toda a rotina de saúde em um único lugar, sem precisar inativar medicamentos ou compromissos para liberar espaço para novos cadastros.',
+    'Mais flexibilidade para quem possui uma rotina médica mais complexa.'
   ];
 
   const containerVariants = {
@@ -185,7 +185,7 @@ const Subscription: React.FC<Props> = ({ setView }) => {
           {plan === 'free' ? (
             <div className="space-y-4">
               <p className="text-sm text-slate-600 leading-relaxed font-medium">
-                Você está utilizando a versão gratuita do Remédio em Dia. Tenha mais tranquilidade com cadastros sem limites, modo cuidador integrado e notificações altamente personalizadas ao assinar o Premium!
+                Você está utilizando a versão gratuita do Remédio em Dia. Tenha mais tranquilidade com cadastros de medicações e compromissos sem limites ao assinar o Premium!
               </p>
               
               <div className="mt-6 pt-2">
