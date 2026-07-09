@@ -118,7 +118,7 @@ const Login: React.FC = () => {
             <img
               src="/remedio-em-dia-logo-vertical.png"
               alt="Remédio em Dia Logo"
-              className="max-h-[200px] w-auto object-contain mb-6"
+              className="max-h-[240px] w-auto object-contain mb-6 rounded-2xl"
               onError={() => setLogoError(true)}
             />
           ) : (
