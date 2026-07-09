@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { Pill, Mail, Lock, Loader2, AlertTriangle, Activity, Wifi, WifiOff, Bug } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { testSupabaseConnection } from '../lib/supabase';
 
 const Login: React.FC = () => {
@@ -113,7 +114,7 @@ const Login: React.FC = () => {
           </div>
         )}
 
-        <div className="flex flex-col items-center mb-10">
+        <div className="flex flex-col items-center mb-6">
           {!logoError ? (
             <img
               src="/remedio-em-dia-logo-vertical.png"
@@ -129,9 +130,62 @@ const Login: React.FC = () => {
               <h1 className="text-3xl font-black text-slate-900 mb-2">Remédio em Dia</h1>
             </>
           )}
-          <p className="text-slate-500 font-medium">
-            {isSignUp ? 'Crie sua conta gratuita' : 'Bem-vindo de volta'}
-          </p>
+          <div className="h-6 overflow-hidden">
+            <AnimatePresence mode="wait">
+              <motion.p
+                key={isSignUp ? 'signup-subtitle' : 'signin-subtitle'}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.15 }}
+                className="text-slate-500 font-medium"
+              >
+                {isSignUp ? 'Crie sua conta gratuita' : 'Bem-vindo de volta'}
+              </motion.p>
+            </AnimatePresence>
+          </div>
+        </div>
+
+        {/* Abas Deslizantes para Login / Cadastro */}
+        <div className="flex bg-slate-100 p-1.5 rounded-2xl mb-8 relative">
+          <button
+            type="button"
+            onClick={() => {
+              setIsSignUp(false);
+              setError(null);
+            }}
+            className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors relative z-10 ${
+              !isSignUp ? 'text-blue-600 font-black' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Entrar
+            {!isSignUp && (
+              <motion.div
+                layoutId="activeTabIndicator"
+                className="absolute inset-0 bg-white rounded-xl shadow-sm border border-slate-100/50 -z-10"
+                transition={{ type: "spring", stiffness: 350, damping: 28 }}
+              />
+            )}
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setIsSignUp(true);
+              setError(null);
+            }}
+            className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors relative z-10 ${
+              isSignUp ? 'text-blue-600 font-black' : 'text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            Cadastrar
+            {isSignUp && (
+              <motion.div
+                layoutId="activeTabIndicator"
+                className="absolute inset-0 bg-white rounded-xl shadow-sm border border-slate-100/50 -z-10"
+                transition={{ type: "spring", stiffness: 350, damping: 28 }}
+              />
+            )}
+          </button>
         </div>
 
         {/* Formulário deve usar <form onSubmit={handleLogin}> */}
@@ -183,9 +237,20 @@ const Login: React.FC = () => {
           <button
             type="submit"
             disabled={loading || !isConfigured}
-            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2"
+            className="w-full bg-blue-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg shadow-blue-200 hover:bg-blue-700 transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2 overflow-hidden min-h-[60px]"
           >
-            {loading ? <Loader2 className="animate-spin" size={24} /> : (isSignUp ? 'Cadastrar' : 'Entrar')}
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={isSignUp ? 'signup-btn' : 'signin-btn'}
+                initial={{ opacity: 0, y: 12 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -12 }}
+                transition={{ duration: 0.15 }}
+                className="flex items-center justify-center gap-2 w-full"
+              >
+                {loading ? <Loader2 className="animate-spin" size={24} /> : (isSignUp ? 'Cadastrar' : 'Entrar')}
+              </motion.span>
+            </AnimatePresence>
           </button>
         </form>
 
@@ -209,16 +274,27 @@ const Login: React.FC = () => {
           Entrar com Google
         </button>
 
-        <div className="mt-8 text-center relative">
+        <div className="mt-8 text-center relative h-6">
           <button
             onClick={() => {
               setIsSignUp(!isSignUp);
               setError(null);
             }}
-            className="text-slate-500 font-bold hover:text-blue-600 transition-colors"
+            className="text-slate-500 font-bold hover:text-blue-600 transition-colors inline-block w-full text-center"
             disabled={loading || !isConfigured}
           >
-            {isSignUp ? 'Já tem uma conta? Entre aqui' : 'Não tem conta? Cadastre-se'}
+            <AnimatePresence mode="wait">
+              <motion.span
+                key={isSignUp ? 'signup-toggle' : 'signin-toggle'}
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                transition={{ duration: 0.15 }}
+                className="block w-full text-center"
+              >
+                {isSignUp ? 'Já tem uma conta? Entre aqui' : 'Não tem conta? Cadastre-se'}
+              </motion.span>
+            </AnimatePresence>
           </button>
 
           <button
