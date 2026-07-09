@@ -13,6 +13,7 @@ const Login: React.FC = () => {
   const [isSignUp, setIsSignUp] = useState(false);
   const [connStatus, setConnStatus] = useState<{ loading: boolean; ok?: boolean; message?: string }>({ loading: false });
   const [showDebugInfo, setShowDebugInfo] = useState(false);
+  const [logoError, setLogoError] = useState(false);
 
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading, signIn, signUp, signInWithGoogle, isConfigured } = useAuth();
@@ -113,10 +114,21 @@ const Login: React.FC = () => {
         )}
 
         <div className="flex flex-col items-center mb-10">
-          <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200 mb-6">
-            <Pill size={32} className="text-white" />
-          </div>
-          <h1 className="text-3xl font-black text-slate-900 mb-2">Remédio em Dia</h1>
+          {!logoError ? (
+            <img
+              src="/remedio-em-dia-logo-vertical.png"
+              alt="Remédio em Dia Logo"
+              className="max-h-[160px] w-auto object-contain mb-6"
+              onError={() => setLogoError(true)}
+            />
+          ) : (
+            <>
+              <div className="w-16 h-16 bg-blue-600 rounded-2xl flex items-center justify-center shadow-lg shadow-blue-200 mb-6">
+                <Pill size={32} className="text-white" />
+              </div>
+              <h1 className="text-3xl font-black text-slate-900 mb-2">Remédio em Dia</h1>
+            </>
+          )}
           <p className="text-slate-500 font-medium">
             {isSignUp ? 'Crie sua conta gratuita' : 'Bem-vindo de volta'}
           </p>

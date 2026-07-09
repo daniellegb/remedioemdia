@@ -9,6 +9,7 @@ interface Props {
 }
 
 const Navigation: React.FC<Props> = React.memo(({ currentView, setView }) => {
+  const [logoError, setLogoError] = React.useState(false);
   const navItems = [
     { id: 'dashboard', label: 'Hoje', icon: Home },
     { id: 'calendar', label: 'Calendário', icon: Calendar },
@@ -37,11 +38,22 @@ const Navigation: React.FC<Props> = React.memo(({ currentView, setView }) => {
 
       {/* Desktop Sidebar Nav */}
       <nav className="hidden md:flex flex-col fixed left-0 top-0 h-full w-64 bg-white border-r border-slate-200 p-6 z-50">
-        <div className="flex items-center gap-3 mb-10">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white">
-            <Pill size={24} />
-          </div>
-          <h1 className="text-xl font-bold text-slate-900">Remédio em Dia</h1>
+        <div className="flex items-center gap-3 mb-10 min-h-[40px]">
+          {!logoError ? (
+            <img
+              src="/remedio-em-dia-logo-horizontal.png"
+              alt="Remédio em Dia Logo"
+              className="max-w-full h-auto object-contain"
+              onError={() => setLogoError(true)}
+            />
+          ) : (
+            <>
+              <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shrink-0">
+                <Pill size={24} />
+              </div>
+              <h1 className="text-xl font-bold text-slate-900">Remédio em Dia</h1>
+            </>
+          )}
         </div>
         <div className="flex flex-col gap-2">
           {navItems.map((item) => (
