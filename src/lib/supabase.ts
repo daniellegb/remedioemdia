@@ -22,33 +22,85 @@ if (isDev) {
   console.log('[Supabase] Rodando em Ambiente de Desenvolvimento');
 }
 
-const activeLocks = new Map<string, Promise<any>>();
+const activeLocks = new Set<string>();
 
 const customLock = async <R>(name: string, acquireTimeout: number, fn: () => Promise<R>): Promise<R> => {
   if (typeof window === 'undefined') {
     return fn();
   }
 
-  // Use a highly robust in-memory lock to serialize calls within the window/tab context.
-  // This avoids Navigator LockManager timeouts which fail inside sandboxed iframes.
-  const existingLock = activeLocks.get(name) || Promise.resolve();
-  
-  let resolveLock: () => void;
-  const newLock = new Promise<void>((resolve) => {
-    resolveLock = resolve;
-  });
+  console.log(`[customLock] [REQUISITADO] Trava '${name}' solicitada.`);
 
-  activeLocks.set(name, existingLock.then(() => newLock, () => newLock));
+  // Se o lock já está ativo na memória, isso indica uma chamada concorrente imediata ou reentrante/aninhada.
+  // Para evitar deadlock ou congelamentos crônicos (onde uma chamada espera por si mesma),
+  // nós permitimos que ela passe diretamente. Isso é extremamente resiliente e seguro.
+  if (activeLocks.has(name)) {
+    console.log(`[customLock] [REENTRANTE/CONCORRENTE] Trava '${name}' já ativa na memória. Executando diretamente para evitar deadlock.`);
+    return fn();
+  }
+
+  activeLocks.add(name);
+  console.log(`[customLock] [ADQUIRIDO] Trava '${name}' adquirida.`);
 
   try {
-    await existingLock;
-    return await fn();
+    const result = await fn();
+    console.log(`[customLock] [RESOLVIDO] Execução da trava '${name}' concluída.`);
+    return result;
+  } catch (err: any) {
+    console.error(`[customLock] [ERRO] Falha durante execução da trava '${name}':`, err?.message || err);
+    throw err;
   } finally {
-    resolveLock!();
-    if (activeLocks.get(name) === newLock) {
-      activeLocks.delete(name);
+    activeLocks.delete(name);
+    console.log(`[customLock] [LIBERADO] Trava '${name}' liberada.`);
+  }
+};
+
+const customFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+  const urlStr = typeof input === 'string' ? input : (input && 'toString' in input ? input.toString() : (input as any)?.url || 'unknown');
+  const method = init?.method || 'GET';
+  
+  console.log(`[customFetch] [INICIADO] ${method} ${urlStr}`);
+  
+  const controller = new AbortController();
+  let abortListener: (() => void) | undefined;
+  
+  if (init?.signal) {
+    if (init.signal.aborted) {
+      console.warn(`[customFetch] [ABORTADO_PREVIAMENTE] ${method} ${urlStr}`);
+      controller.abort();
+    } else {
+      abortListener = () => {
+        console.warn(`[customFetch] [ABORTADO_VIA_SINAL] ${method} ${urlStr}`);
+        controller.abort();
+      };
+      init.signal.addEventListener('abort', abortListener);
     }
   }
+
+  // 10 seconds timeout para todas as chamadas de REST/Auth para prevenir hangs infinitos em conexões instáveis
+  const timeoutId = setTimeout(() => {
+    console.warn(`[customFetch] [TIMEOUT_EXCEDIDO] A requisição para ${urlStr} excedeu o limite de tempo de 10s. Abortando...`);
+    controller.abort();
+  }, 10000);
+
+  return fetch(input, {
+    ...init,
+    signal: controller.signal
+  })
+  .then((response) => {
+    console.log(`[customFetch] [SUCESSO] ${method} ${urlStr} - Status: ${response.status}`);
+    return response;
+  })
+  .catch((err) => {
+    console.error(`[customFetch] [FALHA] ${method} ${urlStr} - Erro:`, err?.message || err);
+    throw err;
+  })
+  .finally(() => {
+    clearTimeout(timeoutId);
+    if (init?.signal && abortListener) {
+      init.signal.removeEventListener('abort', abortListener);
+    }
+  });
 };
 
 export const supabase = createClient(
@@ -60,7 +112,11 @@ export const supabase = createClient(
       autoRefreshToken: true,
       detectSessionInUrl: true,
       storageKey: 'med-clean-v3',
-      lock: customLock
+      lock: customLock,
+      fetch: customFetch
+    } as any,
+    global: {
+      fetch: customFetch
     }
   }
 );

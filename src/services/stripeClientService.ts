@@ -57,6 +57,9 @@ export const stripeClientService = {
    * Sincroniza o status e datas de assinatura diretamente com a API do Stripe via backend.
    */
   async syncSubscription(userId: string): Promise<Profile> {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 6000); // Timeout de 6 segundos para segurança
+
     try {
       const response = await fetch('/api/stripe/sync-subscription', {
         method: 'POST',
@@ -64,6 +67,7 @@ export const stripeClientService = {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ userId }),
+        signal: controller.signal,
       });
 
       const data = await response.json();
@@ -74,8 +78,14 @@ export const stripeClientService = {
 
       return data.profile;
     } catch (error: any) {
+      if (error.name === 'AbortError') {
+        console.warn('Requisição de sincronização do Stripe expirou (timeout).');
+        throw new Error('Sincronização temporariamente indisponível.');
+      }
       console.error('Stripe sync client error:', error);
       throw error;
+    } finally {
+      clearTimeout(timeoutId);
     }
   }
 };

@@ -13,17 +13,58 @@ interface Profile {
   [key: string]: any;
 }
 
+// Helper functions to safely handle mismatched Supabase environment variables
+function getProjectRefFromKey(key: string): string | null {
+  try {
+    const parts = key.split('.');
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+      return payload.ref || null;
+    }
+  } catch (e) {
+    // Ignore decoding errors
+  }
+  return null;
+}
+
+function getProjectRefFromUrl(url: string): string | null {
+  try {
+    const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
+    return match ? match[1] : null;
+  } catch (e) {
+    // Ignore parsing errors
+  }
+  return null;
+}
+
 // --- SUPABASE ADMIN ---
-const supabaseUrl = process.env.SUPABASE_DB_URL || process.env.VITE_SUPABASE_URL;
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+function getMatchingSupabaseUrl(): string {
+  const serviceKeyRef = getProjectRefFromKey(supabaseServiceKey);
+  const dbUrl = process.env.SUPABASE_DB_URL || '';
+  const viteUrl = process.env.VITE_SUPABASE_URL || '';
+  
+  if (serviceKeyRef) {
+    if (getProjectRefFromUrl(dbUrl) === serviceKeyRef) {
+      return dbUrl;
+    }
+    if (getProjectRefFromUrl(viteUrl) === serviceKeyRef) {
+      return viteUrl;
+    }
+  }
+  return dbUrl || viteUrl;
+}
+
+const supabaseUrl = getMatchingSupabaseUrl();
 
 if (!supabaseUrl || !supabaseServiceKey) {
   console.error('[StripeServerService] Missing environment variables: SUPABASE_DB_URL/VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
 }
 
 const supabaseAdmin = createClient(
-  supabaseUrl || '',
-  supabaseServiceKey || ''
+  supabaseUrl,
+  supabaseServiceKey
 );
 
 // --- STRIPE ---
@@ -683,6 +724,13 @@ export const stripeServerService = {
    * Útil para curar/atualizar instantaneamente dados divergentes ou desatualizados.
    */
   async syncSubscription(userId: string): Promise<Profile> {
+    const activeRef = getProjectRefFromUrl(supabaseUrl);
+    const viteRef = getProjectRefFromUrl(process.env.VITE_SUPABASE_URL || '');
+    if (viteRef && activeRef && viteRef !== activeRef) {
+      console.error(`[SUPABASE CONFIG MISMATCH] O frontend está configurado com o projeto: "${viteRef}" mas o backend está com: "${activeRef}".`);
+      throw new Error(`Conexão Supabase inconsistente: o frontend está em "${viteRef}" enquanto o backend está em "${activeRef}". Por favor, atualize as credenciais no menu Settings do AI Studio.`);
+    }
+
     let { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('*')

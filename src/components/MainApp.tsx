@@ -295,13 +295,24 @@ const MainApp: React.FC = () => {
     // Throttle to once every 10 seconds to prevent rendering loops
     if (now - lastSyncTimeRef.current < 10000) return;
     lastSyncTimeRef.current = now;
+    
+    console.log('[MainApp] [performSubscriptionSync] Iniciando sincronização em segundo plano...');
+    
+    // Rodar a sincronização do Stripe de forma resiliente e isolada
     try {
       await stripeClientService.syncSubscription(user.id);
+      console.log('[MainApp] [performSubscriptionSync] Sincronização do Stripe concluída com sucesso.');
+    } catch (stripeErr) {
+      console.warn('[MainApp] [performSubscriptionSync] Sincronização do Stripe falhou (não-bloqueante):', stripeErr);
+    }
+
+    // Rodar a atualização do perfil e notificações de forma independente e isolada
+    try {
       await refreshProfile();
-      // Check immediately after sync to catch freshly created database notifications
       await checkReactivationNotification();
+      console.log('[MainApp] [performSubscriptionSync] Atualização de perfil e notificações concluída.');
     } catch (err) {
-      console.warn('[MainApp] Error during background subscription sync:', err);
+      console.error('[MainApp] [performSubscriptionSync] Erro na atualização de perfil ou notificações:', err);
     }
   }, [user?.id, refreshProfile, checkReactivationNotification]);
 
@@ -316,9 +327,10 @@ const MainApp: React.FC = () => {
 
     checkReactivationNotification();
 
-    const handleFocus = async () => {
-      await performSubscriptionSync();
-      await checkReactivationNotification();
+    const handleFocus = () => {
+      console.log('[MainApp] Janela focada, iniciando sincronização em segundo plano...');
+      performSubscriptionSync().catch(err => console.warn('[MainApp] Erro na sincronização de assinatura ao focar:', err));
+      checkReactivationNotification().catch(err => console.warn('[MainApp] Erro na checagem de reativação ao focar:', err));
     };
 
     window.addEventListener('focus', handleFocus);
@@ -601,39 +613,53 @@ const MainApp: React.FC = () => {
   }, [settings, user]);
 
   const handleSaveMedication = useCallback(async (newMed: Medication) => {
-    if (!user) return;
+    if (!user) {
+      console.warn('[MainApp] Tentativa de salvar medicamento sem usuário autenticado.');
+      return;
+    }
+    console.log('[MainApp] handleSaveMedication chamado com dados:', newMed);
     try {
       const exists = meds.some(m => m.id === newMed.id);
       if (exists) {
+        console.log(`[MainApp] Medicamento ID ${newMed.id} já existe. Atualizando registro...`);
         const oldMed = meds.find(m => m.id === newMed.id);
         if (oldMed && oldMed.active === false && newMed.active !== false) {
           const activeMedsCount = meds.filter(m => m.active !== false && m.deleted !== true).length;
           if (!isPremium && activeMedsCount >= FREE_PLAN_LIMITS.medications) {
+            console.log('[MainApp] Limite de plano gratuito atingido ao reativar medicamento.');
             setLimitModalOpen(true);
             return;
           }
         }
         const updated = await medicationService.updateMedication(user.id, newMed.id, newMed);
+        console.log('[MainApp] Medicamento atualizado no banco com sucesso:', updated);
         const newMeds = meds.map(m => m.id === updated.id ? updated : m);
         setMeds(newMeds);
+        console.log('[MainApp] Sincronizando lembretes de push pós-atualização...');
         await pushService.syncMedicationReminders(user.id, newMeds);
       } else {
+        console.log('[MainApp] Medicamento novo. Criando registro...');
         const activeMedsCount = meds.filter(m => m.active !== false && m.deleted !== true).length;
         if (!isPremium && activeMedsCount >= FREE_PLAN_LIMITS.medications) {
+          console.log('[MainApp] Limite de plano gratuito atingido para novo medicamento.');
           setLimitModalOpen(true);
           return;
         }
         const finalMed = { ...newMed, color: newMed.color || COLORS[Math.floor(Math.random() * COLORS.length)] };
         const created = await medicationService.createMedication(user.id, finalMed);
+        console.log('[MainApp] Medicamento criado no banco com sucesso:', created);
         const newMeds = [created, ...meds];
         setMeds(newMeds);
+        console.log('[MainApp] Sincronizando lembretes de push pós-criação...');
         await pushService.syncMedicationReminders(user.id, newMeds);
       }
       setEditingMedication(null);
+      console.log('[MainApp] Mudando visualização para lista de medicamentos ("meds")');
       setView('meds');
     } catch (error) {
-      console.error('Erro ao salvar medicamento:', error);
-      alert('Houve um erro ao salvar o medicamento. Por favor, verifique os dados e tente novamente.');
+      console.error('[MainApp] Erro em handleSaveMedication:', error);
+      alert('Houve um erro ao salvar o medicamento. Por favor, verifique sua conexão e tente novamente.');
+      throw error; // Repassar o erro para que a interface AddMedication desative o loading no bloco finally
     }
   }, [user, meds, isPremium]);
 
@@ -753,33 +779,46 @@ const MainApp: React.FC = () => {
   }, [isPremium, appointments]);
 
   const handleSaveAppointment = useCallback(async (newApp: Appointment) => {
-    if (!user) return;
+    if (!user) {
+      console.warn('[MainApp] Tentativa de salvar compromisso sem usuário autenticado.');
+      return;
+    }
+    console.log('[MainApp] handleSaveAppointment chamado com dados:', newApp);
     try {
       const exists = appointments.some(app => app.id === newApp.id);
       if (exists) {
+        console.log(`[MainApp] Compromisso ID ${newApp.id} já existe. Atualizando registro...`);
         const oldApp = appointments.find(a => a.id === newApp.id);
         if (oldApp && oldApp.active === false && newApp.active !== false) {
           const activeAppsCount = appointments.filter(a => a.active !== false && a.deleted !== true).length;
           if (!isPremium && activeAppsCount >= FREE_PLAN_LIMITS.appointments) {
+            console.log('[MainApp] Limite de plano gratuito atingido ao reativar compromisso.');
             setLimitModalOpen(true);
             return;
           }
         }
         const updated = await appointmentService.updateAppointment(user.id, newApp.id, newApp);
+        console.log('[MainApp] Compromisso atualizado no banco com sucesso:', updated);
         setAppointments(prev => prev.map(app => app.id === updated.id ? updated : app));
       } else {
+        console.log('[MainApp] Compromisso novo. Criando registro...');
         const activeAppsCount = appointments.filter(a => a.active !== false && a.deleted !== true).length;
         if (!isPremium && activeAppsCount >= FREE_PLAN_LIMITS.appointments) {
+          console.log('[MainApp] Limite de plano gratuito atingido para novo compromisso.');
           setLimitModalOpen(true);
           return;
         }
         const created = await appointmentService.createAppointment(user.id, newApp);
+        console.log('[MainApp] Compromisso criado no banco com sucesso:', created);
         setAppointments(prev => [created, ...prev]);
       }
       setEditingAppointment(null);
+      console.log('[MainApp] Mudando visualização para lista de compromissos ("appointments")');
       setView('appointments');
     } catch (error) {
-      console.error('Erro ao salvar compromisso:', error);
+      console.error('[MainApp] Erro em handleSaveAppointment:', error);
+      alert('Houve um erro ao salvar o compromisso. Por favor, verifique sua conexão e tente novamente.');
+      throw error; // Repassar o erro para que a interface AddAppointment desative o loading no bloco finally
     }
   }, [user, appointments, isPremium]);
 

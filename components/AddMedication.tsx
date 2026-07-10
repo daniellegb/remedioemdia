@@ -140,9 +140,14 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
+    console.log('[AddMedication] Botão de submit clicado.');
+    if (isSubmitting) {
+      console.warn('[AddMedication] Envio já em andamento, bloqueando clique repetido.');
+      return;
+    }
 
     try {
+      console.log('[AddMedication] Iniciando processo de salvamento...');
       setIsSubmitting(true);
       let finalEndDate = formData.endDate;
       if (formData.usageCategory === 'period') {
@@ -164,14 +169,19 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
         sanitizedData.intervalDays = 1;
       }
 
+      console.log('[AddMedication] Chamando função onSave para persistência...', sanitizedData);
       await onSave({
         id: initialData?.id || Math.random().toString(36).substr(2, 9),
         ...sanitizedData,
         endDate: finalEndDate,
         frequency: 1 
       });
+      console.log('[AddMedication] onSave retornou com sucesso.');
     } catch (error) {
-      console.error('Erro ao processar envio do formulário:', error);
+      console.error('[AddMedication] Erro ao processar envio do formulário:', error);
+      alert('Erro ao salvar o medicamento: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      console.log('[AddMedication] Finalizando envio do formulário, redefinindo isSubmitting para false.');
       setIsSubmitting(false);
     }
   };

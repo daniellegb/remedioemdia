@@ -337,6 +337,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Stand up periodic activity update & validity checking (fallback)
     const interval = setInterval(async () => {
       if (!user?.id || !localId) return;
+      
+      // Evitar chamadas desnecessárias ao banco de dados enquanto a aba estiver inativa/background
+      if (document.visibilityState !== 'visible') {
+        console.log('[SessionTracker] Aba em segundo plano/minimizado. Pulando checagem de atividade periódica.');
+        return;
+      }
+
       try {
         if (isRegisteredOnDb) {
           const isValid = await sessionService.isSessionValid(user.id, localId);

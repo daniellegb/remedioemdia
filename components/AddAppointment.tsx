@@ -25,6 +25,7 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
   const [isLoadingSuggestions, setIsLoadingSuggestions] = useState(false);
   const [showDropdown, setShowDropdown] = useState(false);
   const [lastSelectedLocation, setLastSelectedLocation] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -100,20 +101,38 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
     setShowDropdown(false);
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    const appToSave: Appointment = {
-      id: initialData ? initialData.id : Math.random().toString(36).substr(2, 9),
-      type,
-      doctor: formData.doctor,
-      specialty: formData.specialty,
-      date: formData.date,
-      time: formData.time,
-      location: formData.location,
-      notes: formData.notes,
-      active: formData.active
-    };
-    onSave(appToSave);
+    console.log('[AddAppointment] Botão de submit clicado.');
+    if (isSubmitting) {
+      console.warn('[AddAppointment] Envio já em andamento, bloqueando clique repetido.');
+      return;
+    }
+
+    try {
+      console.log('[AddAppointment] Iniciando processo de salvamento...');
+      setIsSubmitting(true);
+      const appToSave: Appointment = {
+        id: initialData ? initialData.id : Math.random().toString(36).substr(2, 9),
+        type,
+        doctor: formData.doctor,
+        specialty: formData.specialty,
+        date: formData.date,
+        time: formData.time,
+        location: formData.location,
+        notes: formData.notes,
+        active: formData.active
+      };
+      console.log('[AddAppointment] Chamando função onSave para persistência...', appToSave);
+      await onSave(appToSave);
+      console.log('[AddAppointment] onSave retornou com sucesso.');
+    } catch (error) {
+      console.error('[AddAppointment] Erro ao processar envio do compromisso:', error);
+      alert('Erro ao salvar o compromisso: ' + (error instanceof Error ? error.message : String(error)));
+    } finally {
+      console.log('[AddAppointment] Finalizando envio do formulário, redefinindo isSubmitting para false.');
+      setIsSubmitting(false);
+    }
   };
 
   return (
@@ -287,9 +306,21 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
 
         <button
           type="submit"
-          className="w-full bg-blue-600 text-white py-4 rounded-2xl font-bold text-lg shadow-xl hover:bg-blue-700 hover:shadow-blue-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2"
+          disabled={isSubmitting}
+          className={`w-full py-4 rounded-2xl font-bold text-lg shadow-xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 ${
+            isSubmitting
+              ? 'bg-slate-400 text-white cursor-not-allowed'
+              : 'bg-blue-600 text-white hover:bg-blue-700 hover:shadow-blue-200'
+          }`}
         >
-          {initialData ? 'Salvar Alterações' : 'Confirmar Agendamento'}
+          {isSubmitting ? (
+            <>
+              <Loader2 className="animate-spin" size={20} />
+              Salvando...
+            </>
+          ) : (
+            initialData ? 'Salvar Alterações' : 'Confirmar Agendamento'
+          )}
         </button>
       </form>
     </div>

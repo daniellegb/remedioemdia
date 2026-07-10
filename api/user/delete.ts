@@ -1,9 +1,50 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-// Initialize Supabase Admin client
-const supabaseUrl = process.env.SUPABASE_DB_URL || process.env.VITE_SUPABASE_URL || '';
+// Helper functions to safely handle mismatched Supabase environment variables
+function getProjectRefFromKey(key: string): string | null {
+  try {
+    const parts = key.split('.');
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+      return payload.ref || null;
+    }
+  } catch (e) {
+    // Ignore decoding errors
+  }
+  return null;
+}
+
+function getProjectRefFromUrl(url: string): string | null {
+  try {
+    const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
+    return match ? match[1] : null;
+  } catch (e) {
+    // Ignore parsing errors
+  }
+  return null;
+}
+
+// Initialize Supabase Admin client with dynamic project matching
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+function getMatchingSupabaseUrl(): string {
+  const serviceKeyRef = getProjectRefFromKey(supabaseServiceKey);
+  const dbUrl = process.env.SUPABASE_DB_URL || '';
+  const viteUrl = process.env.VITE_SUPABASE_URL || '';
+  
+  if (serviceKeyRef) {
+    if (getProjectRefFromUrl(dbUrl) === serviceKeyRef) {
+      return dbUrl;
+    }
+    if (getProjectRefFromUrl(viteUrl) === serviceKeyRef) {
+      return viteUrl;
+    }
+  }
+  return dbUrl || viteUrl;
+}
+
+const supabaseUrl = getMatchingSupabaseUrl();
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {

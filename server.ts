@@ -11,10 +11,61 @@ import portalHandler from './api/stripe/create-portal-session.js';
 import syncHandler from './api/stripe/sync-subscription.js';
 import webhookHandler from './api/stripe/webhook.js';
 
-// Initialize Supabase Admin client
-const supabaseUrl = process.env.SUPABASE_DB_URL || process.env.VITE_SUPABASE_URL || '';
+// Helper functions to safely handle mismatched Supabase environment variables
+function getProjectRefFromKey(key: string): string | null {
+  try {
+    const parts = key.split('.');
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+      return payload.ref || null;
+    }
+  } catch (e) {
+    // Ignore decoding errors
+  }
+  return null;
+}
+
+function getProjectRefFromUrl(url: string): string | null {
+  try {
+    const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
+    return match ? match[1] : null;
+  } catch (e) {
+    // Ignore parsing errors
+  }
+  return null;
+}
+
+// Initialize Supabase Admin client with dynamic project matching
 const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+
+function getMatchingSupabaseUrl(): string {
+  const serviceKeyRef = getProjectRefFromKey(supabaseServiceKey);
+  const dbUrl = process.env.SUPABASE_DB_URL || '';
+  const viteUrl = process.env.VITE_SUPABASE_URL || '';
+  
+  if (serviceKeyRef) {
+    if (getProjectRefFromUrl(dbUrl) === serviceKeyRef) {
+      return dbUrl;
+    }
+    if (getProjectRefFromUrl(viteUrl) === serviceKeyRef) {
+      return viteUrl;
+    }
+  }
+  return dbUrl || viteUrl;
+}
+
+const supabaseUrl = getMatchingSupabaseUrl();
 const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+
+const activeRef = getProjectRefFromUrl(supabaseUrl);
+const viteRef = getProjectRefFromUrl(process.env.VITE_SUPABASE_URL || '');
+if (viteRef && activeRef && viteRef !== activeRef) {
+  console.error(`[SUPABASE CONFIG MISMATCH WARNING]
+  O frontend está configurado com o projeto Supabase: "${viteRef}" (VITE_SUPABASE_URL)
+  O backend está configurado com o projeto Supabase: "${activeRef}" (SUPABASE_DB_URL)
+  Isso causará falhas de sincronização de assinatura e autenticação porque eles usam bancos de dados diferentes!
+  Por favor, atualize as credenciais no menu Settings do AI Studio para que apontem para o mesmo projeto.`);
+}
 
 /**
  * Runs PostgreSQL column migrations on startup to support account deletion tracking.

@@ -60,7 +60,8 @@ export const UserAvatar: React.FC<UserAvatarProps> = ({
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-500 to-indigo-600 text-white font-bold"
+            className="w-full h-full flex items-center justify-center text-white font-bold"
+            style={{ backgroundColor: '#007D71' }}
           >
             {getInitials(name)}
           </motion.div>
