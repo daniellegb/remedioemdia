@@ -2,6 +2,15 @@
 
 @theme {
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+  
+  --color-blue-50: #f0f6ff;
+  --color-blue-100: #e1ebfd;
+  --color-blue-200: #bcd4fb;
+  --color-blue-500: #4a8bf2;
+  --color-blue-600: #3478E5;
+  --color-blue-700: #2762cc;
+  --color-blue-800: #1e4da3;
+  --color-blue-900: #1b3d80;
 }
 
 body {

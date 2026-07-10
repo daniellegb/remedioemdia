@@ -42,7 +42,7 @@ export async function openGoogleMapsLink(address: string) {
   newWindow.document.title = 'Abrindo Google Maps...';
   newWindow.document.body.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#334155;background:#f8fafc;">
-      <div style="border: 4px solid #e2e8f0; border-top: 4px solid #2563eb; border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
+      <div style="border: 4px solid #e2e8f0; border-top: 4px solid #3478E5; border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
       <p style="font-weight: 600;">Buscando coordenadas do endereço...</p>
       <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
     </div>
@@ -69,7 +69,7 @@ export async function openWazeLink(address: string) {
   newWindow.document.title = 'Abrindo Waze...';
   newWindow.document.body.innerHTML = `
     <div style="display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;font-family:sans-serif;color:#334155;background:#f8fafc;">
-      <div style="border: 4px solid #e2e8f0; border-top: 4px solid #2563eb; border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
+      <div style="border: 4px solid #e2e8f0; border-top: 4px solid #3478E5; border-radius: 50%; width: 36px; height: 36px; animation: spin 1s linear infinite; margin-bottom: 16px;"></div>
       <p style="font-weight: 600;">Buscando coordenadas do endereço...</p>
       <style>@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }</style>
     </div>
