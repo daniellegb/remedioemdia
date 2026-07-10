@@ -22,37 +22,72 @@ if (isDev) {
   console.log('[Supabase] Rodando em Ambiente de Desenvolvimento');
 }
 
-const activeLocks = new Set<string>();
+const lockQueues = new Map<string, Promise<any>>();
 
 const customLock = async <R>(name: string, acquireTimeout: number, fn: () => Promise<R>): Promise<R> => {
   if (typeof window === 'undefined') {
     return fn();
   }
 
-  console.log(`[customLock] [REQUISITADO] Trava '${name}' solicitada.`);
-
-  // Se o lock já está ativo na memória, isso indica uma chamada concorrente imediata ou reentrante/aninhada.
-  // Para evitar deadlock ou congelamentos crônicos (onde uma chamada espera por si mesma),
-  // nós permitimos que ela passe diretamente. Isso é extremamente resiliente e seguro.
-  if (activeLocks.has(name)) {
-    console.log(`[customLock] [REENTRANTE/CONCORRENTE] Trava '${name}' já ativa na memória. Executando diretamente para evitar deadlock.`);
-    return fn();
+  // Se navigator.locks estiver disponível e funcionando, use-o prioritariamente
+  if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
+    try {
+      return await navigator.locks.request(name, { steal: false }, async () => {
+        return await fn();
+      });
+    } catch (e) {
+      console.warn('[customLock] navigator.locks.request falhou, usando fallback baseado em fila:', e);
+    }
   }
 
-  activeLocks.add(name);
-  console.log(`[customLock] [ADQUIRIDO] Trava '${name}' adquirida.`);
+  console.log(`[customLock] [REQUISITADO] Trava '${name}' solicitada com timeout de ${acquireTimeout}ms.`);
 
-  try {
-    const result = await fn();
-    console.log(`[customLock] [RESOLVIDO] Execução da trava '${name}' concluída.`);
-    return result;
-  } catch (err: any) {
-    console.error(`[customLock] [ERRO] Falha durante execução da trava '${name}':`, err?.message || err);
-    throw err;
-  } finally {
-    activeLocks.delete(name);
-    console.log(`[customLock] [LIBERADO] Trava '${name}' liberada.`);
-  }
+  const previousPromise = lockQueues.get(name) || Promise.resolve();
+
+  // Cria um timeout de segurança (padrão 10 segundos) para evitar qualquer travamento eterno
+  const timeoutMs = acquireTimeout > 0 ? acquireTimeout : 10000;
+  let timeoutId: any;
+  
+  const timeoutPromise = new Promise<void>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new Error(`[customLock] Timeout de aquisição (${timeoutMs}ms) excedido para a trava '${name}'`));
+    }, timeoutMs);
+  });
+
+  const currentPromise = (async () => {
+    try {
+      // Aguarda a trava anterior ou o timeout de segurança
+      await Promise.race([previousPromise, timeoutPromise]);
+    } catch (e: any) {
+      console.warn(`[customLock] Espera pela trava anterior '${name}' falhou ou expirou:`, e?.message || e);
+      // Prossegue mesmo em caso de erro/timeout para evitar que a aplicação congele para sempre
+    } finally {
+      if (timeoutId) clearTimeout(timeoutId);
+    }
+
+    console.log(`[customLock] [EXECUTANDO] Iniciando execução da trava '${name}' de forma exclusiva.`);
+    try {
+      const result = await fn();
+      console.log(`[customLock] [RESOLVIDO] Execução da trava '${name}' concluída.`);
+      return result;
+    } catch (err: any) {
+      console.error(`[customLock] [ERRO] Falha durante execução da trava '${name}':`, err?.message || err);
+      throw err;
+    }
+  })();
+
+  // Registra a nova Promise na fila
+  lockQueues.set(name, currentPromise);
+
+  // Limpa a fila quando terminar
+  currentPromise.finally(() => {
+    if (lockQueues.get(name) === currentPromise) {
+      lockQueues.delete(name);
+      console.log(`[customLock] [LIBERADO] Trava '${name}' limpa da fila.`);
+    }
+  });
+
+  return currentPromise;
 };
 
 const customFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
