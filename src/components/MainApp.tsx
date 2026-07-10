@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { ShieldCheck, X } from 'lucide-react';
+import { ShieldCheck, X, Pill } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
+import { UserAvatar } from './UserAvatar';
 import Navigation from '../../components/Navigation';
 import Dashboard from '../../components/Dashboard';
 import Medications from '../../components/Medications';
@@ -48,6 +49,31 @@ const DEFAULT_SETTINGS: AppSettings = {
 
 const MainApp: React.FC = () => {
   const { user, onboardingCompleted, loading: authLoading, refreshProfile, isPremium, profile } = useAuth();
+  
+  const [showMobileHeader, setShowMobileHeader] = useState(true);
+  const [lastScrollY, setLastScrollY] = useState(0);
+  const [mobileLogoError, setMobileLogoError] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      const currentScrollY = window.scrollY;
+      
+      // If we scroll down past a threshold, hide.
+      // If we scroll up or are very close to top, show.
+      if (currentScrollY > lastScrollY && currentScrollY > 60) {
+        setShowMobileHeader(false);
+      } else {
+        setShowMobileHeader(true);
+      }
+      setLastScrollY(currentScrollY);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+    };
+  }, [lastScrollY]);
+
   const location = useLocation();
   const navigate = useNavigate();
   
@@ -934,8 +960,39 @@ const MainApp: React.FC = () => {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col md:flex-row">
+      {/* Mobile Exclusive Header */}
+      <motion.header
+        initial={{ y: 0 }}
+        animate={{ y: showMobileHeader ? 0 : -80 }}
+        transition={{ duration: 0.25, ease: 'easeInOut' }}
+        className="fixed top-0 left-0 right-0 h-16 bg-white border-b border-slate-200/60 px-4 flex items-center justify-between z-40 md:hidden shadow-sm"
+      >
+        <div className="flex items-center min-h-[40px] max-w-[200px]">
+          {!mobileLogoError ? (
+            <img
+              src="/remedio-em-dia-logo-horizontal.png"
+              alt="Remédio em Dia"
+              className="max-h-8 w-auto object-contain"
+              onError={() => setMobileLogoError(true)}
+            />
+          ) : (
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 bg-blue-600 rounded-lg flex items-center justify-center text-white shrink-0">
+                <Pill size={18} />
+              </div>
+              <span className="text-base font-bold text-slate-900">Remédio em Dia</span>
+            </div>
+          )}
+        </div>
+        <UserAvatar 
+          src={user?.user_metadata?.avatar_url} 
+          name={profile?.name || user?.user_metadata?.full_name} 
+          size="sm"
+        />
+      </motion.header>
+
       <Navigation currentView={view === 'add-appointment' ? 'appointments' : (view === 'add-med' ? 'meds' : view)} setView={setView} />
-      <main className="flex-1 md:ml-64 p-4 md:p-10 transition-all duration-300">
+      <main className="flex-1 md:ml-64 p-4 pt-20 md:pt-10 md:p-10 transition-all duration-300">
         <div className="max-w-6xl mx-auto">
           {dataLoading ? (
             <div className="flex flex-col items-center justify-center p-12 text-center h-64">

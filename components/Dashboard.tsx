@@ -264,18 +264,6 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
             </p>
           )}
         </div>
-        <UserAvatar 
-          src={user?.user_metadata?.avatar_url} 
-          name={profile?.name || user?.user_metadata?.full_name} 
-          size="sm"
-          className="sm:hidden"
-        />
-        <UserAvatar 
-          src={user?.user_metadata?.avatar_url} 
-          name={profile?.name || user?.user_metadata?.full_name} 
-          size="md"
-          className="hidden sm:flex"
-        />
       </header>
 
       {/* Stats Summary */}
