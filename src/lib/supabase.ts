@@ -22,62 +22,11 @@ if (isDev) {
   console.log('[Supabase] Rodando em Ambiente de Desenvolvimento');
 }
 
-const lockQueues = new Map<string, Promise<any>>();
-
 const customLock = async <R>(name: string, acquireTimeout: number, fn: () => Promise<R>): Promise<R> => {
-  if (typeof window === 'undefined') {
-    return fn();
+  if (isDev) {
+    console.log(`[customLock] [DIRETO] Executando trava '${name}' diretamente para evitar deadlocks em sandbox/iframe.`);
   }
-
-  // Ignoramos navigator.locks.request em ambientes de iframe/sandbox/AI Studio para evitar travamento eterno/deadlocks silenciados
-  console.log(`[customLock] [REQUISITADO] Trava '${name}' solicitada (usando fila em memória resiliente com timeout de segurança).`);
-
-  const previousPromise = lockQueues.get(name) || Promise.resolve();
-
-  // Cria um timeout de segurança (padrão 5 segundos) para evitar qualquer travamento eterno
-  const timeoutMs = acquireTimeout > 0 ? acquireTimeout : 5000;
-  let timeoutId: any;
-  
-  const timeoutPromise = new Promise<void>((_, reject) => {
-    timeoutId = setTimeout(() => {
-      reject(new Error(`[customLock] Timeout de aquisição (${timeoutMs}ms) excedido para a trava '${name}'`));
-    }, timeoutMs);
-  });
-
-  const currentPromise = (async () => {
-    try {
-      // Aguarda a trava anterior ou o timeout de segurança
-      await Promise.race([previousPromise, timeoutPromise]);
-    } catch (e: any) {
-      console.warn(`[customLock] Espera pela trava anterior '${name}' falhou ou expirou:`, e?.message || e);
-      // Prossegue mesmo em caso de erro/timeout para evitar que a aplicação congele para sempre
-    } finally {
-      if (timeoutId) clearTimeout(timeoutId);
-    }
-
-    console.log(`[customLock] [EXECUTANDO] Iniciando execução da trava '${name}' de forma exclusiva.`);
-    try {
-      const result = await fn();
-      console.log(`[customLock] [RESOLVIDO] Execução da trava '${name}' concluída.`);
-      return result;
-    } catch (err: any) {
-      console.error(`[customLock] [ERRO] Falha durante execução da trava '${name}':`, err?.message || err);
-      throw err;
-    }
-  })();
-
-  // Registra a nova Promise na fila
-  lockQueues.set(name, currentPromise);
-
-  // Limpa a fila quando terminar
-  currentPromise.finally(() => {
-    if (lockQueues.get(name) === currentPromise) {
-      lockQueues.delete(name);
-      console.log(`[customLock] [LIBERADO] Trava '${name}' limpa da fila.`);
-    }
-  });
-
-  return currentPromise;
+  return fn();
 };
 
 const customFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
