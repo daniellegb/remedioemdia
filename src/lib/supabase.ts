@@ -29,23 +29,13 @@ const customLock = async <R>(name: string, acquireTimeout: number, fn: () => Pro
     return fn();
   }
 
-  // Se navigator.locks estiver disponível e funcionando, use-o prioritariamente
-  if (typeof navigator !== 'undefined' && navigator.locks && typeof navigator.locks.request === 'function') {
-    try {
-      return await navigator.locks.request(name, { steal: false }, async () => {
-        return await fn();
-      });
-    } catch (e) {
-      console.warn('[customLock] navigator.locks.request falhou, usando fallback baseado em fila:', e);
-    }
-  }
-
-  console.log(`[customLock] [REQUISITADO] Trava '${name}' solicitada com timeout de ${acquireTimeout}ms.`);
+  // Ignoramos navigator.locks.request em ambientes de iframe/sandbox/AI Studio para evitar travamento eterno/deadlocks silenciados
+  console.log(`[customLock] [REQUISITADO] Trava '${name}' solicitada (usando fila em memória resiliente com timeout de segurança).`);
 
   const previousPromise = lockQueues.get(name) || Promise.resolve();
 
-  // Cria um timeout de segurança (padrão 10 segundos) para evitar qualquer travamento eterno
-  const timeoutMs = acquireTimeout > 0 ? acquireTimeout : 10000;
+  // Cria um timeout de segurança (padrão 5 segundos) para evitar qualquer travamento eterno
+  const timeoutMs = acquireTimeout > 0 ? acquireTimeout : 5000;
   let timeoutId: any;
   
   const timeoutPromise = new Promise<void>((_, reject) => {
