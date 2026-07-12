@@ -203,13 +203,18 @@ const Subscription: React.FC<Props> = ({ setView }) => {
                   ) : (
                     <>
                       <Sparkles size={20} />
-                      Assinar Premium - R$ 9,90/mês
+                      Assinar Premium - R$ 14,99/mês
                     </>
                   )}
                 </button>
-                <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 mt-2 font-medium">
-                  <ShieldCheck size={14} className="text-emerald-500" />
-                  Processamento de assinatura seguro garantido pelo Stripe
+                <div className="flex flex-col items-center justify-center gap-1.5 mt-3">
+                  <span className="text-[11px] text-blue-700 font-bold bg-blue-50 border border-blue-100 px-3 py-1 rounded-full uppercase tracking-wider animate-pulse shadow-sm">
+                    🚀 Preço promocional de lançamento!
+                  </span>
+                  <div className="flex items-center justify-center gap-1.5 text-[10px] text-slate-400 mt-1 font-medium">
+                    <ShieldCheck size={14} className="text-emerald-500" />
+                    Processamento de assinatura seguro garantido pelo Stripe
+                  </div>
                 </div>
               </div>
             </div>
@@ -285,7 +290,7 @@ const Subscription: React.FC<Props> = ({ setView }) => {
             // Outros status como trial expirado etc.
             <div className="space-y-4">
               <p className="text-sm text-slate-600">
-                Seu período de teste ou de assinaturaPremium expirou. Assine agora para retomar todos os recursos Premium!
+                Seu período de teste ou de assinatura Premium expirou. Assine agora para retomar todos os recursos Premium!
               </p>
               
               <button 
@@ -302,10 +307,15 @@ const Subscription: React.FC<Props> = ({ setView }) => {
                 ) : (
                   <>
                     <Sparkles size={20} />
-                    Assinar Premium - R$ 9,90/mês
+                    Assinar Premium - R$ 14,99/mês
                   </>
                 )}
               </button>
+              <div className="flex flex-col items-center justify-center gap-1.5 mt-2">
+                <span className="text-[11px] text-blue-700 font-bold bg-blue-50 border border-blue-100 px-3 py-1 rounded-full uppercase tracking-wider animate-pulse shadow-sm">
+                  🚀 Preço promocional de lançamento!
+                </span>
+              </div>
             </div>
           )}
         </div>
