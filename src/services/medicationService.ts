@@ -139,8 +139,9 @@ export const medicationService = {
 
       // Recalcular próxima dose se campos relevantes mudarem
       if (data.times || data.intervalDays || data.usageCategory || data.startDate) {
-        console.log(`[Repository] [updateMedication] Recalculando próxima dose. Buscando med atual...`);
+        console.log(`[Repository] [updateMedication] Recalculando próxima dose. ANTES de buscar med atual id: ${id}`);
         const { data: current } = await supabase.from('medications').select('*').eq('id', id).single();
+        console.log(`[Repository] [updateMedication] Recalculando próxima dose. DEPOIS de buscar med atual:`, current);
         if (current) {
           const fullMed = mapMedToCamelCase({ ...current, ...updateData });
           updateData.next_dose_at = getNextDoseAt(fullMed);

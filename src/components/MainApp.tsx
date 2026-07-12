@@ -330,7 +330,6 @@ const MainApp: React.FC = () => {
     const handleFocus = () => {
       console.log('[MainApp] Janela focada, iniciando sincronização em segundo plano...');
       performSubscriptionSync().catch(err => console.warn('[MainApp] Erro na sincronização de assinatura ao focar:', err));
-      checkReactivationNotification().catch(err => console.warn('[MainApp] Erro na checagem de reativação ao focar:', err));
     };
 
     window.addEventListener('focus', handleFocus);

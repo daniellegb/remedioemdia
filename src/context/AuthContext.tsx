@@ -48,14 +48,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const isAdmin = profile?.role === 'admin';
   const isPremium = hasPremiumAccess(profile);
 
-  const fetchProfile = useCallback(async (userId: string) => {
+  const fetchProfile = useCallback(async (userId: string, authUser?: User | null) => {
     try {
       // Tentar buscar do backend
-      const { data, error } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', userId)
-        .single();
+      console.log('[profiles query] Antes do select');
+      const step1 = supabase.from('profiles').select('*');
+      console.log('[profiles query] Depois do select');
+      
+      const step2 = step1.eq('id', userId);
+      
+      console.log('[profiles query] Antes do .single()');
+      const step3 = step2.single();
+      console.log('[profiles query] Depois do .single()');
+      
+      console.log('[profiles query] Antes do then');
+      console.log('[fetchProfile] ANTES do await step3');
+      console.log('[profiles query] Antes do retorno ao AuthContext');
+      const { data, error } = await step3;
+      console.log('[profiles query] Depois do retorno ao AuthContext');
+      console.log('[fetchProfile] DEPOIS do await step3');
+      console.log('[profiles query] Depois do then');
       
       if (error) {
         console.warn('Error fetching profile from backend, checking cache...', error);
@@ -63,25 +75,31 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error.code === 'PGRST116') {
           console.log('[AuthContext] Profile row not found. Creating a default profile row on the fly...');
           try {
-            const { data: { user: authUser } } = await supabase.auth.getUser();
-            if (authUser) {
-              const name = authUser.user_metadata?.full_name || authUser.user_metadata?.name || authUser.email?.split('@')[0] || 'Usuário';
+            console.log('[fetchProfile] Obter resolvedUser');
+            const resolvedUser = authUser ?? (await supabase.auth.getUser()).data.user;
+            if (resolvedUser) {
+              const name = resolvedUser.user_metadata?.full_name || resolvedUser.user_metadata?.name || resolvedUser.email?.split('@')[0] || 'Usuário';
               const newProfile: any = {
                 id: userId,
                 name: name
               };
+              console.log('[fetchProfile] ANTES do await supabase.from(profiles).insert(...)');
               const { data: insertedData, error: insertError } = await supabase
                 .from('profiles')
                 .insert([newProfile])
                 .select()
                 .single();
+              console.log('[fetchProfile] DEPOIS do await supabase.from(profiles).insert(...)');
               
               if (!insertError && insertedData) {
                 console.log('[AuthContext] Default profile row created successfully on the fly:', insertedData);
+                console.log('[fetchProfile] ANTES do await subscriptionService.refreshSubscriptionStatus(...) [on creation]');
                 const updatedProfile = await subscriptionService.refreshSubscriptionStatus(insertedData as Profile);
+                console.log('[fetchProfile] DEPOIS do await subscriptionService.refreshSubscriptionStatus(...) [on creation]');
                 setProfile(updatedProfile);
                 setProfileLoaded(true);
-                return;
+                console.log('[fetchProfile] ANTES do return (caminho PGRST116 sucesso)');
+                return console.log('[fetchProfile] DEPOIS do return (avaliado antes do retorno de PGRST116 sucesso)');
               } else if (insertError) {
                 console.error('[AuthContext] Error creating profile row on the fly:', insertError.message);
               }
@@ -105,7 +123,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
         setProfileLoaded(true);
-        return;
+        console.log('[fetchProfile] ANTES do return (caminho PGRST116 final)');
+        return console.log('[fetchProfile] DEPOIS do return (avaliado antes do retorno de PGRST116 final)');
       }
       
       const currentProfile = data as Profile;
@@ -113,27 +132,33 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Fetch user metadata backup for account deletion properties
       let meta: any = {};
       try {
-        const { data: { user } } = await supabase.auth.getUser();
-        if (user?.user_metadata) {
-          meta = user.user_metadata;
+        console.log('[fetchProfile] Obter resolvedUserBackup [backup metadata]');
+        const resolvedUserBackup = authUser ?? (await supabase.auth.getUser()).data.user;
+        if (resolvedUserBackup?.user_metadata) {
+          meta = resolvedUserBackup.user_metadata;
         }
       } catch (metaErr) {
         console.warn('[AuthContext] Error retrieving user metadata backup:', metaErr);
       }
-
+      
       const mergedProfile: Profile = {
         ...currentProfile,
         account_status: currentProfile.account_status || meta.account_status || 'active',
         deletion_requested_at: currentProfile.deletion_requested_at || meta.deletion_requested_at || null,
         scheduled_deletion_at: currentProfile.scheduled_deletion_at || meta.scheduled_deletion_at || null
       };
-
+      
+      console.log('[fetchProfile] ANTES do await subscriptionService.refreshSubscriptionStatus(...) [on normal fetch]');
       const updatedProfile = await subscriptionService.refreshSubscriptionStatus(mergedProfile);
+      console.log('[fetchProfile] DEPOIS do await subscriptionService.refreshSubscriptionStatus(...) [on normal fetch]');
       setProfile(updatedProfile);
     } catch (err) {
+      console.log('[fetchProfile] Interceptado erro que seria lançado. Erro:', err);
       console.error('Unexpected error fetching profile:', err);
     } finally {
+      console.log('[fetchProfile] ANTES do finally');
       setProfileLoaded(true);
+      console.log('[fetchProfile] DEPOIS do finally');
     }
   }, [isConfigured]);
 
@@ -183,7 +208,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(currentUser);
 
         if (currentUser) {
-          await fetchProfile(currentUser.id);
+          await fetchProfile(currentUser.id, currentUser);
         }
       } catch (err) {
         console.error('[Auth] Unexpected initialization error:', err);
@@ -195,13 +220,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     initAuth();
 
     // Listen for changes on auth state
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, currentSession) => {
-      console.log('Auth state change event:', event);
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
+      const callbackId = Math.random().toString(36).substring(2, 7);
+      const timestamp = new Date().toISOString();
+      console.log(`[onAuthStateChange Callback] [${callbackId}] [${timestamp}] Evento: ${event}`);
       
       const newUser = currentSession?.user ?? null;
-      const isInitialOrTransition = event === 'SIGNED_IN' || event === 'SIGNED_OUT' || event === 'USER_UPDATED';
       
-      // Update session/user and fetch profile
+      // Update session/user
       // We use a functional update or comparison to avoid redundant renders if the user is the same
       setSession(prev => (prev?.access_token === currentSession?.access_token ? prev : currentSession));
       setUser(prev => {
@@ -212,18 +238,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return prev;
       });
       
-      if (newUser) {
-        // Only trigger profile fetch if it is a major transition or if we don't have a profile yet
-        if (isInitialOrTransition || !profileRef.current) {
-          await fetchProfile(newUser.id);
-        }
-      } else {
+      if (!newUser) {
         setProfile(null);
+        setProfileLoaded(true);
       }
     });
 
     return () => subscription.unsubscribe();
   }, [isConfigured]);
+
+  // Carrega o perfil do usuário de forma assíncrona, reativa e isolada quando o usuário logado muda
+  useEffect(() => {
+    if (!user || !isConfigured) {
+      return;
+    }
+
+    const currentProfile = profileRef.current;
+    if (!currentProfile || currentProfile.id !== user.id) {
+      console.log(`[AuthContext Effect] Carregando perfil assincronamente para o usuário: ${user.id}`);
+      fetchProfile(user.id, user);
+    }
+  }, [user?.id, isConfigured, fetchProfile]);
 
   useEffect(() => {
     if (!user || !isConfigured) return;
@@ -234,7 +269,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, async (payload) => {
         console.log('[AuthContext] Profiles table changed. Tracing updates:', payload);
         if (payload.new) {
-          await fetchProfile(user.id);
+          await fetchProfile(user.id, user);
         }
       })
       .subscribe();
@@ -429,9 +464,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshProfile = useCallback(async () => {
     if (user?.id) {
-      await fetchProfile(user.id);
+      await fetchProfile(user.id, user);
     }
-  }, [user?.id, fetchProfile]);
+  }, [user, fetchProfile]);
 
   const value = {
     user,
