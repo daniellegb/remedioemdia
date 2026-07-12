@@ -60,7 +60,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         console.warn('Error fetching profile from backend, checking cache...', error);
         
         if (error.code === 'PGRST116') {
-          console.log('[AuthContext] Profile row not found. Creating a default profile row on the fly...');
           try {
             const resolvedUser = authUser ?? (await supabase.auth.getUser()).data.user;
             if (resolvedUser) {
@@ -76,7 +75,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 .single();
               
               if (!insertError && insertedData) {
-                console.log('[AuthContext] Default profile row created successfully on the fly:', insertedData);
                 const updatedProfile = await subscriptionService.refreshSubscriptionStatus(insertedData as Profile);
                 setProfile(updatedProfile);
                 setProfileLoaded(true);
@@ -145,7 +143,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     // Wrap initialization in a safe block
     const initAuth = async () => {
       try {
-        console.log('[Auth] Initializing session...');
         const { data: { session }, error } = await supabase.auth.getSession();
         
         if (error) {
@@ -227,7 +224,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     if (!user || !isConfigured) return;
 
-    console.log(`[AuthContext] Initializing Realtime listener for profile-changes for user: ${user.id}`);
     const channel = supabase
       .channel(`profile-db-changes-${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, async (payload) => {
@@ -281,7 +277,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (sess) {
           isRegisteredOnDb = true;
           sessionDbId = sess.id;
-          console.log('[SessionTracker] Current session registered in public.active_sessions with DB ID:', sess.id);
         }
       })
       .catch(err => console.error('[SessionTracker] Error registering session:', err));
@@ -309,7 +304,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const matchesDbId = isSessionDbIdValid && isOldRowIdValid && oldRow.id === sessionDbId;
           
           if (matchesSecId || matchesDbId) {
-            console.log('[SessionTracker] Match found! Initiating instant remote sign out...');
             handleRemoteLogout();
           }
         }
@@ -341,7 +335,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           if (sess) {
             isRegisteredOnDb = true;
             sessionDbId = sess.id;
-            console.log('[SessionTracker] Current session successfully registered (retry).');
           }
         }
       } catch (err) {

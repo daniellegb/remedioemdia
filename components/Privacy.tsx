@@ -9,6 +9,16 @@ import { appointmentService } from '../src/services/appointmentService';
 import { jsPDF } from 'jspdf';
 import { isContraceptivePauseDay, calculatePeriodDoses } from '../src/domain/medicationRules';
 
+const loadImage = (src: string): Promise<HTMLImageElement> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    img.crossOrigin = 'Anonymous';
+    img.onload = () => resolve(img);
+    img.onerror = (e) => reject(e);
+    img.src = src;
+  });
+};
+
 interface Props {
   setView: (view: ViewType) => void;
 }
@@ -315,36 +325,34 @@ const Privacy: React.FC<Props> = ({ setView }) => {
         format: 'a4'
       });
 
-      let currentY = 20;
+      // Try pre-loading logo and QR code images
+      let logoImage: HTMLImageElement | null = null;
+      let qrCodeImage: HTMLImageElement | null = null;
+      try {
+        const [logo, qr] = await Promise.all([
+          loadImage('/remedio-em-dia-logo-horizontal.png'),
+          loadImage('/remedio-em-dia-qrcode.png')
+        ]);
+        logoImage = logo;
+        qrCodeImage = qr;
+      } catch (imgErr) {
+        console.warn('Erro ao carregar as imagens para o relatório PDF, usando fallbacks de texto.', imgErr);
+      }
+
+      let currentY = 40;
       const pageHeight = 297;
       const marginBottom = 25;
 
       const checkPageOverflow = (neededHeight: number) => {
         if (currentY + neededHeight > pageHeight - marginBottom) {
           doc.addPage();
-          currentY = 20;
-          doc.setFontSize(8);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(148, 163, 184); // slate-400
-          doc.text("Remédio em Dia - Relatório de Histórico de Tomadas", 15, 12);
-          doc.line(15, 14, 195, 14);
-          currentY = 22;
+          currentY = 40;
         }
       };
 
-      // --- DOCUMENT HEADER ---
-      doc.setFillColor(30, 58, 138); // Navy accent bar
-      doc.rect(15, currentY, 180, 5, 'F');
-      currentY += 12;
-
-      doc.setFont('helvetica', 'bold');
-      doc.setFontSize(22);
-      doc.setTextColor(30, 41, 59); // slate-800
-      doc.text("Relatório de Histórico de Tomadas", 15, currentY);
-      currentY += 8;
-
+      // --- DOCUMENT HEADER METADATA (PAGE 1) ---
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(10);
+      doc.setFontSize(9.5);
       doc.setTextColor(100, 116, 139); // slate-500
       const formattedGenDate = new Date().toLocaleString('pt-BR');
       doc.text(`Data de geração: ${formattedGenDate}`, 15, currentY);
@@ -356,11 +364,12 @@ const Privacy: React.FC<Props> = ({ setView }) => {
                           periodOption === 'all' ? 'Todo o histórico' :
                           `Personalizado (${formatBrazilianDate(reportStartDate)} a ${formatBrazilianDate(reportEndDate)})`;
       doc.text(`Período selecionado: ${periodLabel}`, 15, currentY);
-      currentY += 8;
+      currentY += 6;
 
-      doc.setDrawColor(226, 232, 240); // slate-200
+      doc.setDrawColor(108, 200, 176); // Brand Green `#6CC8B0`
+      doc.setLineWidth(0.2);
       doc.line(15, currentY, 195, currentY);
-      currentY += 10;
+      currentY += 8;
 
       // Stats for general summary
       let totalMeds = 0;
@@ -369,7 +378,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
       let totalMissed = 0;
 
       // Generate data and draw for each medication
-      medsToReport.forEach((med: any) => {
+      medsToReport.forEach((med: any, medIndex: number) => {
         // Compute doses
         const medDoses = getMedicationDosesForPeriod(med, reportStartDate, reportEndDate, freshRecords);
 
@@ -384,11 +393,20 @@ const Privacy: React.FC<Props> = ({ setView }) => {
         totalTaken += takenCount;
         totalMissed += missedCount;
 
+        // Section Separator (between medications)
+        if (medIndex > 0) {
+          checkPageOverflow(25);
+          doc.setDrawColor(108, 200, 176); // Brand Green `#6CC8B0`
+          doc.setLineWidth(0.2);
+          doc.line(15, currentY - 2, 195, currentY - 2);
+          currentY += 6;
+        }
+
         // DRAW MEDICATION SECTION
         checkPageOverflow(30);
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(13);
-        doc.setTextColor(30, 58, 138); // Primary Navy
+        doc.setFontSize(12);
+        doc.setTextColor(46, 124, 195); // Brand Blue `#2E7CC3`
         const medStatusSuffix = med.deleted ? ' (Inativo - Histórico)' : med.active === false ? ' (Inativo)' : '';
         doc.text(`${med.name}${medStatusSuffix}`, 15, currentY);
         currentY += 5;
@@ -405,18 +423,19 @@ const Privacy: React.FC<Props> = ({ setView }) => {
 
         // Draw Table Header
         checkPageOverflow(15);
-        doc.setFillColor(241, 245, 249); // slate-100
+        doc.setFillColor(248, 250, 252); // slate-50
         doc.rect(15, currentY - 4, 180, 8, 'F');
         
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.setTextColor(71, 85, 105);
+        doc.setFontSize(8.5);
+        doc.setTextColor(100, 116, 139); // slate-500
         doc.text("Data", 18, currentY + 1);
         doc.text("Horário Previsto", 63, currentY + 1);
         doc.text("Confirmação", 108, currentY + 1);
         doc.text("Situação", 158, currentY + 1);
         
-        doc.setDrawColor(203, 213, 225); // slate-300
+        doc.setDrawColor(226, 232, 240); // slate-200
+        doc.setLineWidth(0.2);
         doc.line(15, currentY + 4, 195, currentY + 4);
         currentY += 8;
 
@@ -437,7 +456,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
             
             doc.text(formatBrazilianDate(dose.date), 18, currentY);
             doc.text(dose.scheduledTime, 63, currentY);
-            doc.text(dose.confirmationTime, 108, currentY);
+            doc.text(dose.confirmationTime || 'Não confirmada', 108, currentY);
             
             if (dose.status === 'taken') {
               doc.setTextColor(16, 185, 129); // emerald-500
@@ -454,36 +473,61 @@ const Privacy: React.FC<Props> = ({ setView }) => {
             }
             
             doc.setDrawColor(241, 245, 249); // slate-100
+            doc.setLineWidth(0.15);
             doc.line(15, currentY + 2, 195, currentY + 2);
             currentY += 6;
           });
         }
 
         // Draw Medication Summary Card
-        checkPageOverflow(26);
+        checkPageOverflow(24);
         doc.setFillColor(248, 250, 252); // slate-50
-        doc.rect(15, currentY - 2, 180, 20, 'F');
-        doc.setDrawColor(226, 232, 240); // slate-200
-        doc.rect(15, currentY - 2, 180, 20, 'D');
+        doc.setDrawColor(108, 200, 176); // Brand Green `#6CC8B0`
+        doc.setLineWidth(0.25);
+        doc.roundedRect(15, currentY - 2, 180, 18, 3, 3, 'FD');
 
         doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.setTextColor(71, 85, 105); // slate-600
+        doc.setFontSize(8.5);
+        doc.setTextColor(100, 116, 139); // slate-500
 
-        doc.text(`Tomadas previstas: ${plannedCount}`, 20, currentY + 4);
-        doc.text(`Tomadas realizadas: ${takenCount}`, 20, currentY + 10);
-        doc.text(`Tomadas perdidas: ${missedCount}`, 20, currentY + 16);
-
-        // Adherence Rate on the right
+        // Column 1: Previstas
+        doc.text("Previstas", 22, currentY + 3);
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.setTextColor(30, 41, 59); // slate-800
-        doc.text("Adesão:", 120, currentY + 10);
+        doc.setFontSize(12);
+        doc.setTextColor(51, 65, 85); // slate-700
+        doc.text(`${plannedCount}`, 22, currentY + 11);
+
+        // Column 2: Realizadas
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text("Realizadas", 62, currentY + 3);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(46, 124, 195); // Brand Blue `#2E7CC3`
+        doc.text(`${takenCount}`, 62, currentY + 11);
+
+        // Column 3: Perdidas
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text("Perdidas", 102, currentY + 3);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(239, 68, 68); // Red
+        doc.text(`${missedCount}`, 102, currentY + 11);
+
+        // Column 4: Adesão
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8.5);
+        doc.setTextColor(100, 116, 139);
+        doc.text("Adesão", 142, currentY + 3);
 
         const rateStr = plannedCount > 0 ? `${((takenCount / plannedCount) * 100).toFixed(1)}%` : '-';
-        doc.setFontSize(14);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(13);
         if (plannedCount === 0) {
-          doc.setTextColor(100, 116, 139); // slate-500
+          doc.setTextColor(100, 116, 139);
         } else {
           const pct = (takenCount / plannedCount) * 100;
           if (pct >= 90) {
@@ -494,40 +538,41 @@ const Privacy: React.FC<Props> = ({ setView }) => {
             doc.setTextColor(239, 68, 68); // red-500
           }
         }
-        doc.text(rateStr, 138, currentY + 10.5);
+        doc.text(rateStr, 142, currentY + 11);
 
-        currentY += 26; // Spacing before next medication
+        currentY += 22; // Spacing after card
       });
 
       // --- GENERAL SUMMARY SECTION ---
       checkPageOverflow(40);
       doc.setFont('helvetica', 'bold');
-      doc.setFontSize(14);
-      doc.setTextColor(30, 41, 59);
+      doc.setFontSize(13);
+      doc.setTextColor(46, 124, 195); // Brand Blue `#2E7CC3`
       doc.text("Resumo Geral de Adesão", 15, currentY);
       currentY += 6;
 
-      doc.setFillColor(239, 246, 255); // blue-50
-      doc.rect(15, currentY - 2, 180, 28, 'F');
-      doc.setDrawColor(191, 219, 254); // blue-200
-      doc.rect(15, currentY - 2, 180, 28, 'D');
+      doc.setFillColor(240, 247, 255); // soft blue-50
+      doc.setDrawColor(46, 124, 195); // Brand Blue `#2E7CC3`
+      doc.setLineWidth(0.3);
+      doc.roundedRect(15, currentY - 2, 180, 28, 3, 3, 'FD');
 
       doc.setFont('helvetica', 'normal');
       doc.setFontSize(9);
-      doc.setTextColor(30, 58, 138); // blue-800
+      doc.setTextColor(51, 65, 85); // slate-700
 
-      doc.text(`Medicamentos incluídos: ${totalMeds}`, 20, currentY + 4);
-      doc.text(`Total de tomadas previstas: ${totalPlanned}`, 20, currentY + 10);
-      doc.text(`Total de tomadas realizadas: ${totalTaken}`, 20, currentY + 16);
-      doc.text(`Total de doses não tomadas: ${totalMissed}`, 20, currentY + 22);
+      doc.text(`• Medicamentos incluídos: ${totalMeds}`, 22, currentY + 4);
+      doc.text(`• Total de tomadas previstas: ${totalPlanned}`, 22, currentY + 10);
+      doc.text(`• Total de tomadas realizadas: ${totalTaken}`, 22, currentY + 16);
+      doc.text(`• Total de doses não tomadas: ${totalMissed}`, 22, currentY + 22);
 
+      // Large adherence percentage on the right
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
-      doc.setTextColor(30, 58, 138);
-      doc.text("Adesão Geral:", 120, currentY + 11);
+      doc.setTextColor(46, 124, 195); // Brand Blue `#2E7CC3`
+      doc.text("Adesão Geral:", 120, currentY + 9);
 
       const overallPctStr = totalPlanned > 0 ? `${((totalTaken / totalPlanned) * 100).toFixed(1)}%` : '-';
-      doc.setFontSize(18);
+      doc.setFontSize(22);
       if (totalPlanned === 0) {
         doc.setTextColor(100, 116, 139);
       } else {
@@ -540,18 +585,102 @@ const Privacy: React.FC<Props> = ({ setView }) => {
           doc.setTextColor(239, 68, 68); // red-500
         }
       }
-      doc.text(overallPctStr, 146, currentY + 12);
+      doc.text(overallPctStr, 120, currentY + 19);
 
-      // --- FOOTERS LOOP ---
-      const totalPages = doc.internal.pages.length - 1;
+      currentY += 32; // Spacing after summary
+
+      // --- LAST PAGE INSTITUTIONAL AREA ---
+      const institutionalHeight = 45;
+      if (currentY + institutionalHeight > pageHeight - marginBottom) {
+        doc.addPage();
+        currentY = 40;
+      } else {
+        currentY += 6;
+      }
+
+      // Add a light separator line before the institutional area
+      doc.setDrawColor(108, 200, 176); // Brand Green `#6CC8B0`
+      doc.setLineWidth(0.2);
+      doc.line(40, currentY, 170, currentY);
+      currentY += 6;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(46, 124, 195); // Brand Blue `#2E7CC3`
+      doc.text("Continue acompanhando sua saúde com o Remédio em Dia.", 105, currentY, { align: 'center' });
+      currentY += 5;
+
+      // Draw QR Code
+      const qrWidth = 25;
+      const qrHeight = 25;
+      const qrX = (210 - qrWidth) / 2;
+      try {
+        if (qrCodeImage) {
+          doc.addImage(qrCodeImage, 'PNG', qrX, currentY, qrWidth, qrHeight);
+        } else {
+          doc.setDrawColor(200, 200, 200);
+          doc.rect(qrX, currentY, qrWidth, qrHeight, 'S');
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(150, 150, 150);
+          doc.text("QR Code", 105, currentY + 13, { align: 'center' });
+        }
+      } catch (err) {
+        console.error("Error adding QR code image to PDF", err);
+      }
+      currentY += qrHeight + 4;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(108, 200, 176); // Brand Green `#6CC8B0`
+      doc.text("www.remedioemdia.com", 105, currentY, { align: 'center' });
+
+      // --- HEADERS AND FOOTERS LOOP ---
+      const totalPages = doc.getNumberOfPages();
+      const reportTitle = "Relatório de Histórico de Tomadas";
+      
       for (let i = 1; i <= totalPages; i++) {
         doc.setPage(i);
-        doc.setFontSize(8);
+
+        // 1. HEADER (Every Page)
+        const logoWidth = 45;
+        const logoHeight = 12;
+        const logoX = (210 - logoWidth) / 2;
+        try {
+          if (logoImage) {
+            doc.addImage(logoImage, 'PNG', logoX, 10, logoWidth, logoHeight);
+          } else {
+            // Text fallback for logo
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.setTextColor(46, 124, 195); // Brand Blue
+            doc.text("Remédio em Dia", 105, 18, { align: 'center' });
+          }
+        } catch (logoErr) {
+          console.error("Error drawing logo in PDF header:", logoErr);
+        }
+
+        // Title of the report below the logo
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(46, 124, 195); // Brand Blue
+        doc.text(reportTitle, 105, 28, { align: 'center' });
+
+        // Thin horizontal separator line using the primary color of the brand
+        doc.setDrawColor(46, 124, 195); // Brand Blue
+        doc.setLineWidth(0.3);
+        doc.line(15, 32, 195, 32);
+
+        // 2. FOOTER (Every Page)
+        doc.setDrawColor(226, 232, 240); // slate-200
+        doc.setLineWidth(0.2);
+        doc.line(15, 280, 195, 280);
+
         doc.setFont('helvetica', 'normal');
-        doc.setTextColor(148, 163, 184); // slate-400
-        doc.text(`Página ${i} de ${totalPages}`, 195, 287, { align: 'right' });
-        doc.text("Remédio em Dia - Relatório de Histórico de Tomadas", 15, 287);
-        doc.line(15, 283, 195, 283);
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139); // slate-500
+        doc.text("Remédio em Dia  |  www.remedioemdia.com", 15, 285);
+        doc.text(`Página ${i} de ${totalPages}`, 195, 285, { align: 'right' });
       }
 
       // Save the PDF
@@ -644,101 +773,123 @@ const Privacy: React.FC<Props> = ({ setView }) => {
         format: 'a4'
       });
 
-      let currentY = 20;
+      // Try pre-loading logo and QR code images
+      let logoImage: HTMLImageElement | null = null;
+      let qrCodeImage: HTMLImageElement | null = null;
+      try {
+        const [logo, qr] = await Promise.all([
+          loadImage('/remedio-em-dia-logo-horizontal.png'),
+          loadImage('/remedio-em-dia-qrcode.png')
+        ]);
+        logoImage = logo;
+        qrCodeImage = qr;
+      } catch (imgErr) {
+        console.warn('Erro ao carregar as imagens para o relatório PDF, usando fallbacks de texto.', imgErr);
+      }
+
+      let currentY = 40;
       const pageHeight = 297;
-      const marginBottom = 20;
+      const marginBottom = 25;
 
       // Self-paging text printers
-      const addText = (text: string, x: number, options?: { fontSize?: number; fontStyle?: 'normal' | 'bold'; color?: [number, number, number]; maxWidth?: number }) => {
+      const addText = (text: string, x: number, options?: { fontSize?: number; fontStyle?: 'normal' | 'bold' | 'italic'; color?: [number, number, number]; maxWidth?: number }) => {
         if (options?.fontSize) doc.setFontSize(options.fontSize);
         if (options?.fontStyle) doc.setFont('helvetica', options.fontStyle);
         if (options?.color) {
           doc.setTextColor(options.color[0], options.color[1], options.color[2]);
         } else {
-          doc.setTextColor(30, 41, 59); // slate-800 default
+          doc.setTextColor(51, 65, 85); // slate-700 default
         }
         
-        const width = options?.maxWidth || 180;
+        const width = options?.maxWidth || (195 - x);
         const splitLines = doc.splitTextToSize(text, width);
-        const neededHeight = splitLines.length * ((options?.fontSize || 10) * 0.45);
+        const neededHeight = splitLines.length * ((options?.fontSize || 9) * 0.45);
         
         if (currentY + neededHeight > pageHeight - marginBottom) {
           doc.addPage();
-          currentY = 20;
-          doc.setFontSize(8);
-          doc.setFont('helvetica', 'normal');
-          doc.setTextColor(148, 163, 184); // slate-400
-          doc.text("Remédio em Dia - Relatório de Dados da Conta", 15, 12);
-          doc.line(15, 14, 195, 14);
-          currentY = 20;
+          currentY = 40;
         }
 
         if (options?.fontSize) doc.setFontSize(options.fontSize);
         if (options?.fontStyle) doc.setFont('helvetica', options.fontStyle);
+        if (options?.color) {
+          doc.setTextColor(options.color[0], options.color[1], options.color[2]);
+        } else {
+          doc.setTextColor(51, 65, 85);
+        }
         
         doc.text(splitLines, x, currentY);
-        currentY += neededHeight + 2;
+        currentY += neededHeight + 2.5;
       };
 
       const addSeparatorLine = () => {
-        if (currentY + 5 > pageHeight - marginBottom) {
+        if (currentY + 6 > pageHeight - marginBottom) {
           doc.addPage();
-          currentY = 20;
+          currentY = 40;
         }
-        doc.setDrawColor(226, 232, 240); // slate-200
+        doc.setDrawColor(108, 200, 176); // Brand Green `#6CC8B0`
+        doc.setLineWidth(0.2);
         doc.line(15, currentY, 195, currentY);
-        currentY += 6;
+        currentY += 8;
       };
 
-      // --- DOCUMENT HEADER ---
-      // Accent bar at the top
-      doc.setFillColor(37, 99, 235); // Blue-600
-      doc.rect(15, currentY, 180, 4, 'F');
-      currentY += 10;
+      const addSectionHeader = (title: string) => {
+        if (currentY + 14 > pageHeight - marginBottom) {
+          doc.addPage();
+          currentY = 40;
+        }
+        doc.setFillColor(248, 250, 252); // soft slate-50
+        doc.rect(15, currentY, 180, 8, 'F');
+        doc.setDrawColor(46, 124, 195); // Brand Blue `#2E7CC3`
+        doc.setLineWidth(0.4);
+        doc.line(15, currentY, 15, currentY + 8); // left accent bar
+        
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10.5);
+        doc.setTextColor(46, 124, 195); // Brand Blue `#2E7CC3`
+        doc.text(title, 19, currentY + 5.5);
+        currentY += 12;
+      };
 
-      addText("Remédio em Dia", 15, { fontSize: 24, fontStyle: 'bold', color: [37, 99, 235] });
-      addText("Relatório de Dados da Conta", 15, { fontSize: 11, fontStyle: 'bold', color: [100, 116, 139] });
-      addText("Este documento serve para consulta amigável de todos os dados salvos em sua conta, em total conformidade com os princípios de transparência (LGPD).", 15, { fontSize: 9, fontStyle: 'normal', color: [100, 116, 139], maxWidth: 175 });
-      
-      currentY += 4;
+      // --- INTRODUCTORY METADATA ---
+      addText("Este documento serve para consulta amigável de todos os dados salvos em sua conta, em total conformidade com os princípios de transparência e portabilidade da Lei Geral de Proteção de Dados (LGPD).", 15, { fontSize: 8.5, fontStyle: 'italic', color: [100, 116, 139], maxWidth: 180 });
+      currentY += 2;
       addSeparatorLine();
 
       // --- DADOS DA CONTA ---
-      addText("1. Dados da Conta", 15, { fontSize: 14, fontStyle: 'bold', color: [30, 41, 59] });
-      currentY += 2;
+      addSectionHeader("1. Dados da Conta");
       
       const uName = profile?.mode === 'caregiver' && profile?.caregiver_name 
         ? `${profile.caregiver_name} (Cuidador de ${profile?.patient_name || 'Paciente'})`
         : (profile?.name || user?.user_metadata?.full_name || 'Não cadastrado');
       
-      addText(`• Nome do Titular: ${uName}`, 18, { fontSize: 10 });
-      addText(`• E-mail cadastrado: ${user.email || 'Não informado'}`, 18, { fontSize: 10 });
+      addText(`• Nome do Titular: ${uName}`, 18, { fontSize: 9.5 });
+      addText(`• E-mail cadastrado: ${user.email || 'Não informado'}`, 18, { fontSize: 9.5 });
       
       const registrationDate = user?.created_at ? formatBrazilianDate(user.created_at) : 'Não identificada';
-      addText(`• Data de criação da conta: ${registrationDate}`, 18, { fontSize: 10 });
+      addText(`• Data de criação da conta: ${registrationDate}`, 18, { fontSize: 9.5 });
       
       currentY += 4;
       addSeparatorLine();
 
       // --- MEDICAMENTOS ---
-      addText("2. Medicamentos Cadastrados", 15, { fontSize: 14, fontStyle: 'bold', color: [30, 41, 59] });
-      currentY += 2;
+      addSectionHeader("2. Medicamentos Cadastrados");
 
       if (medications && medications.length > 0) {
         medications.forEach((med, index) => {
           const statusSuffix = med.deleted ? ' (Inativo - Histórico)' : med.active === false ? ' (Inativo)' : ' (Ativo)';
-          addText(`${index + 1}. ${med.name}${statusSuffix}`, 18, { fontSize: 11, fontStyle: 'bold', color: (med.deleted || med.active === false) ? [100, 116, 139] : [37, 99, 235] });
+          addText(`${index + 1}. ${med.name}${statusSuffix}`, 18, { fontSize: 10, fontStyle: 'bold', color: (med.deleted || med.active === false) ? [100, 116, 139] : [46, 124, 195] });
           const dosageInfo = med.dosage ? `${med.dosage} ${formatUnit(med.unit, 2)}` : 'Não informada';
-          addText(`   • Dosagem: ${dosageInfo}`, 18, { fontSize: 10 });
-          addText(`   • Categoria: ${getUsageCategoryLabel(med.usageCategory)}`, 18, { fontSize: 10 });
+          addText(`   • Dosagem: ${dosageInfo}`, 18, { fontSize: 9 });
+          addText(`   • Categoria: ${getUsageCategoryLabel(med.usageCategory)}`, 18, { fontSize: 9 });
           if (med.times && med.times.length > 0) {
-            addText(`   • Horários agendados: ${med.times.join(', ')}`, 18, { fontSize: 10 });
+            addText(`   • Horários agendados: ${med.times.join(', ')}`, 18, { fontSize: 9 });
           }
           if (med.deleted && med.deleted_at) {
-            addText(`   • Data da inativação: ${formatBrazilianDate(med.deleted_at)}`, 18, { fontSize: 10, color: [100, 116, 139] });
+            addText(`   • Data da inativação: ${formatBrazilianDate(med.deleted_at)}`, 18, { fontSize: 9, color: [100, 116, 139] });
           }
           if (med.notes) {
-            addText(`   • Anotações: ${med.notes}`, 18, { fontSize: 10, maxWidth: 165 });
+            addText(`   • Anotações: ${med.notes}`, 18, { fontSize: 9, maxWidth: 165 });
           }
           
           // Adiciona histórico de consumo
@@ -748,22 +899,21 @@ const Privacy: React.FC<Props> = ({ setView }) => {
               const statusLabel = r.status === 'taken' ? 'Tomado' : r.status === 'skipped' ? 'Pulado' : 'Atrasado';
               return `${formatBrazilianDate(r.date)} às ${r.scheduled_time} (${statusLabel})`;
             }).join(', ');
-            addText(`   • Histórico de consumo: ${formattedHistory}${records.length > 8 ? '...' : ''}`, 18, { fontSize: 9, color: [100, 116, 139], maxWidth: 165 });
+            addText(`   • Histórico de consumo recente: ${formattedHistory}${records.length > 8 ? '...' : ''}`, 18, { fontSize: 8.5, color: [100, 116, 139], maxWidth: 165 });
           } else {
-            addText(`   • Histórico de consumo: Nenhum registro de consumo`, 18, { fontSize: 9, color: [148, 163, 184] });
+            addText(`   • Histórico de consumo: Nenhum registro de consumo`, 18, { fontSize: 8.5, color: [148, 163, 184] });
           }
           currentY += 2;
         });
       } else {
-        addText("Nenhum medicamento cadastrado no momento.", 18, { fontSize: 10, fontStyle: 'normal', color: [148, 163, 184] });
+        addText("Nenhum medicamento cadastrado no momento.", 18, { fontSize: 9.5, fontStyle: 'italic', color: [148, 163, 184] });
       }
 
       currentY += 4;
       addSeparatorLine();
 
       // --- ESTOQUES ---
-      addText("3. Estoques", 15, { fontSize: 14, fontStyle: 'bold', color: [30, 41, 59] });
-      currentY += 2;
+      addSectionHeader("3. Controle de Estoques");
 
       if (medications && medications.length > 0) {
         let hasStock = false;
@@ -773,40 +923,38 @@ const Privacy: React.FC<Props> = ({ setView }) => {
             const current = med.currentStock ?? 0;
             const total = med.totalStock ?? 0;
             const unitLabel = formatUnit(med.unit, current);
-            addText(`• ${med.name}: Quantidade atual: ${current} ${unitLabel} (Total inicial configurado: ${total} ${formatUnit(med.unit, total)})`, 18, { fontSize: 10 });
+            addText(`• ${med.name}: Quantidade atual: ${current} ${unitLabel} (Total inicial configurado: ${total} ${formatUnit(med.unit, total)})`, 18, { fontSize: 9.5 });
           }
         });
         if (!hasStock) {
-          addText("Controle de estoque desativado para os medicamentos cadastrados.", 18, { fontSize: 10, color: [100, 116, 139] });
+          addText("Controle de estoque desativado para os medicamentos cadastrados.", 18, { fontSize: 9.5, color: [100, 116, 139] });
         }
       } else {
-        addText("Sem medicamentos para controle de estoque.", 18, { fontSize: 10, fontStyle: 'normal', color: [148, 163, 184] });
+        addText("Sem medicamentos para controle de estoque.", 18, { fontSize: 9.5, fontStyle: 'italic', color: [148, 163, 184] });
       }
 
       currentY += 4;
       addSeparatorLine();
 
       // --- LEMBRETES ---
-      addText("4. Lembretes Configurados", 15, { fontSize: 14, fontStyle: 'bold', color: [30, 41, 59] });
-      currentY += 2;
+      addSectionHeader("4. Lembretes Configurados");
 
       if (reminders && reminders.length > 0) {
         reminders.forEach((rem, idx) => {
           const medName = rem.medication_name || 'Medicamento relacionado';
           const time = rem.reminder_time ? rem.reminder_time.substring(0, 5) : 'Não definido';
           const status = rem.active ? 'Ativo' : 'Inativo';
-          addText(`• Lembrete #${idx + 1}: ${medName} - Horário: ${time} - Status de disparo: ${status}`, 18, { fontSize: 10 });
+          addText(`• Lembrete #${idx + 1}: ${medName} - Horário: ${time} - Status de disparo: ${status}`, 18, { fontSize: 9.5 });
         });
       } else {
-        addText("Nenhum lembrete automático registrado para notificações push.", 18, { fontSize: 10, fontStyle: 'normal', color: [148, 163, 184] });
+        addText("Nenhum lembrete automático registrado para notificações push.", 18, { fontSize: 9.5, fontStyle: 'italic', color: [148, 163, 184] });
       }
 
       currentY += 4;
       addSeparatorLine();
 
       // --- CONFIGURAÇÕES ---
-      addText("5. Configurações de Uso do Aplicativo", 15, { fontSize: 14, fontStyle: 'bold', color: [30, 41, 59] });
-      currentY += 2;
+      addSectionHeader("5. Configurações de Uso do Aplicativo");
 
       // Use preferences from DB, fallback to profile preferences or standard defaults
       const expiringThreshold = preferences?.threshold_expiring ?? 7;
@@ -816,13 +964,13 @@ const Privacy: React.FC<Props> = ({ setView }) => {
       const notificationsOn = preferences?.push_notifications_enabled ? 'Sim (Ativado)' : 'Não (Desativado)';
       const preMinutes = preferences?.pre_notification_minutes ?? 0;
 
-      addText(`• Aviso de expiração de medicamentos: Exibir alertas ${expiringThreshold} dias antes de vencer.`, 18, { fontSize: 10 });
-      addText(`• Alerta de estoque baixo: Exibir quando restarem menos de ${runningOutThreshold} dias de uso do medicamento.`, 18, { fontSize: 10 });
-      addText(`• Exibir aviso de atrasos no Dashboard: ${delayAlert}`, 18, { fontSize: 10 });
-      addText(`• Exibir mensagens motivacionais e de carinho: ${friendlyGreeting}`, 18, { fontSize: 10 });
-      addText(`• Notificações Push Globais da Conta: ${notificationsOn}`, 18, { fontSize: 10 });
+      addText(`• Aviso de expiração de medicamentos: Exibir alertas ${expiringThreshold} dias antes de vencer.`, 18, { fontSize: 9.5 });
+      addText(`• Alerta de estoque baixo: Exibir quando restarem menos de ${runningOutThreshold} dias de uso do medicamento.`, 18, { fontSize: 9.5 });
+      addText(`• Exibir aviso de atrasos no Dashboard: ${delayAlert}`, 18, { fontSize: 9.5 });
+      addText(`• Exibir mensagens motivacionais e de carinho: ${friendlyGreeting}`, 18, { fontSize: 9.5 });
+      addText(`• Notificações Push Globais da Conta: ${notificationsOn}`, 18, { fontSize: 9.5 });
       if (preferences?.push_notifications_enabled) {
-        addText(`• Antecipação de notificações: Lembretes emitidos com ${preMinutes} minutos de antecedência do horário regular.`, 18, { fontSize: 10 });
+        addText(`• Antecipação de notificações: Lembretes emitidos com ${preMinutes} minutos de antecedência do horário regular.`, 18, { fontSize: 9.5 });
       }
 
       currentY += 4;
@@ -830,11 +978,10 @@ const Privacy: React.FC<Props> = ({ setView }) => {
 
       // --- APPOINTMENTS (IF ANY) ---
       if (appointments && appointments.length > 0) {
-        addText("6. Compromissos e Consultas", 15, { fontSize: 14, fontStyle: 'bold', color: [30, 41, 59] });
-        currentY += 2;
+        addSectionHeader("6. Compromissos e Consultas");
         appointments.forEach((app, index) => {
           const statusSuffix = app.deleted ? ' (Inativo - Histórico)' : app.active === false ? ' (Inativo)' : ' (Agendado)';
-          addText(`• ${app.type} com Dr(a). ${app.doctor || 'Não informado'} (${app.specialty || 'Especialidade não especificada'})${statusSuffix}`, 18, { fontSize: 10, fontStyle: 'bold', color: (app.deleted || app.active === false) ? [100, 116, 139] : [30, 41, 59] });
+          addText(`• ${app.type} com Dr(a). ${app.doctor || 'Não informado'} (${app.specialty || 'Especialidade não especificada'})${statusSuffix}`, 18, { fontSize: 9.5, fontStyle: 'bold', color: (app.deleted || app.active === false) ? [100, 116, 139] : [51, 65, 85] });
           addText(`  Data: ${formatBrazilianDate(app.date)} às ${app.time}`, 18, { fontSize: 9 });
           if (app.deleted && app.deleted_at) {
             addText(`  Data da inativação: ${formatBrazilianDate(app.deleted_at)}`, 18, { fontSize: 9, color: [100, 116, 139] });
@@ -848,17 +995,108 @@ const Privacy: React.FC<Props> = ({ setView }) => {
       }
 
       // --- EXPORT INFORMATION ---
-      addText("Informações da Exportação", 15, { fontSize: 11, fontStyle: 'bold', color: [100, 116, 139] });
+      addText("Informações da Exportação", 15, { fontSize: 10.5, fontStyle: 'bold', color: [100, 116, 139] });
       currentY += 1;
       
       const generationDate = new Date();
-      addText(`• Gerado em: ${generationDate.toLocaleString('pt-BR')}`, 18, { fontSize: 9, color: [100, 116, 139] });
-      addText("• Observação: Este relatório foi gerado diretamente pelo sistema e contém apenas informações relacionadas à sua conta e utilização do aplicativo.", 18, { fontSize: 9, color: [100, 116, 139], maxWidth: 175 });
+      addText(`• Gerado em: ${generationDate.toLocaleString('pt-BR')}`, 18, { fontSize: 8.5, color: [100, 116, 139] });
+      addText("• Observação: Este relatório foi gerado diretamente pelo sistema e contém apenas informações relacionadas à sua conta e utilização do aplicativo.", 18, { fontSize: 8.5, color: [100, 116, 139], maxWidth: 175 });
 
       currentY += 8;
-      // Accent bar at the bottom
-      doc.setFillColor(226, 232, 240); // slate-200
-      doc.rect(15, currentY > 275 ? 275 : currentY, 180, 1, 'F');
+
+      // --- LAST PAGE INSTITUTIONAL AREA ---
+      const institutionalHeight = 45;
+      if (currentY + institutionalHeight > pageHeight - marginBottom) {
+        doc.addPage();
+        currentY = 40;
+      } else {
+        currentY += 6;
+      }
+
+      // Add a light separator line before the institutional area
+      doc.setDrawColor(108, 200, 176); // Brand Green `#6CC8B0`
+      doc.setLineWidth(0.2);
+      doc.line(40, currentY, 170, currentY);
+      currentY += 6;
+
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(10);
+      doc.setTextColor(46, 124, 195); // Brand Blue `#2E7CC3`
+      doc.text("Continue acompanhando sua saúde com o Remédio em Dia.", 105, currentY, { align: 'center' });
+      currentY += 5;
+
+      // Draw QR Code
+      const qrWidth = 25;
+      const qrHeight = 25;
+      const qrX = (210 - qrWidth) / 2;
+      try {
+        if (qrCodeImage) {
+          doc.addImage(qrCodeImage, 'PNG', qrX, currentY, qrWidth, qrHeight);
+        } else {
+          doc.setDrawColor(200, 200, 200);
+          doc.rect(qrX, currentY, qrWidth, qrHeight, 'S');
+          doc.setFont('helvetica', 'normal');
+          doc.setFontSize(8);
+          doc.setTextColor(150, 150, 150);
+          doc.text("QR Code", 105, currentY + 13, { align: 'center' });
+        }
+      } catch (err) {
+        console.error("Error adding QR code image to PDF", err);
+      }
+      currentY += qrHeight + 4;
+
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.setTextColor(108, 200, 176); // Brand Green `#6CC8B0`
+      doc.text("www.remedioemdia.com", 105, currentY, { align: 'center' });
+
+      // --- HEADERS AND FOOTERS LOOP ---
+      const totalPages = doc.getNumberOfPages();
+      const reportTitle = "Relatório de Dados da Conta";
+      
+      for (let i = 1; i <= totalPages; i++) {
+        doc.setPage(i);
+
+        // 1. HEADER (Every Page)
+        const logoWidth = 45;
+        const logoHeight = 12;
+        const logoX = (210 - logoWidth) / 2;
+        try {
+          if (logoImage) {
+            doc.addImage(logoImage, 'PNG', logoX, 10, logoWidth, logoHeight);
+          } else {
+            // Text fallback for logo
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(16);
+            doc.setTextColor(46, 124, 195); // Brand Blue
+            doc.text("Remédio em Dia", 105, 18, { align: 'center' });
+          }
+        } catch (logoErr) {
+          console.error("Error drawing logo in PDF header:", logoErr);
+        }
+
+        // Title of the report below the logo
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(12);
+        doc.setTextColor(46, 124, 195); // Brand Blue
+        doc.text(reportTitle, 105, 28, { align: 'center' });
+
+        // Thin horizontal separator line using the primary color of the brand
+        doc.setDrawColor(46, 124, 195); // Brand Blue
+        doc.setLineWidth(0.3);
+        doc.line(15, 32, 195, 32);
+
+        // 2. FOOTER (Every Page)
+        doc.setDrawColor(226, 232, 240); // slate-200
+        doc.setLineWidth(0.2);
+        doc.line(15, 280, 195, 280);
+
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.setTextColor(100, 116, 139); // slate-500
+        doc.text("Remédio em Dia  |  www.remedioemdia.com", 15, 285);
+        doc.text(`Página ${i} de ${totalPages}`, 195, 285, { align: 'right' });
+      }
 
       // Generate file name
       const year = generationDate.getFullYear();

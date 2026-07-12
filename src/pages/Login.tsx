@@ -62,7 +62,6 @@ const Login: React.FC = () => {
     setError(null);
     
     try {
-      console.log('Starting Google Login...');
       await signInWithGoogle();
       // Nota: O signInWithOAuth em ambiente web causa um redirect,
       // então o código abaixo pode não ser executado se o redirect for bem-sucedido.

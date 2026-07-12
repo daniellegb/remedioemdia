@@ -159,7 +159,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       }
 
       // Free user (or expired subscriber): Delete immediately
-      console.log(`[DeleteAPI] Usuário Free ${userId} solicitou exclusão. Excluindo conta imediatamente.`);
+      console.log('[DeleteAPI] Free user requested deletion. Deleting account immediately.');
       const { error: deleteErr } = await supabaseAdmin.auth.admin.deleteUser(userId);
 
       if (deleteErr) {

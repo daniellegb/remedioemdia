@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const syncedProfile = await stripeServerService.syncSubscription(userId);
-    console.log('[SyncSubscription] Subscription synced successfully for user:', userId);
+    console.log('[SyncSubscription] Subscription synced successfully');
     res.status(200).json({ profile: syncedProfile });
   } catch (error: any) {
     console.error('[SyncSubscription] Error:', error);

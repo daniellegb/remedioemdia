@@ -296,12 +296,9 @@ const MainApp: React.FC = () => {
     if (now - lastSyncTimeRef.current < 10000) return;
     lastSyncTimeRef.current = now;
     
-    console.log('[MainApp] [performSubscriptionSync] Iniciando sincronização em segundo plano...');
-    
     // Rodar a sincronização do Stripe de forma resiliente e isolada
     try {
       await stripeClientService.syncSubscription(user.id);
-      console.log('[MainApp] [performSubscriptionSync] Sincronização do Stripe concluída com sucesso.');
     } catch (stripeErr) {
       console.warn('[MainApp] [performSubscriptionSync] Sincronização do Stripe falhou (não-bloqueante):', stripeErr);
     }
@@ -310,7 +307,6 @@ const MainApp: React.FC = () => {
     try {
       await refreshProfile();
       await checkReactivationNotification();
-      console.log('[MainApp] [performSubscriptionSync] Atualização de perfil e notificações concluída.');
     } catch (err) {
       console.error('[MainApp] [performSubscriptionSync] Erro na atualização de perfil ou notificações:', err);
     }
@@ -328,21 +324,18 @@ const MainApp: React.FC = () => {
     checkReactivationNotification();
 
     const handleFocus = () => {
-      console.log('[MainApp] Janela focada, iniciando sincronização em segundo plano...');
       performSubscriptionSync().catch(err => console.warn('[MainApp] Erro na sincronização de assinatura ao focar:', err));
     };
 
     window.addEventListener('focus', handleFocus);
 
     // Dynamic real-time subscription for instant updates
-    console.log(`[MainApp] Subscribing to instant real-time notification_queue changes for user: ${user.id}`);
     const channel = supabase
       .channel(`notification-queue-changes-${user.id}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'notification_queue', filter: `user_id=eq.${user.id}` },
         async (payload) => {
-          console.log('[MainApp] Real-time notification inserted:', payload.new);
           if (payload.new && payload.new.title === 'Exclusão de Conta Cancelada 🔒' && !payload.new.sent) {
             let dismissedIds: string[] = [];
             try {
@@ -400,22 +393,6 @@ const MainApp: React.FC = () => {
     }
   };
 
-  // Diagnostic logs
-  useEffect(() => {
-    if (!user || !profile || dataLoading) return;
-    const activeMeds = meds.filter(m => !m.deleted && m.active !== false);
-    const activeApps = appointments.filter(a => !a.deleted && a.active !== false);
-    console.log('[Plan Control] Diagnostics:', {
-      userId: user.id,
-      plan: profile.plan,
-      isPremium,
-      planMismatchPending: profile.plan_mismatch_pending,
-      activeMedsCount: activeMeds.length,
-      activeAppsCount: activeApps.length,
-      shouldBePending: !isPremium && (activeMeds.length > 3 || activeApps.length > 5)
-    });
-  }, [user, profile, isPremium, meds, appointments, dataLoading]);
-
   // Detecção automática de pendência de plano pós-downgrade
   useEffect(() => {
     if (!user || !profile || dataLoading) return;
@@ -428,7 +405,6 @@ const MainApp: React.FC = () => {
       const shouldBePending = activeMedsCount > 3 || activeAppsCount > 5;
       
       if (shouldBePending && !profile.plan_mismatch_pending) {
-        console.log('[Plan Control] Mismatch detected! Setting plan_mismatch_pending to true.');
         const updatePending = async () => {
           try {
             const { error } = await supabase
@@ -616,44 +592,34 @@ const MainApp: React.FC = () => {
       console.warn('[MainApp] Tentativa de salvar medicamento sem usuário autenticado.');
       return;
     }
-    console.log('[MainApp] handleSaveMedication chamado com dados:', newMed);
     try {
       const exists = meds.some(m => m.id === newMed.id);
       if (exists) {
-        console.log(`[MainApp] Medicamento ID ${newMed.id} já existe. Atualizando registro...`);
         const oldMed = meds.find(m => m.id === newMed.id);
         if (oldMed && oldMed.active === false && newMed.active !== false) {
           const activeMedsCount = meds.filter(m => m.active !== false && m.deleted !== true).length;
           if (!isPremium && activeMedsCount >= FREE_PLAN_LIMITS.medications) {
-            console.log('[MainApp] Limite de plano gratuito atingido ao reativar medicamento.');
             setLimitModalOpen(true);
             return;
           }
         }
         const updated = await medicationService.updateMedication(user.id, newMed.id, newMed);
-        console.log('[MainApp] Medicamento atualizado no banco com sucesso:', updated);
         const newMeds = meds.map(m => m.id === updated.id ? updated : m);
         setMeds(newMeds);
-        console.log('[MainApp] Sincronizando lembretes de push pós-atualização...');
         await pushService.syncMedicationReminders(user.id, newMeds);
       } else {
-        console.log('[MainApp] Medicamento novo. Criando registro...');
         const activeMedsCount = meds.filter(m => m.active !== false && m.deleted !== true).length;
         if (!isPremium && activeMedsCount >= FREE_PLAN_LIMITS.medications) {
-          console.log('[MainApp] Limite de plano gratuito atingido para novo medicamento.');
           setLimitModalOpen(true);
           return;
         }
         const finalMed = { ...newMed, color: newMed.color || COLORS[Math.floor(Math.random() * COLORS.length)] };
         const created = await medicationService.createMedication(user.id, finalMed);
-        console.log('[MainApp] Medicamento criado no banco com sucesso:', created);
         const newMeds = [created, ...meds];
         setMeds(newMeds);
-        console.log('[MainApp] Sincronizando lembretes de push pós-criação...');
         await pushService.syncMedicationReminders(user.id, newMeds);
       }
       setEditingMedication(null);
-      console.log('[MainApp] Mudando visualização para lista de medicamentos ("meds")');
       setView('meds');
     } catch (error) {
       console.error('[MainApp] Erro em handleSaveMedication:', error);
@@ -782,37 +748,29 @@ const MainApp: React.FC = () => {
       console.warn('[MainApp] Tentativa de salvar compromisso sem usuário autenticado.');
       return;
     }
-    console.log('[MainApp] handleSaveAppointment chamado com dados:', newApp);
     try {
       const exists = appointments.some(app => app.id === newApp.id);
       if (exists) {
-        console.log(`[MainApp] Compromisso ID ${newApp.id} já existe. Atualizando registro...`);
         const oldApp = appointments.find(a => a.id === newApp.id);
         if (oldApp && oldApp.active === false && newApp.active !== false) {
           const activeAppsCount = appointments.filter(a => a.active !== false && a.deleted !== true).length;
           if (!isPremium && activeAppsCount >= FREE_PLAN_LIMITS.appointments) {
-            console.log('[MainApp] Limite de plano gratuito atingido ao reativar compromisso.');
             setLimitModalOpen(true);
             return;
           }
         }
         const updated = await appointmentService.updateAppointment(user.id, newApp.id, newApp);
-        console.log('[MainApp] Compromisso atualizado no banco com sucesso:', updated);
         setAppointments(prev => prev.map(app => app.id === updated.id ? updated : app));
       } else {
-        console.log('[MainApp] Compromisso novo. Criando registro...');
         const activeAppsCount = appointments.filter(a => a.active !== false && a.deleted !== true).length;
         if (!isPremium && activeAppsCount >= FREE_PLAN_LIMITS.appointments) {
-          console.log('[MainApp] Limite de plano gratuito atingido para novo compromisso.');
           setLimitModalOpen(true);
           return;
         }
         const created = await appointmentService.createAppointment(user.id, newApp);
-        console.log('[MainApp] Compromisso criado no banco com sucesso:', created);
         setAppointments(prev => [created, ...prev]);
       }
       setEditingAppointment(null);
-      console.log('[MainApp] Mudando visualização para lista de compromissos ("appointments")');
       setView('appointments');
     } catch (error) {
       console.error('[MainApp] Erro em handleSaveAppointment:', error);

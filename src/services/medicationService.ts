@@ -37,16 +37,13 @@ const nullIfEmpty = (val: string | undefined | null) => {
 
 export const medicationService = {
   async getMedications(userId: string) {
-    console.log(`[Repository] [getMedications] Entrando para usuário: ${userId}`);
     try {
-      console.log(`[Repository] [getMedications] Antes do select medications`);
       const { data, error } = await supabase
         .from('medications')
         .select('*')
         .eq('user_id', userId)
         .order('created_at', { ascending: false });
 
-      console.log(`[Repository] [getMedications] Depois do select medications`);
       if (error) {
         console.error(`[Repository] [getMedications] Erro retornado pelo Supabase:`, error);
         throw error;
@@ -59,14 +56,12 @@ export const medicationService = {
   },
 
   async createMedication(userId: string, data: Omit<Medication, 'id'>) {
-    console.log(`[Repository] [createMedication] Entrando para usuário: ${userId}, med: ${data.name}`);
     try {
       const nextDoseAt = getNextDoseAt(data as Medication);
       
       // Sanitização para evitar erros de tipo no Supabase (colunas INTEGER vs strings '1x')
       const dosesPerDayInt = data.dosesPerDay ? parseInt(data.dosesPerDay) : 1;
       
-      console.log(`[Repository] [createMedication] Antes do insert medications`);
       const { data: created, error } = await supabase
         .from('medications')
         .insert([{ 
@@ -96,7 +91,6 @@ export const medicationService = {
         .select()
         .single();
 
-      console.log(`[Repository] [createMedication] Depois do insert medications`);
       if (error) {
         console.error(`[Repository] [createMedication] Erro retornado pelo Supabase:`, error);
         throw error;
@@ -109,7 +103,6 @@ export const medicationService = {
   },
 
   async updateMedication(userId: string, id: string, data: Partial<Medication>) {
-    console.log(`[Repository] [updateMedication] Entrando para usuário: ${userId}, medId: ${id}`);
     try {
       const updateData: any = {};
       if (data.name !== undefined) updateData.name = data.name;
@@ -139,9 +132,7 @@ export const medicationService = {
 
       // Recalcular próxima dose se campos relevantes mudarem
       if (data.times || data.intervalDays || data.usageCategory || data.startDate) {
-        console.log(`[Repository] [updateMedication] Recalculando próxima dose. ANTES de buscar med atual id: ${id}`);
         const { data: current } = await supabase.from('medications').select('*').eq('id', id).single();
-        console.log(`[Repository] [updateMedication] Recalculando próxima dose. DEPOIS de buscar med atual:`, current);
         if (current) {
           const fullMed = mapMedToCamelCase({ ...current, ...updateData });
           updateData.next_dose_at = getNextDoseAt(fullMed);
@@ -150,7 +141,6 @@ export const medicationService = {
         updateData.next_dose_at = data.next_dose_at;
       }
 
-      console.log(`[Repository] [updateMedication] Antes do update medications`);
       const { data: updated, error } = await supabase
         .from('medications')
         .update(updateData)
@@ -159,7 +149,6 @@ export const medicationService = {
         .select()
         .single();
 
-      console.log(`[Repository] [updateMedication] Depois do update medications`);
       if (error) {
         console.error(`[Repository] [updateMedication] Erro retornado pelo Supabase:`, error);
         throw error;
@@ -172,10 +161,8 @@ export const medicationService = {
   },
 
   async deleteMedication(userId: string, id: string, keepHistory: boolean = true) {
-    console.log(`[Repository] [deleteMedication] Entrando para usuário: ${userId}, medId: ${id}, keepHistory: ${keepHistory}`);
     try {
       if (keepHistory) {
-        console.log(`[Repository] [deleteMedication] Antes de marcar como deletado (keepHistory=true)`);
         const { error } = await supabase
           .from('medications')
           .update({
@@ -188,29 +175,24 @@ export const medicationService = {
           .eq('id', id)
           .eq('user_id', userId);
 
-        console.log(`[Repository] [deleteMedication] Depois de marcar como deletado (keepHistory=true)`);
         if (error) {
           console.error(`[Repository] [deleteMedication] Erro no update do soft delete:`, error);
           throw error;
         }
 
         // Inativar também os lembretes automáticos na tabela medication_reminders
-        console.log(`[Repository] [deleteMedication] Antes de desativar lembretes`);
         await supabase
           .from('medication_reminders')
           .update({ active: false })
           .eq('medication_id', id)
           .eq('user_id', userId);
-        console.log(`[Repository] [deleteMedication] Depois de desativar lembretes`);
       } else {
-        console.log(`[Repository] [deleteMedication] Antes do delete físico (keepHistory=false)`);
         const { error } = await supabase
           .from('medications')
           .delete()
           .eq('id', id)
           .eq('user_id', userId);
 
-        console.log(`[Repository] [deleteMedication] Depois do delete físico (keepHistory=false)`);
         if (error) {
           console.error(`[Repository] [deleteMedication] Erro no delete físico:`, error);
           throw error;

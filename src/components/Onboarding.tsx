@@ -22,10 +22,8 @@ const Onboarding: React.FC<Props> = ({ onComplete }) => {
   const handleFinish = async (skipMedication: boolean) => {
     if (isSubmitting) return;
     setIsSubmitting(true);
-    console.log('Finalizing onboarding...', { skipMedication });
     try {
       await completeOnboarding();
-      console.log('Onboarding data saved successfully');
       await onComplete(skipMedication);
     } catch (error) {
       console.error('Error in handleFinish:', error);

@@ -46,8 +46,6 @@ export const authService = {
       ? 'io.medmanager.app://auth/callback' 
       : `${window.location.origin}/dashboard`;
     
-    console.log('Google login redirectUrl:', redirectUrl);
-
     return await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {

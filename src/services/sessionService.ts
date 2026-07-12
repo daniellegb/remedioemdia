@@ -128,12 +128,10 @@ export const sessionService = {
    * Revokes (deletes) a specific session.
    */
   async revokeSession(sessionId: string): Promise<void> {
-    console.log(`[sessionService] [revokeSession] ANTES do delete da sessão: ${sessionId}`);
     const { error } = await supabase
       .from('active_sessions')
       .delete()
       .eq('session_id', sessionId);
-    console.log(`[sessionService] [revokeSession] DEPOIS do delete da sessão: ${sessionId}`);
 
     if (error) {
       console.error('[SessionService] Error revoking session:', error);
@@ -145,18 +143,14 @@ export const sessionService = {
    * Revokes all other sessions except the current one.
    */
   async revokeAllOtherSessions(currentSessionId: string): Promise<void> {
-    console.log(`[sessionService] [revokeAllOtherSessions] ANTES do auth.getUser()`);
     const { data: { user } } = await supabase.auth.getUser();
-    console.log(`[sessionService] [revokeAllOtherSessions] DEPOIS do auth.getUser()`);
     if (!user) throw new Error('Usuário não autenticado');
 
-    console.log(`[sessionService] [revokeAllOtherSessions] ANTES do delete de outras sessões para o usuário: ${user.id}`);
     const { error } = await supabase
       .from('active_sessions')
       .delete()
       .eq('user_id', user.id)
       .neq('session_id', currentSessionId);
-    console.log(`[sessionService] [revokeAllOtherSessions] DEPOIS do delete de outras sessões`);
 
     if (error) {
       console.error('[SessionService] Error revoking all other sessions:', error);

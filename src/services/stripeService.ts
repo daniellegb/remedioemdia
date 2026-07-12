@@ -104,7 +104,7 @@ export const stripeService = {
         const session = event.data.object as Stripe.Checkout.Session;
         const userId = session.metadata?.userId;
         const sessionId = session.id;
-        console.log(`[StripeService] Checkout Session Completed: ${sessionId} for User: ${userId}`);
+        console.log('[StripeService] Checkout Session Completed');
         
         if (userId) {
           await this.updateProfileSubscription(userId, {
@@ -187,11 +187,11 @@ export const stripeService = {
       .single();
 
     if (error) {
-      console.error(`[StripeService] [Supabase Update Result] FAIL for profile ${userId}:`, error.message);
+      console.error(`[StripeService] [Supabase Update Result] FAIL for profile:`, error.message);
       throw error;
     }
 
-    console.log(`[StripeService] [Supabase Update Result] SUCCESS for profile ${userId}. Updates applied:`, JSON.stringify(updates));
+    console.log('[StripeService] [Supabase Update Result] SUCCESS. Updates applied successfully.');
     return data as Profile;
   }
 };
