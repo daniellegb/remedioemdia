@@ -203,7 +203,7 @@ const Subscription: React.FC<Props> = ({ setView }) => {
                   ) : (
                     <>
                       <Sparkles size={20} />
-                      Assinar Premium - R$ 14,99/mês
+                      Assinar Premium - R$ 14,90/mês
                     </>
                   )}
                 </button>
@@ -307,7 +307,7 @@ const Subscription: React.FC<Props> = ({ setView }) => {
                 ) : (
                   <>
                     <Sparkles size={20} />
-                    Assinar Premium - R$ 14,99/mês
+                    Assinar Premium - R$ 14,90/mês
                   </>
                 )}
               </button>
