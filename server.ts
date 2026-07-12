@@ -2,7 +2,6 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import fs from 'fs';
 import { createClient } from '@supabase/supabase-js';
 import postgres from 'postgres';
 
@@ -403,9 +402,11 @@ function startScheduledDeletionWorker() {
 async function createServer() {
   const app = express();
 
-  // Logging middleware to help debug backend requests
+  // Logging middleware to help debug backend API requests
   app.use((req, res, next) => {
-    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    if (req.url.startsWith('/api/')) {
+      console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    }
     next();
   });
 
@@ -417,44 +418,6 @@ async function createServer() {
   app.post('/api/stripe/create-portal-session', (req, res) => portalHandler(req as any, res as any));
   app.post('/api/stripe/sync-subscription', (req, res) => syncHandler(req as any, res as any));
   app.post('/api/stripe/webhook', (req, res) => webhookHandler(req as any, res as any));
-
-  // 1b. Debug Logs Endpoint for Diagnostic Telemetry
-  app.post('/api/debug/logs', (req, res) => {
-    try {
-      const logs = req.body.logs;
-      if (Array.isArray(logs)) {
-        const logFilePath = path.join(process.cwd(), 'frontend_debug_logs.txt');
-        const formattedLogs = logs.map(l => {
-          if (typeof l === 'object') {
-            try {
-              return JSON.stringify(l);
-            } catch (err) {
-              return '[Object circular/unserializable]';
-            }
-          }
-          return String(l);
-        }).join('\n') + '\n';
-        
-        fs.appendFileSync(logFilePath, formattedLogs, 'utf8');
-      }
-      res.json({ success: true });
-    } catch (e: any) {
-      console.error('[Debug API] Error logging to file:', e.message);
-      res.status(500).json({ error: e.message });
-    }
-  });
-
-  app.get('/api/debug/logs/clear', (req, res) => {
-    try {
-      const logFilePath = path.join(process.cwd(), 'frontend_debug_logs.txt');
-      if (fs.existsSync(logFilePath)) {
-        fs.unlinkSync(logFilePath);
-      }
-      res.json({ success: true, message: 'Logs de debug limpos com sucesso.' });
-    } catch (e: any) {
-      res.status(500).json({ error: e.message });
-    }
-  });
 
   // 2. Safe and Secure Authentication-Authorized Account Deletion API Endpoint
   app.post('/api/user/delete', async (req, res): Promise<any> => {

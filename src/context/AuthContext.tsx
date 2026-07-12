@@ -51,23 +51,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const fetchProfile = useCallback(async (userId: string, authUser?: User | null) => {
     try {
       // Tentar buscar do backend
-      console.log('[profiles query] Antes do select');
       const step1 = supabase.from('profiles').select('*');
-      console.log('[profiles query] Depois do select');
-      
       const step2 = step1.eq('id', userId);
-      
-      console.log('[profiles query] Antes do .single()');
       const step3 = step2.single();
-      console.log('[profiles query] Depois do .single()');
-      
-      console.log('[profiles query] Antes do then');
-      console.log('[fetchProfile] ANTES do await step3');
-      console.log('[profiles query] Antes do retorno ao AuthContext');
       const { data, error } = await step3;
-      console.log('[profiles query] Depois do retorno ao AuthContext');
-      console.log('[fetchProfile] DEPOIS do await step3');
-      console.log('[profiles query] Depois do then');
       
       if (error) {
         console.warn('Error fetching profile from backend, checking cache...', error);
@@ -75,7 +62,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (error.code === 'PGRST116') {
           console.log('[AuthContext] Profile row not found. Creating a default profile row on the fly...');
           try {
-            console.log('[fetchProfile] Obter resolvedUser');
             const resolvedUser = authUser ?? (await supabase.auth.getUser()).data.user;
             if (resolvedUser) {
               const name = resolvedUser.user_metadata?.full_name || resolvedUser.user_metadata?.name || resolvedUser.email?.split('@')[0] || 'Usuário';
@@ -83,23 +69,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 id: userId,
                 name: name
               };
-              console.log('[fetchProfile] ANTES do await supabase.from(profiles).insert(...)');
               const { data: insertedData, error: insertError } = await supabase
                 .from('profiles')
                 .insert([newProfile])
                 .select()
                 .single();
-              console.log('[fetchProfile] DEPOIS do await supabase.from(profiles).insert(...)');
               
               if (!insertError && insertedData) {
                 console.log('[AuthContext] Default profile row created successfully on the fly:', insertedData);
-                console.log('[fetchProfile] ANTES do await subscriptionService.refreshSubscriptionStatus(...) [on creation]');
                 const updatedProfile = await subscriptionService.refreshSubscriptionStatus(insertedData as Profile);
-                console.log('[fetchProfile] DEPOIS do await subscriptionService.refreshSubscriptionStatus(...) [on creation]');
                 setProfile(updatedProfile);
                 setProfileLoaded(true);
-                console.log('[fetchProfile] ANTES do return (caminho PGRST116 sucesso)');
-                return console.log('[fetchProfile] DEPOIS do return (avaliado antes do retorno de PGRST116 sucesso)');
+                return;
               } else if (insertError) {
                 console.error('[AuthContext] Error creating profile row on the fly:', insertError.message);
               }
@@ -123,8 +104,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
         
         setProfileLoaded(true);
-        console.log('[fetchProfile] ANTES do return (caminho PGRST116 final)');
-        return console.log('[fetchProfile] DEPOIS do return (avaliado antes do retorno de PGRST116 final)');
+        return;
       }
       
       const currentProfile = data as Profile;
@@ -132,7 +112,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       // Fetch user metadata backup for account deletion properties
       let meta: any = {};
       try {
-        console.log('[fetchProfile] Obter resolvedUserBackup [backup metadata]');
         const resolvedUserBackup = authUser ?? (await supabase.auth.getUser()).data.user;
         if (resolvedUserBackup?.user_metadata) {
           meta = resolvedUserBackup.user_metadata;
@@ -148,26 +127,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         scheduled_deletion_at: currentProfile.scheduled_deletion_at || meta.scheduled_deletion_at || null
       };
       
-      console.log('[fetchProfile] ANTES do await subscriptionService.refreshSubscriptionStatus(...) [on normal fetch]');
       const updatedProfile = await subscriptionService.refreshSubscriptionStatus(mergedProfile);
-      console.log('[fetchProfile] DEPOIS do await subscriptionService.refreshSubscriptionStatus(...) [on normal fetch]');
       setProfile(updatedProfile);
     } catch (err) {
-      console.log('[fetchProfile] Interceptado erro que seria lançado. Erro:', err);
       console.error('Unexpected error fetching profile:', err);
     } finally {
-      console.log('[fetchProfile] ANTES do finally');
       setProfileLoaded(true);
-      console.log('[fetchProfile] DEPOIS do finally');
     }
   }, [isConfigured]);
 
   useEffect(() => {
-    // Diagnostics
-    const status = getSupabaseStatus();
-    console.log('[Auth] Supabase Status:', status);
-    console.log('[Auth] Current Hash:', window.location.hash ? 'Has hash' : 'None');
-
     if (!isConfigured) {
       setLoading(false);
       return;
@@ -221,10 +190,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     // Listen for changes on auth state
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, currentSession) => {
-      const callbackId = Math.random().toString(36).substring(2, 7);
-      const timestamp = new Date().toISOString();
-      console.log(`[onAuthStateChange Callback] [${callbackId}] [${timestamp}] Evento: ${event}`);
-      
       const newUser = currentSession?.user ?? null;
       
       // Update session/user
@@ -255,7 +220,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     const currentProfile = profileRef.current;
     if (!currentProfile || currentProfile.id !== user.id) {
-      console.log(`[AuthContext Effect] Carregando perfil assincronamente para o usuário: ${user.id}`);
       fetchProfile(user.id, user);
     }
   }, [user?.id, isConfigured, fetchProfile]);
@@ -267,7 +231,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     const channel = supabase
       .channel(`profile-db-changes-${user.id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles', filter: `id=eq.${user.id}` }, async (payload) => {
-        console.log('[AuthContext] Profiles table changed. Tracing updates:', payload);
         if (payload.new) {
           await fetchProfile(user.id, user);
         }
@@ -331,7 +294,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         schema: 'public',
         table: 'active_sessions'
       }, (payload) => {
-        console.log('[SessionTracker] Realtime DELETE payload received:', JSON.stringify(payload));
         const oldRow = payload.old;
         if (oldRow) {
           // Robust checking: verify that localId and oldRow variables are actual valid session keys and not placeholders/undef
@@ -346,28 +308,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const isOldRowIdValid = !!(oldRow.id && oldRow.id !== 'undefined' && oldRow.id !== 'null' && oldRow.id.trim() !== '');
           const matchesDbId = isSessionDbIdValid && isOldRowIdValid && oldRow.id === sessionDbId;
           
-          console.log('[SessionTracker] Match evaluation:', {
-            matchesSecId,
-            matchesDbId,
-            oldRowSessionId: oldRow.session_id,
-            localId,
-            oldRowId: oldRow.id,
-            sessionDbId,
-            isLocalIdValid,
-            isOldRowSessionIdValid,
-            isSessionDbIdValid,
-            isOldRowIdValid
-          });
-          
           if (matchesSecId || matchesDbId) {
             console.log('[SessionTracker] Match found! Initiating instant remote sign out...');
             handleRemoteLogout();
           }
         }
       })
-      .subscribe((status) => {
-        console.log(`[SessionTracker] Realtime subscription status: ${status}`);
-      });
+      .subscribe();
 
     // Stand up periodic activity update & validity checking (fallback)
     const interval = setInterval(async () => {
@@ -375,7 +322,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       
       // Evitar chamadas desnecessárias ao banco de dados enquanto a aba estiver inativa/background
       if (document.visibilityState !== 'visible') {
-        console.log('[SessionTracker] Aba em segundo plano/minimizado. Pulando checagem de atividade periódica.');
         return;
       }
 
