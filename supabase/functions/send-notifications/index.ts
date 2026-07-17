@@ -65,7 +65,7 @@ serve(async (req) => {
         };
         await webpush.sendNotification(pushSubscription, JSON.stringify({
           title: 'Teste de Notificação 🚀',
-          body: 'Se você recebeu isso, o backend está configurado corretamente!',
+          body: 'Seu sistema de notificações está funcionando corretamente!',
           url: '/dashboard'
         }))
       }
