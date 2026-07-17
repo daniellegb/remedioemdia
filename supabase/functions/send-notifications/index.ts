@@ -237,9 +237,14 @@ serve(async (req) => {
 
               if (!pushSubscription.keys.p256dh || !pushSubscription.keys.auth) continue;
 
+              const userDateStr = now.toLocaleDateString('pt-BR', {
+                timeZone: sub.timezone || 'UTC'
+              });
+              const formattedBody = `Tomar ${reminder.medication_name}, às ${reminderTimeShort} de ${userDateStr}.`;
+
               await webpush.sendNotification(pushSubscription, JSON.stringify({
                 title: 'Hora do Medicamento 💊',
-                body: reminder.message_template || `Lembrete: Tomar ${reminder.medication_name}`,
+                body: formattedBody,
                 url: '/dashboard'
               }))
               sentEndpoints.add(endpoint);

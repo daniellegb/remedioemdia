@@ -80,11 +80,11 @@ export const pushService = {
                 medication_name: med.name,
                 reminder_time: time,
                 active: true,
-                message_template: `Hora de tomar ${med.name}`
+                message_template: `Tomar ${med.name}`
               });
 
-              // Lembrete antecipado (se configurado)
-              if (preNotificationMinutes > 0) {
+              // Lembrete antecipado (se configurado) - Desabilitado para o MVP
+              if (false && preNotificationMinutes > 0) {
                 const [hours, minutes] = time.split(':').map(Number);
                 const date = new Date();
                 date.setHours(hours, minutes, 0, 0);

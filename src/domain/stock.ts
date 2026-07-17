@@ -27,7 +27,9 @@ export const calculateDosesPerDay = (med: Medication): number => {
  */
 export const calculateDaysOfStockLeft = (med: Medication): number | null => {
   if (med.currentStock <= 0) return 0;
-  if (med.usageCategory === 'prn') return null;
+  if (med.usageCategory === 'prn') {
+    return med.currentStock;
+  }
 
   const dosesPerDay = calculateDosesPerDay(med);
   if (dosesPerDay <= 0) return null;

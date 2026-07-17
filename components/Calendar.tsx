@@ -331,7 +331,7 @@ const Calendar: React.FC<Props> = React.memo(({ appointments, meds, doses, onTog
     <div className="space-y-6 pb-20 md:pb-0">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-slate-900">Calendário</h2>
+          <h2 className="text-2xl font-bold text-slate-900">Calendário Inteligente</h2>
           <p className="text-sm text-slate-500">Acompanhe sua rotina de saúde</p>
         </div>
 
