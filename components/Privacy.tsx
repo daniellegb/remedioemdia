@@ -21,9 +21,12 @@ const loadImage = (src: string): Promise<HTMLImageElement> => {
 
 interface Props {
   setView: (view: ViewType) => void;
+  initialShowReportConfig?: boolean;
+  onResetReportConfig?: () => void;
+  onBackToPrevious?: () => void;
 }
 
-const Privacy: React.FC<Props> = ({ setView }) => {
+const Privacy: React.FC<Props> = ({ setView, initialShowReportConfig, onResetReportConfig, onBackToPrevious }) => {
   const { user, profile } = useAuth();
   const [loading, setLoading] = useState(false);
   const [success, setSuccess] = useState(false);
@@ -36,7 +39,13 @@ const Privacy: React.FC<Props> = ({ setView }) => {
   const [dbLoading, setDbLoading] = useState(false);
 
   // States for report config
-  const [showReportConfig, setShowReportConfig] = useState(false);
+  const [showReportConfig, setShowReportConfig] = useState(initialShowReportConfig ?? false);
+
+  useEffect(() => {
+    if (initialShowReportConfig !== undefined) {
+      setShowReportConfig(initialShowReportConfig);
+    }
+  }, [initialShowReportConfig]);
   const [periodOption, setPeriodOption] = useState<'7' | '30' | '90' | 'all' | 'custom'>('30');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -1239,6 +1248,11 @@ const Privacy: React.FC<Props> = ({ setView }) => {
               setShowReportConfig(false);
               setReportSuccess(false);
               setError(null);
+              if (onBackToPrevious) {
+                onBackToPrevious();
+              } else if (onResetReportConfig) {
+                onResetReportConfig();
+              }
             }}
             className="p-2.5 bg-white hover:bg-slate-50 border border-slate-100 rounded-2xl text-slate-500 hover:text-slate-800 transition-colors shadow-sm cursor-pointer flex items-center justify-center"
             title="Voltar"
@@ -1552,33 +1566,6 @@ const Privacy: React.FC<Props> = ({ setView }) => {
           </button>
         </div>
 
-        {/* Card: Relatório de Histórico de Tomadas */}
-        <div id="privacy-report-card" className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 space-y-6">
-          <div className="flex gap-4 items-start">
-            <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl shrink-0">
-              <FileText size={24} />
-            </div>
-            <div className="space-y-1">
-              <h3 className="font-bold text-slate-800 text-lg">Relatório de Histórico de Tomadas</h3>
-              <p className="text-slate-500 text-sm leading-relaxed">
-                Gere um relatório em PDF com o histórico completo de tomadas dos seus medicamentos no período configurado.
-              </p>
-            </div>
-          </div>
-
-          <button
-            id="btn-open-report-config"
-            onClick={() => {
-              setSuccess(false);
-              setReportSuccess(false);
-              setError(null);
-              setShowReportConfig(true);
-            }}
-            className="w-full font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white shadow-lg shadow-blue-100 active:scale-[0.98] cursor-pointer"
-          >
-            Configurar e Gerar Relatório
-          </button>
-        </div>
 
         {/* Card: Política de Privacidade */}
         <div id="privacy-policy-card" className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 space-y-6">
@@ -1589,7 +1576,7 @@ const Privacy: React.FC<Props> = ({ setView }) => {
             <div className="space-y-1">
               <h3 className="font-bold text-slate-800 text-lg">Política de Privacidade</h3>
               <p className="text-slate-500 text-sm leading-relaxed">
-                Entenda como coletamos, protegemos e tratamos as suas informações pessoais e médicas.
+                Entenda como coletamos, protegemos e tratamos as suas informações pessoais.
               </p>
             </div>
           </div>
@@ -1602,6 +1589,31 @@ const Privacy: React.FC<Props> = ({ setView }) => {
             className="w-full font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all active:scale-[0.98] cursor-pointer"
           >
             Acessar a Política de Privacidade
+          </a>
+        </div>
+
+        {/* Card: Termos de Uso */}
+        <div id="terms-of-use-card" className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 space-y-6">
+          <div className="flex gap-4 items-start">
+            <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl shrink-0">
+              <FileText size={24} />
+            </div>
+            <div className="space-y-1">
+              <h3 className="font-bold text-slate-800 text-lg">Termos de Uso</h3>
+              <p className="text-slate-500 text-sm leading-relaxed">
+                Consulte os termos e condições para utilizar o Remédio em Dia.
+              </p>
+            </div>
+          </div>
+
+          <a
+            id="btn-access-terms-of-use"
+            href="https://remedioemdia.com/termosdeuso/"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-full font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all active:scale-[0.98] cursor-pointer"
+          >
+            Acessar os Termos de Uso
           </a>
         </div>
       </div>

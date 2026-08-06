@@ -119,7 +119,7 @@ export interface UserPreferences {
   updated_at?: string; // ISO string
 }
 
-export type ViewType = 'dashboard' | 'calendar' | 'meds' | 'appointments' | 'settings' | 'add-appointment' | 'add-med' | 'onboarding' | 'subscription' | 'security' | 'privacy' | 'help-support';
+export type ViewType = 'dashboard' | 'calendar' | 'meds' | 'appointments' | 'settings' | 'add-appointment' | 'add-med' | 'onboarding' | 'subscription' | 'security' | 'privacy' | 'help-support' | 'dose-report';
 
 export interface ActiveSession {
   id: string;

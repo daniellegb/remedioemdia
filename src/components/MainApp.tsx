@@ -85,6 +85,13 @@ const MainApp: React.FC = () => {
   const [editingMedication, setEditingMedication] = useState<Medication | null>(null);
   const [initialMedCategory, setInitialMedCategory] = useState<UsageCategory | undefined>(undefined);
   
+  const [privacyShowReportConfig, setPrivacyShowReportConfig] = useState(false);
+
+  const handleOpenReportFromDashboard = () => {
+    setPrivacyShowReportConfig(true);
+    setView('privacy');
+  };
+
   const [view, setView] = useState<ViewType>(() => {
     if (location.state?.openAddMed) return 'add-med';
     return 'dashboard';
@@ -894,6 +901,8 @@ const MainApp: React.FC = () => {
           onDeleteAppointment={handleDeleteAppointment}
           onEditAppointment={handleEditAppointment}
           onAddMed={handleAddMed}
+          onOpenReport={handleOpenReportFromDashboard}
+          setView={setView}
         />;
       case 'meds':
         return <Medications meds={meds} settings={settings} onAdd={() => handleAddMed()} onEdit={handleEditMedication} onDelete={handleDeleteMed} onReactivate={handleReactivateMed} isPremium={isPremium} onUpgradeClick={() => setView('subscription')} />;
@@ -917,7 +926,31 @@ const MainApp: React.FC = () => {
       case 'security':
         return <Security setView={setView} />;
       case 'privacy':
-        return <Privacy setView={setView} />;
+        return (
+          <Privacy 
+            setView={setView} 
+            initialShowReportConfig={privacyShowReportConfig}
+            onResetReportConfig={() => setPrivacyShowReportConfig(false)}
+            onBackToPrevious={() => {
+              setPrivacyShowReportConfig(false);
+              if (privacyShowReportConfig) {
+                setView('dashboard');
+              }
+            }}
+          />
+        );
+      case 'dose-report':
+        return (
+          <Privacy 
+            setView={setView} 
+            initialShowReportConfig={true}
+            onResetReportConfig={() => setPrivacyShowReportConfig(false)}
+            onBackToPrevious={() => {
+              setPrivacyShowReportConfig(false);
+              setView('dashboard');
+            }}
+          />
+        );
       case 'help-support':
         return <HelpSupport setView={setView} />;
       default:
@@ -932,6 +965,8 @@ const MainApp: React.FC = () => {
           onDeleteAppointment={handleDeleteAppointment}
           onEditAppointment={handleEditAppointment}
           onAddMed={handleAddMed}
+          onOpenReport={handleOpenReportFromDashboard}
+          setView={setView}
         />;
     }
   };
@@ -990,7 +1025,7 @@ const MainApp: React.FC = () => {
         />
       </motion.header>
 
-      <Navigation currentView={view === 'add-appointment' ? 'appointments' : (view === 'add-med' ? 'meds' : view)} setView={setView} />
+      <Navigation currentView={view === 'add-appointment' ? 'appointments' : (view === 'add-med' ? 'meds' : (view === 'dose-report' ? 'dashboard' : view))} setView={setView} />
       <main className="flex-1 md:ml-64 p-4 pt-20 md:pt-10 md:p-10 transition-all duration-300">
         <div className="max-w-6xl mx-auto">
           {dataLoading ? (

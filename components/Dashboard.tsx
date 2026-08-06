@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Medication, DoseEvent, Appointment, AppSettings, UsageCategory } from '../types';
+import { Medication, DoseEvent, Appointment, AppSettings, UsageCategory, ViewType } from '../types';
 import { CheckCircle2, Circle, Calendar as CalendarIcon, ChevronRight, Clock as ClockIcon, AlertTriangle, XCircle, AlertCircle, Pill, AlertOctagon, TestTubeDiagonal, MapPin, FileText, Map, Navigation, ChevronDown, ChevronUp, Stethoscope, Trash2, Pencil } from 'lucide-react';
 import { calculateDaysOfStockLeft } from '../src/domain/stock';
 import { isMedicationExpired, getDaysUntilExpiry, calculatePeriodDoses, isContraceptivePauseDay } from '../src/domain/medicationRules';
@@ -20,9 +20,11 @@ interface Props {
   onDeleteAppointment?: (id: string) => void;
   onEditAppointment?: (app: Appointment) => void;
   onAddMed: (category?: UsageCategory) => void;
+  onOpenReport?: () => void;
+  setView?: (view: ViewType) => void;
 }
 
-const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, settings, onToggleDose, onEditMed, onUpdateSettings, onDeleteAppointment, onEditAppointment, onAddMed }) => {
+const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, settings, onToggleDose, onEditMed, onUpdateSettings, onDeleteAppointment, onEditAppointment, onAddMed, onOpenReport, setView }) => {
   const { profile, user } = useAuth();
   const [expandedAppId, setExpandedAppId] = useState<string | null>(null);
   const [showPrnSelector, setShowPrnSelector] = useState(false);
@@ -821,6 +823,46 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
                 Nenhum compromisso agendado
               </div>
             )}
+          </div>
+        </section>
+
+        {/* Seção Relatório de Tomadas */}
+        <section id="dashboard-report-shortcut">
+          <div className="flex items-center justify-between mb-5">
+            <h3 className="text-xl font-bold flex items-center gap-2 text-slate-900">
+              <FileText size={22} className="text-blue-500" /> Relatório de Tomadas
+            </h3>
+          </div>
+          <div className="bg-white rounded-[28px] border border-slate-100 shadow-sm p-5 md:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center shrink-0 shadow-xs">
+                <FileText size={24} />
+              </div>
+              <div className="space-y-1">
+                <h4 className="font-bold text-slate-800 text-base md:text-lg leading-snug">
+                  Histórico de Medicamentos
+                </h4>
+                <p className="text-xs md:text-sm text-slate-500 font-medium leading-relaxed">
+                  Gere e exporte o relatório em PDF com seu histórico de remédios tomados.
+                </p>
+              </div>
+            </div>
+            <button
+              id="btn-go-to-report-from-dashboard"
+              type="button"
+              onClick={() => {
+                if (onOpenReport) {
+                  onOpenReport();
+                } else if (setView) {
+                  setView('dose-report');
+                }
+              }}
+              className="w-full sm:w-auto inline-flex items-center justify-center gap-2 px-5 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs md:text-sm rounded-2xl shadow-md shadow-blue-100 active:scale-[0.98] transition-all cursor-pointer shrink-0"
+            >
+              <FileText size={18} />
+              Gerar Relatório
+              <ChevronRight size={16} />
+            </button>
           </div>
         </section>
       </div>
