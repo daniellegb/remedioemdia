@@ -56,15 +56,15 @@ function getMatchingSupabaseUrl(): string {
   return dbUrl || viteUrl;
 }
 
-const supabaseUrl = getMatchingSupabaseUrl();
+const supabaseUrl = getMatchingSupabaseUrl() || 'https://placeholder.supabase.co';
 
-if (!supabaseUrl || !supabaseServiceKey) {
+if (!supabaseUrl || !supabaseServiceKey || supabaseUrl === 'https://placeholder.supabase.co') {
   console.error('[StripeServerService] Missing environment variables: SUPABASE_DB_URL/VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
 }
 
 const supabaseAdmin = createClient(
   supabaseUrl,
-  supabaseServiceKey
+  supabaseServiceKey || 'placeholder_key'
 );
 
 // --- STRIPE ---

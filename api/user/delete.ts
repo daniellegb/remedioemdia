@@ -44,8 +44,8 @@ function getMatchingSupabaseUrl(): string {
   return dbUrl || viteUrl;
 }
 
-const supabaseUrl = getMatchingSupabaseUrl();
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+const supabaseUrl = getMatchingSupabaseUrl() || 'https://placeholder.supabase.co';
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey || 'placeholder_key');
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(`[${new Date().toISOString()}] Delete request: ${req.method} ${req.url}`);

@@ -54,8 +54,8 @@ function getMatchingSupabaseUrl(): string {
   return dbUrl || viteUrl;
 }
 
-const supabaseUrl = getMatchingSupabaseUrl();
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
+const supabaseUrl = getMatchingSupabaseUrl() || 'https://placeholder.supabase.co';
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey || 'placeholder_key');
 
 const activeRef = getProjectRefFromUrl(supabaseUrl);
 const viteRef = getProjectRefFromUrl(process.env.VITE_SUPABASE_URL || '');
@@ -79,7 +79,7 @@ async function runSchemaMigration() {
   
   try {
     console.log('[Migration] Conectando ao banco PostgreSQL para verificar colunas de exclusão de conta...');
-    const sql = postgres(dbUrl, { ssl: 'require' });
+    const sql = postgres(dbUrl, { ssl: 'require', connect_timeout: 10, max: 1 });
     
     await sql`
       ALTER TABLE public.profiles 
@@ -560,14 +560,18 @@ async function createServer() {
 }
 
 const PORT = 3000;
-createServer().then(async app => {
-  // Run PostgreSQL direct schema migration
-  await runSchemaMigration();
-  
-  // Start the background cron worker to complete scheduled deletions
-  startScheduledDeletionWorker();
-  
+createServer().then(app => {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
+    
+    // Run PostgreSQL direct schema migration without blocking server startup
+    runSchemaMigration().catch(err => {
+      console.error('[Migration] Non-blocking schema migration error:', err);
+    });
+    
+    // Start the background cron worker to complete scheduled deletions
+    startScheduledDeletionWorker();
   });
+}).catch(err => {
+  console.error('[Server] Fatal error creating server:', err);
 });
