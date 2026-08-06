@@ -1594,18 +1594,15 @@ const Privacy: React.FC<Props> = ({ setView }) => {
             </div>
           </div>
 
-          <button
+          <a
             id="btn-access-privacy-policy"
-            onClick={() => {
-              setSuccess(false);
-              setReportSuccess(false);
-              setError(null);
-              setShowPolicy(true);
-            }}
+            href="https://remedioemdia.com/privacidade/"
+            target="_blank"
+            rel="noopener noreferrer"
             className="w-full font-bold py-4 px-6 rounded-2xl flex items-center justify-center gap-2 bg-slate-100 hover:bg-slate-200 text-slate-700 transition-all active:scale-[0.98] cursor-pointer"
           >
             Acessar a Política de Privacidade
-          </button>
+          </a>
         </div>
       </div>
     </motion.div>
