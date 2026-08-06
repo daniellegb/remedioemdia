@@ -13,6 +13,7 @@ import Settings from '../../components/Settings';
 import Subscription from '../../components/Subscription';
 import Security from '../../components/Security';
 import Privacy from '../../components/Privacy';
+import HelpSupport from '../../components/HelpSupport';
 import ConfirmationModal from '../../components/ConfirmationModal';
 import { PlanMismatchModal } from '../../components/PlanMismatchModal';
 import { DeleteConfirmationModal } from '../../components/DeleteConfirmationModal';
@@ -917,6 +918,8 @@ const MainApp: React.FC = () => {
         return <Security setView={setView} />;
       case 'privacy':
         return <Privacy setView={setView} />;
+      case 'help-support':
+        return <HelpSupport setView={setView} />;
       default:
         return <Dashboard 
           meds={meds} 
