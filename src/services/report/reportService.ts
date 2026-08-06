@@ -170,7 +170,7 @@ export const reportService = {
     doc.setFontSize(9.5);
     doc.setTextColor(51, 65, 85); // slate-700
 
-    doc.text(`Paciente: ${patientName}`, 15, currentY);
+    doc.text(`Nome: ${patientName}`, 15, currentY);
     currentY += 5;
 
     doc.text(`Período: ${formatDateDDMMYYYY(reportStartDate)} a ${formatDateDDMMYYYY(reportEndDate)}`, 15, currentY);
