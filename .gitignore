@@ -31,3 +31,5 @@ dist-ssr
 supabase/.temp/
 
 bun.lock
+
+public/
