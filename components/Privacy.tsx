@@ -7,16 +7,49 @@ import { supabase } from '../src/lib/supabase';
 import { medicationService } from '../src/services/medicationService';
 import { appointmentService } from '../src/services/appointmentService';
 import { jsPDF } from 'jspdf';
+import QRCode from 'qrcode';
 import { isContraceptivePauseDay, calculatePeriodDoses } from '../src/domain/medicationRules';
 
-const loadImage = (src: string): Promise<HTMLImageElement> => {
+const loadImageAsPngDataUrl = (src: string): Promise<string> => {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.crossOrigin = 'Anonymous';
-    img.onload = () => resolve(img);
+    img.onload = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = img.naturalWidth || img.width;
+        canvas.height = img.naturalHeight || img.height;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) {
+          reject(new Error('Canvas context error'));
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        const dataUrl = canvas.toDataURL('image/png');
+        resolve(dataUrl);
+      } catch (err) {
+        reject(err);
+      }
+    };
     img.onerror = (e) => reject(e);
     img.src = src;
   });
+};
+
+const generateQRCodeDataUrl = async (url: string): Promise<string | null> => {
+  try {
+    return await QRCode.toDataURL(url, {
+      margin: 1,
+      width: 250,
+      color: {
+        dark: '#000000',
+        light: '#FFFFFF'
+      }
+    });
+  } catch (err) {
+    console.error('Erro ao gerar DataURL do QR Code:', err);
+    return null;
+  }
 };
 
 interface Props {
@@ -334,18 +367,19 @@ const Privacy: React.FC<Props> = ({ setView, initialShowReportConfig, onResetRep
         format: 'a4'
       });
 
-      // Try pre-loading logo and QR code images
-      let logoImage: HTMLImageElement | null = null;
-      let qrCodeImage: HTMLImageElement | null = null;
+      // Try pre-loading logo image and static QR code
+      let logoDataUrl: string | null = null;
       try {
-        const [logo, qr] = await Promise.all([
-          loadImage('/remedio-em-dia-logo-horizontal.png'),
-          loadImage('/remedio-em-dia-qrcode.png')
-        ]);
-        logoImage = logo;
-        qrCodeImage = qr;
+        logoDataUrl = await loadImageAsPngDataUrl('/remedio-em-dia-logo-horizontal.png');
       } catch (imgErr) {
-        console.warn('Erro ao carregar as imagens para o relatório PDF, usando fallbacks de texto.', imgErr);
+        // Fallback to text title if logo image fails to load
+      }
+
+      let qrCodeDataUrl: string | null = null;
+      try {
+        qrCodeDataUrl = await generateQRCodeDataUrl('https://remedioemdia.com');
+      } catch (qrErr) {
+        console.warn('Erro ao gerar QR Code para o PDF:', qrErr);
       }
 
       let currentY = 40;
@@ -616,32 +650,25 @@ const Privacy: React.FC<Props> = ({ setView, initialShowReportConfig, onResetRep
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(46, 124, 195); // Brand Blue `#2E7CC3`
-      doc.text("Continue acompanhando sua saúde com o Remédio em Dia.", 105, currentY, { align: 'center' });
+      doc.text("Gerado pelo Remédio em Dia.", 105, currentY, { align: 'center' });
       currentY += 5;
 
-      // Draw QR Code
-      const qrWidth = 25;
-      const qrHeight = 25;
+      // Draw static QR Code linking directly to https://remedioemdia.com
+      const qrWidth = 22;
+      const qrHeight = 22;
       const qrX = (210 - qrWidth) / 2;
       try {
-        if (qrCodeImage) {
-          doc.addImage(qrCodeImage, 'PNG', qrX, currentY, qrWidth, qrHeight);
-        } else {
-          doc.setDrawColor(200, 200, 200);
-          doc.rect(qrX, currentY, qrWidth, qrHeight, 'S');
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(8);
-          doc.setTextColor(150, 150, 150);
-          doc.text("QR Code", 105, currentY + 13, { align: 'center' });
+        if (qrCodeDataUrl) {
+          doc.addImage(qrCodeDataUrl, 'PNG', qrX, currentY, qrWidth, qrHeight);
         }
       } catch (err) {
         console.error("Error adding QR code image to PDF", err);
       }
-      currentY += qrHeight + 4;
+      currentY += qrHeight + 7;
 
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(108, 200, 176); // Brand Green `#6CC8B0`
+      doc.setFontSize(12);
+      doc.setTextColor(80, 80, 80); // Dark Gray `#505050`
       doc.text("www.remedioemdia.com", 105, currentY, { align: 'center' });
 
       // --- HEADERS AND FOOTERS LOOP ---
@@ -652,33 +679,38 @@ const Privacy: React.FC<Props> = ({ setView, initialShowReportConfig, onResetRep
         doc.setPage(i);
 
         // 1. HEADER (Every Page)
-        const logoWidth = 45;
+        const logoWidth = 48;
         const logoHeight = 12;
         const logoX = (210 - logoWidth) / 2;
-        try {
-          if (logoImage) {
-            doc.addImage(logoImage, 'PNG', logoX, 10, logoWidth, logoHeight);
-          } else {
-            // Text fallback for logo
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(16);
-            doc.setTextColor(46, 124, 195); // Brand Blue
-            doc.text("Remédio em Dia", 105, 18, { align: 'center' });
+        let drawnLogo = false;
+
+        if (logoDataUrl) {
+          try {
+            doc.addImage(logoDataUrl, 'PNG', logoX, 8, logoWidth, logoHeight);
+            drawnLogo = true;
+          } catch (logoErr) {
+            console.error("Error drawing logo in PDF header:", logoErr);
           }
-        } catch (logoErr) {
-          console.error("Error drawing logo in PDF header:", logoErr);
+        }
+
+        if (!drawnLogo) {
+          // Text fallback for logo title
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(16);
+          doc.setTextColor(46, 124, 195); // Brand Blue
+          doc.text("Remédio em Dia", 105, 18, { align: 'center' });
         }
 
         // Title of the report below the logo
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(12);
+        doc.setFontSize(11);
         doc.setTextColor(46, 124, 195); // Brand Blue
-        doc.text(reportTitle, 105, 28, { align: 'center' });
+        doc.text(reportTitle, 105, 26, { align: 'center' });
 
         // Thin horizontal separator line using the primary color of the brand
         doc.setDrawColor(46, 124, 195); // Brand Blue
         doc.setLineWidth(0.3);
-        doc.line(15, 32, 195, 32);
+        doc.line(15, 30, 195, 30);
 
         // 2. FOOTER (Every Page)
         doc.setDrawColor(226, 232, 240); // slate-200
@@ -695,7 +727,6 @@ const Privacy: React.FC<Props> = ({ setView, initialShowReportConfig, onResetRep
       // Save the PDF
       doc.save(`historico-tomadas-${reportStartDate}-a-${reportEndDate}.pdf`);
       setReportSuccess(true);
-      setShowReportConfig(false); // Return and show success notification
     } catch (err: any) {
       console.error('[Privacy] Error generating report:', err);
       setError(err.message || 'Falha ao gerar o relatório em PDF. Tente novamente.');
@@ -782,18 +813,19 @@ const Privacy: React.FC<Props> = ({ setView, initialShowReportConfig, onResetRep
         format: 'a4'
       });
 
-      // Try pre-loading logo and QR code images
-      let logoImage: HTMLImageElement | null = null;
-      let qrCodeImage: HTMLImageElement | null = null;
+      // Try pre-loading logo image and static QR code
+      let logoDataUrl: string | null = null;
       try {
-        const [logo, qr] = await Promise.all([
-          loadImage('/remedio-em-dia-logo-horizontal.png'),
-          loadImage('/remedio-em-dia-qrcode.png')
-        ]);
-        logoImage = logo;
-        qrCodeImage = qr;
+        logoDataUrl = await loadImageAsPngDataUrl('/remedio-em-dia-logo-horizontal.png');
       } catch (imgErr) {
-        console.warn('Erro ao carregar as imagens para o relatório PDF, usando fallbacks de texto.', imgErr);
+        // Fallback to text title if logo image fails to load
+      }
+
+      let qrCodeDataUrl: string | null = null;
+      try {
+        qrCodeDataUrl = await generateQRCodeDataUrl('https://remedioemdia.com');
+      } catch (qrErr) {
+        console.warn('Erro ao gerar QR Code para o PDF:', qrErr);
       }
 
       let currentY = 40;
@@ -1031,32 +1063,25 @@ const Privacy: React.FC<Props> = ({ setView, initialShowReportConfig, onResetRep
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10);
       doc.setTextColor(46, 124, 195); // Brand Blue `#2E7CC3`
-      doc.text("Continue acompanhando sua saúde com o Remédio em Dia.", 105, currentY, { align: 'center' });
+      doc.text("Gerado pelo Remédio em Dia.", 105, currentY, { align: 'center' });
       currentY += 5;
 
-      // Draw QR Code
-      const qrWidth = 25;
-      const qrHeight = 25;
+      // Draw static QR Code linking directly to https://remedioemdia.com
+      const qrWidth = 22;
+      const qrHeight = 22;
       const qrX = (210 - qrWidth) / 2;
       try {
-        if (qrCodeImage) {
-          doc.addImage(qrCodeImage, 'PNG', qrX, currentY, qrWidth, qrHeight);
-        } else {
-          doc.setDrawColor(200, 200, 200);
-          doc.rect(qrX, currentY, qrWidth, qrHeight, 'S');
-          doc.setFont('helvetica', 'normal');
-          doc.setFontSize(8);
-          doc.setTextColor(150, 150, 150);
-          doc.text("QR Code", 105, currentY + 13, { align: 'center' });
+        if (qrCodeDataUrl) {
+          doc.addImage(qrCodeDataUrl, 'PNG', qrX, currentY, qrWidth, qrHeight);
         }
       } catch (err) {
         console.error("Error adding QR code image to PDF", err);
       }
-      currentY += qrHeight + 4;
+      currentY += qrHeight + 7;
 
       doc.setFont('helvetica', 'normal');
-      doc.setFontSize(9);
-      doc.setTextColor(108, 200, 176); // Brand Green `#6CC8B0`
+      doc.setFontSize(12);
+      doc.setTextColor(80, 80, 80); // Dark Gray `#505050`
       doc.text("www.remedioemdia.com", 105, currentY, { align: 'center' });
 
       // --- HEADERS AND FOOTERS LOOP ---
@@ -1067,33 +1092,38 @@ const Privacy: React.FC<Props> = ({ setView, initialShowReportConfig, onResetRep
         doc.setPage(i);
 
         // 1. HEADER (Every Page)
-        const logoWidth = 45;
+        const logoWidth = 48;
         const logoHeight = 12;
         const logoX = (210 - logoWidth) / 2;
-        try {
-          if (logoImage) {
-            doc.addImage(logoImage, 'PNG', logoX, 10, logoWidth, logoHeight);
-          } else {
-            // Text fallback for logo
-            doc.setFont('helvetica', 'bold');
-            doc.setFontSize(16);
-            doc.setTextColor(46, 124, 195); // Brand Blue
-            doc.text("Remédio em Dia", 105, 18, { align: 'center' });
+        let drawnLogo = false;
+
+        if (logoDataUrl) {
+          try {
+            doc.addImage(logoDataUrl, 'PNG', logoX, 8, logoWidth, logoHeight);
+            drawnLogo = true;
+          } catch (logoErr) {
+            console.error("Error drawing logo in PDF header:", logoErr);
           }
-        } catch (logoErr) {
-          console.error("Error drawing logo in PDF header:", logoErr);
+        }
+
+        if (!drawnLogo) {
+          // Text fallback for logo title
+          doc.setFont('helvetica', 'bold');
+          doc.setFontSize(16);
+          doc.setTextColor(46, 124, 195); // Brand Blue
+          doc.text("Remédio em Dia", 105, 18, { align: 'center' });
         }
 
         // Title of the report below the logo
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(12);
+        doc.setFontSize(11);
         doc.setTextColor(46, 124, 195); // Brand Blue
-        doc.text(reportTitle, 105, 28, { align: 'center' });
+        doc.text(reportTitle, 105, 26, { align: 'center' });
 
         // Thin horizontal separator line using the primary color of the brand
         doc.setDrawColor(46, 124, 195); // Brand Blue
         doc.setLineWidth(0.3);
-        doc.line(15, 32, 195, 32);
+        doc.line(15, 30, 195, 30);
 
         // 2. FOOTER (Every Page)
         doc.setDrawColor(226, 232, 240); // slate-200
@@ -1271,6 +1301,16 @@ const Privacy: React.FC<Props> = ({ setView, initialShowReportConfig, onResetRep
             <div>
               <p className="font-bold">Ocorreu um erro</p>
               <p className="text-red-600">{error}</p>
+            </div>
+          </div>
+        )}
+
+        {reportSuccess && (
+          <div id="report-success-banner" className="bg-emerald-50 border border-emerald-100 rounded-2xl p-4 text-emerald-800 text-sm flex gap-3 items-start animate-in fade-in slide-in-from-top-1 duration-300">
+            <CheckCircle2 className="text-emerald-500 shrink-0 mt-0.5" size={18} />
+            <div>
+              <p className="font-bold">Relatório de histórico gerado com sucesso!</p>
+              <p className="text-emerald-600">O download do PDF contendo o histórico de tomadas foi iniciado.</p>
             </div>
           </div>
         )}
