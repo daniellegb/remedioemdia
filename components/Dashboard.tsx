@@ -826,11 +826,11 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
           </div>
         </section>
 
-        {/* Seção Relatório de Tomadas */}
+        {/* Seção Relatório de Administrações */}
         <section id="dashboard-report-shortcut">
           <div className="flex items-center justify-between mb-5">
             <h3 className="text-xl font-bold flex items-center gap-2 text-slate-900">
-              <FileText size={22} className="text-blue-500" /> Relatório de Tomadas
+              <FileText size={22} className="text-blue-500" /> Relatório de Administrações
             </h3>
           </div>
           <div className="bg-white rounded-[28px] border border-slate-100 shadow-sm p-5 md:p-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4">

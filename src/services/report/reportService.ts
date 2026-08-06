@@ -6,6 +6,7 @@ import {
   loadImageAsPngDataUrl,
   generateQRCodeDataUrl,
   formatBrazilianDate,
+  formatDateDDMMYYYY,
   getUsageCategoryLabel,
   formatUnit
 } from './reportUtils';
@@ -19,6 +20,8 @@ export interface HistoryReportParams {
   customEndDate?: string;
   medsSelection: 'all' | 'specific';
   selectedMeds: string[];
+  user?: any;
+  profile?: any;
 }
 
 export interface UserDataReportParams {
@@ -37,13 +40,45 @@ export const reportService = {
       throw new Error('Você precisa estar autenticado para gerar o relatório.');
     }
 
-    // 1. Fetch latest medications and consumption records in parallel
-    const [freshMeds, recordsResult] = await Promise.all([
+    // 1. Fetch latest medications, consumption records and profile in parallel
+    const [freshMeds, recordsResult, profileResult] = await Promise.all([
       medicationService.getMedications(userId).catch(() => []),
-      supabase.from('consumption_records').select('*').eq('user_id', userId).order('date', { ascending: false })
+      supabase.from('consumption_records').select('*').eq('user_id', userId).order('date', { ascending: false }),
+      params.profile
+        ? Promise.resolve({ data: params.profile })
+        : supabase.from('profiles').select('*').eq('id', userId).maybeSingle()
     ]);
 
     const freshRecords = recordsResult.data || [];
+    const userProfile = profileResult?.data || params.profile || null;
+    let authUser = params.user || null;
+
+    if (!authUser && userId) {
+      try {
+        const { data } = await supabase.auth.getUser();
+        if (data?.user?.id === userId) {
+          authUser = data.user;
+        }
+      } catch (e) {
+        // ignore
+      }
+    }
+
+    // Resolve patient name
+    let patientName = 'Não informado';
+    if (userProfile?.mode === 'caregiver' && userProfile?.patient_name?.trim()) {
+      patientName = userProfile.patient_name.trim();
+    } else if (userProfile?.name?.trim()) {
+      patientName = userProfile.name.trim();
+    } else if (userProfile?.full_name?.trim()) {
+      patientName = userProfile.full_name.trim();
+    } else if (authUser?.user_metadata?.full_name?.trim()) {
+      patientName = authUser.user_metadata.full_name.trim();
+    } else if (authUser?.user_metadata?.name?.trim()) {
+      patientName = authUser.user_metadata.name.trim();
+    } else if (authUser?.email) {
+      patientName = authUser.email.split('@')[0];
+    }
 
     // 2. Determine period start and end dates
     const todayObj = new Date();
@@ -133,17 +168,23 @@ export const reportService = {
     // --- DOCUMENT HEADER METADATA (PAGE 1) ---
     doc.setFont('helvetica', 'normal');
     doc.setFontSize(9.5);
-    doc.setTextColor(100, 116, 139); // slate-500
-    const formattedGenDate = new Date().toLocaleString('pt-BR');
-    doc.text(`Data de geração: ${formattedGenDate}`, 15, currentY);
+    doc.setTextColor(51, 65, 85); // slate-700
+
+    doc.text(`Paciente: ${patientName}`, 15, currentY);
     currentY += 5;
 
-    const periodLabel = periodOption === '7' ? 'Últimos 7 dias' :
-                        periodOption === '30' ? 'Últimos 30 dias' :
-                        periodOption === '90' ? 'Últimos 90 dias' :
-                        periodOption === 'all' ? 'Todo o histórico' :
-                        `Personalizado (${formatBrazilianDate(reportStartDate)} a ${formatBrazilianDate(reportEndDate)})`;
-    doc.text(`Período selecionado: ${periodLabel}`, 15, currentY);
+    doc.text(`Período: ${formatDateDDMMYYYY(reportStartDate)} a ${formatDateDDMMYYYY(reportEndDate)}`, 15, currentY);
+    currentY += 5;
+
+    const genDateObj = new Date();
+    const day = String(genDateObj.getDate()).padStart(2, '0');
+    const month = String(genDateObj.getMonth() + 1).padStart(2, '0');
+    const year = genDateObj.getFullYear();
+    const hours = String(genDateObj.getHours()).padStart(2, '0');
+    const minutes = String(genDateObj.getMinutes()).padStart(2, '0');
+    const formattedGenDateTime = `${day}/${month}/${year} às ${hours}:${minutes}`;
+
+    doc.text(`Gerado em: ${formattedGenDateTime}`, 15, currentY);
     currentY += 6;
 
     doc.setDrawColor(108, 200, 176); // Brand Green `#6CC8B0`
