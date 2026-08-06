@@ -105,6 +105,7 @@ export interface Profile {
   deletion_requested_at?: string | null;
   scheduled_deletion_at?: string | null;
   plan_mismatch_pending?: boolean;
+  legal_acceptance_at?: string | null;
 }
 
 export interface UserPreferences {

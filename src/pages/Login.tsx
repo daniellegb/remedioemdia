@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Pill, Mail, Lock, Loader2, AlertTriangle, Activity, Wifi, WifiOff, Bug } from 'lucide-react';
+import { Pill, Mail, Lock, Loader2, AlertTriangle, Activity, Wifi, WifiOff, Bug, ShieldCheck } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { testSupabaseConnection } from '../lib/supabase';
 
@@ -9,12 +9,17 @@ const Login: React.FC = () => {
   // Estados locais controlados
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [legalAccepted, setLegalAccepted] = useState(false);
+  const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSignUp, setIsSignUp] = useState(false);
   const [connStatus, setConnStatus] = useState<{ loading: boolean; ok?: boolean; message?: string }>({ loading: false });
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [logoError, setLogoError] = useState(false);
+
+  const turnstileWidgetRef = useRef<HTMLDivElement>(null);
+  const widgetIdRef = useRef<string | null>(null);
 
   const navigate = useNavigate();
   const { user, isAuthenticated, loading: authLoading, signIn, signUp, signInWithGoogle, isConfigured } = useAuth();
@@ -25,6 +30,42 @@ const Login: React.FC = () => {
       navigate('/dashboard');
     }
   }, [isAuthenticated, authLoading, navigate]);
+
+  // Gerenciar renderização do Turnstile quando em modo de cadastro
+  useEffect(() => {
+    if (isSignUp) {
+      const timer = setTimeout(() => {
+        if ((window as any).turnstile && turnstileWidgetRef.current) {
+          try {
+            if (widgetIdRef.current !== null) {
+              (window as any).turnstile.remove(widgetIdRef.current);
+            }
+            const siteKey = (import.meta.env as any).VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
+            widgetIdRef.current = (window as any).turnstile.render(turnstileWidgetRef.current, {
+              key: siteKey,
+              sitekey: siteKey,
+              callback: (token: string) => {
+                setTurnstileToken(token);
+                setError(null);
+              },
+              'expired-callback': () => {
+                setTurnstileToken(null);
+              },
+              'error-callback': () => {
+                setTurnstileToken(null);
+              }
+            });
+          } catch (e) {
+            console.error('Error rendering turnstile:', e);
+          }
+        }
+      }, 100);
+      return () => clearTimeout(timer);
+    } else {
+      setTurnstileToken(null);
+      widgetIdRef.current = null;
+    }
+  }, [isSignUp]);
 
   // Implementar função handleLogin
   const handleLogin = async (e: React.FormEvent) => {
@@ -55,13 +96,48 @@ const Login: React.FC = () => {
     }
   };
 
+  const verifyTurnstile = async () => {
+    if (!turnstileToken) {
+      setError('Não foi possível validar a verificação de segurança. Tente novamente.');
+      return false;
+    }
+    try {
+      const res = await fetch('/api/verify-turnstile', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: turnstileToken })
+      });
+      const data = await res.json();
+      if (!data.success) {
+        setError(data.error || 'Não foi possível validar a verificação de segurança. Tente novamente.');
+        return false;
+      }
+      return true;
+    } catch (e) {
+      setError('Não foi possível validar a verificação de segurança. Tente novamente.');
+      return false;
+    }
+  };
+
   const handleGoogleLogin = async () => {
     if (!isConfigured) return;
     
+    if (isSignUp) {
+      if (!legalAccepted) {
+        setError('É necessário aceitar os Termos de Uso e a Política de Privacidade para criar uma conta.');
+        return;
+      }
+      const ok = await verifyTurnstile();
+      if (!ok) return;
+    }
+
     setLoading(true);
     setError(null);
     
     try {
+      if (isSignUp && legalAccepted) {
+        localStorage.setItem('pending_legal_acceptance', new Date().toISOString());
+      }
       await signInWithGoogle();
       // Nota: O signInWithOAuth em ambiente web causa um redirect,
       // então o código abaixo pode não ser executado se o redirect for bem-sucedido.
@@ -74,12 +150,20 @@ const Login: React.FC = () => {
 
   // Implementar função handleRegister
   const handleRegister = async () => {
+    if (!legalAccepted) {
+      setError('É necessário aceitar os Termos de Uso e a Política de Privacidade para criar uma conta.');
+      return;
+    }
+
+    const ok = await verifyTurnstile();
+    if (!ok) return;
+
     setLoading(true);
     setError(null);
 
     try {
-      // Chamar signUp(email, password)
-      await signUp(email, password);
+      const acceptanceTimestamp = new Date().toISOString();
+      await signUp(email, password, acceptanceTimestamp);
       setError('Cadastro realizado com sucesso! Verifique seu e-mail para confirmar a conta.');
       setIsSignUp(false);
     } catch (err: any) {
@@ -224,6 +308,55 @@ const Login: React.FC = () => {
               />
             </div>
           </div>
+
+          {/* Checkbox de Termos de Uso e Política de Privacidade */}
+          {isSignUp && (
+            <div className="space-y-3">
+              <div className="flex items-start gap-3 pt-1">
+                <input
+                  type="checkbox"
+                  id="legal-terms"
+                  checked={legalAccepted}
+                  onChange={(e) => setLegalAccepted(e.target.checked)}
+                  className="mt-1 w-4 h-4 text-blue-600 bg-slate-50 border-slate-300 rounded focus:ring-blue-500 cursor-pointer accent-blue-600 shrink-0"
+                />
+                <label htmlFor="legal-terms" className="text-xs text-slate-600 font-medium leading-relaxed cursor-pointer select-none">
+                  Li e concordo com os{' '}
+                  <a
+                    href="https://remedioemdia.com/termosdeuso/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 font-bold hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Termos de Uso
+                  </a>{' '}
+                  e a{' '}
+                  <a
+                    href="https://remedioemdia.com/privacidade/"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-blue-600 font-bold hover:underline"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    Política de Privacidade
+                  </a>
+                  .
+                </label>
+              </div>
+
+              {/* Widget Cloudflare Turnstile */}
+              <div className="flex flex-col items-center justify-center pt-1 pb-1">
+                <div ref={turnstileWidgetRef} id="cf-turnstile" className="min-h-[65px]"></div>
+                {!turnstileToken && (
+                  <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                    <ShieldCheck size={13} className="text-blue-500" />
+                    Aguardando verificação de segurança...
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Exibir erro abaixo do formulário se existir */}
           {error && (

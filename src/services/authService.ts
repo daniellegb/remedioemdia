@@ -1,12 +1,13 @@
 import { supabase } from '../lib/supabase';
 
 export const authService = {
-  async signUp(email: string, password: string) {
+  async signUp(email: string, password: string, legalAcceptanceAt?: string) {
     return await supabase.auth.signUp({ 
       email, 
       password,
       options: {
-        emailRedirectTo: `${window.location.origin}/dashboard`
+        emailRedirectTo: `${window.location.origin}/dashboard`,
+        data: legalAcceptanceAt ? { legal_acceptance_at: legalAcceptanceAt } : undefined
       }
     });
   },

@@ -64,9 +64,15 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             const resolvedUser = authUser ?? (await supabase.auth.getUser()).data.user;
             if (resolvedUser) {
               const name = resolvedUser.user_metadata?.full_name || resolvedUser.user_metadata?.name || resolvedUser.email?.split('@')[0] || 'Usuário';
+              const pendingLegal = localStorage.getItem('pending_legal_acceptance');
+              if (pendingLegal) {
+                localStorage.removeItem('pending_legal_acceptance');
+              }
+              const legalAcceptanceAt = resolvedUser.user_metadata?.legal_acceptance_at || pendingLegal || null;
               const newProfile: any = {
                 id: userId,
-                name: name
+                name: name,
+                legal_acceptance_at: legalAcceptanceAt
               };
               const { data: insertedData, error: insertError } = await supabase
                 .from('profiles')
@@ -356,9 +362,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return data;
   };
 
-  const signUp = async (email: string, password: string) => {
+  const signUp = async (email: string, password: string, legalAcceptanceAt?: string) => {
     setProfileLoaded(false);
-    const { data, error } = await authService.signUp(email, password);
+    const { data, error } = await authService.signUp(email, password, legalAcceptanceAt);
     if (error) throw error;
     return data;
   };
