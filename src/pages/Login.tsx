@@ -31,40 +31,35 @@ const Login: React.FC = () => {
     }
   }, [isAuthenticated, authLoading, navigate]);
 
-  // Gerenciar renderização do Turnstile quando em modo de cadastro
+  // Gerenciar renderização do Turnstile
   useEffect(() => {
-    if (isSignUp) {
-      const timer = setTimeout(() => {
-        if ((window as any).turnstile && turnstileWidgetRef.current) {
-          try {
-            if (widgetIdRef.current !== null) {
-              (window as any).turnstile.remove(widgetIdRef.current);
-            }
-            const siteKey = (import.meta.env as any).VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
-            widgetIdRef.current = (window as any).turnstile.render(turnstileWidgetRef.current, {
-              key: siteKey,
-              sitekey: siteKey,
-              callback: (token: string) => {
-                setTurnstileToken(token);
-                setError(null);
-              },
-              'expired-callback': () => {
-                setTurnstileToken(null);
-              },
-              'error-callback': () => {
-                setTurnstileToken(null);
-              }
-            });
-          } catch (e) {
-            console.error('Error rendering turnstile:', e);
+    const timer = setTimeout(() => {
+      if ((window as any).turnstile && turnstileWidgetRef.current) {
+        try {
+          if (widgetIdRef.current !== null) {
+            (window as any).turnstile.remove(widgetIdRef.current);
           }
+          const siteKey = (import.meta.env as any).VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
+          widgetIdRef.current = (window as any).turnstile.render(turnstileWidgetRef.current, {
+            key: siteKey,
+            sitekey: siteKey,
+            callback: (token: string) => {
+              setTurnstileToken(token);
+              setError(null);
+            },
+            'expired-callback': () => {
+              setTurnstileToken(null);
+            },
+            'error-callback': () => {
+              setTurnstileToken(null);
+            }
+          });
+        } catch (e) {
+          console.error('Error rendering turnstile:', e);
         }
-      }, 100);
-      return () => clearTimeout(timer);
-    } else {
-      setTurnstileToken(null);
-      widgetIdRef.current = null;
-    }
+      }
+    }, 100);
+    return () => clearTimeout(timer);
   }, [isSignUp]);
 
   // Implementar função handleLogin
@@ -77,14 +72,19 @@ const Login: React.FC = () => {
       return;
     }
 
+    if (!turnstileToken) {
+      setError('Não foi possível validar a verificação de segurança. Tente novamente.');
+      return;
+    }
+
     // SetLoading(true)
     setLoading(true);
     // Limpar erro
     setError(null);
 
     try {
-      // Chamar signIn(email, password)
-      await signIn(email, password);
+      // Chamar signIn(email, password, turnstileToken)
+      await signIn(email, password, turnstileToken);
       navigate('/dashboard');
     } catch (err: any) {
       // Tratar erro se houver
@@ -99,15 +99,14 @@ const Login: React.FC = () => {
   const handleGoogleLogin = async () => {
     if (!isConfigured) return;
     
-    if (isSignUp) {
-      if (!legalAccepted) {
-        setError('É necessário aceitar os Termos de Uso e a Política de Privacidade para criar uma conta.');
-        return;
-      }
-      if (!turnstileToken) {
-        setError('Não foi possível validar a verificação de segurança. Tente novamente.');
-        return;
-      }
+    if (!turnstileToken) {
+      setError('Não foi possível validar a verificação de segurança. Tente novamente.');
+      return;
+    }
+
+    if (isSignUp && !legalAccepted) {
+      setError('É necessário aceitar os Termos de Uso e a Política de Privacidade para criar uma conta.');
+      return;
     }
 
     setLoading(true);
@@ -290,54 +289,52 @@ const Login: React.FC = () => {
             </div>
           </div>
 
-          {/* Checkbox de Termos de Uso e Política de Privacidade */}
+          {/* Checkbox de Termos de Uso e Política de Privacidade (Apenas no Cadastro) */}
           {isSignUp && (
-            <div className="space-y-3">
-              <div className="flex items-start gap-3 pt-1">
-                <input
-                  type="checkbox"
-                  id="legal-terms"
-                  checked={legalAccepted}
-                  onChange={(e) => setLegalAccepted(e.target.checked)}
-                  className="mt-1 w-4 h-4 text-blue-600 bg-slate-50 border-slate-300 rounded focus:ring-blue-500 cursor-pointer accent-blue-600 shrink-0"
-                />
-                <label htmlFor="legal-terms" className="text-xs text-slate-600 font-medium leading-relaxed cursor-pointer select-none">
-                  Li e concordo com os{' '}
-                  <a
-                    href="https://remedioemdia.com/termosdeuso/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 font-bold hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Termos de Uso
-                  </a>{' '}
-                  e a{' '}
-                  <a
-                    href="https://remedioemdia.com/privacidade/"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-blue-600 font-bold hover:underline"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    Política de Privacidade
-                  </a>
-                  .
-                </label>
-              </div>
-
-              {/* Widget Cloudflare Turnstile */}
-              <div className="flex flex-col items-center justify-center pt-1 pb-1">
-                <div ref={turnstileWidgetRef} id="cf-turnstile" className="min-h-[65px]"></div>
-                {!turnstileToken && (
-                  <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
-                    <ShieldCheck size={13} className="text-blue-500" />
-                    Aguardando verificação de segurança...
-                  </p>
-                )}
-              </div>
+            <div className="flex items-start gap-3 pt-1">
+              <input
+                type="checkbox"
+                id="legal-terms"
+                checked={legalAccepted}
+                onChange={(e) => setLegalAccepted(e.target.checked)}
+                className="mt-1 w-4 h-4 text-blue-600 bg-slate-50 border-slate-300 rounded focus:ring-blue-500 cursor-pointer accent-blue-600 shrink-0"
+              />
+              <label htmlFor="legal-terms" className="text-xs text-slate-600 font-medium leading-relaxed cursor-pointer select-none">
+                Li e concordo com os{' '}
+                <a
+                  href="https://remedioemdia.com/termosdeuso/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 font-bold hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Termos de Uso
+                </a>{' '}
+                e a{' '}
+                <a
+                  href="https://remedioemdia.com/privacidade/"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-600 font-bold hover:underline"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  Política de Privacidade
+                </a>
+                .
+              </label>
             </div>
           )}
+
+          {/* Widget Cloudflare Turnstile (Exibido no Login e Cadastro) */}
+          <div className="flex flex-col items-center justify-center pt-1 pb-1">
+            <div ref={turnstileWidgetRef} id="cf-turnstile" className="min-h-[65px]"></div>
+            {!turnstileToken && (
+              <p className="text-[11px] text-slate-400 mt-1 flex items-center gap-1">
+                <ShieldCheck size={13} className="text-blue-500" />
+                Aguardando verificação de segurança...
+              </p>
+            )}
+          </div>
 
           {/* Exibir erro abaixo do formulário se existir */}
           {error && (

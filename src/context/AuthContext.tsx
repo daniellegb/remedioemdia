@@ -355,9 +355,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   }, [user?.id, isConfigured]);
 
 
-  const signIn = async (email: string, password: string) => {
+  const signIn = async (email: string, password: string, captchaToken?: string) => {
     setProfileLoaded(false);
-    const { data, error } = await authService.signIn(email, password);
+    const { data, error } = await authService.signIn(email, password, captchaToken);
     if (error) throw error;
     return data;
   };

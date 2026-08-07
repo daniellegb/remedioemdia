@@ -13,8 +13,14 @@ export const authService = {
     });
   },
 
-  async signIn(email: string, password: string) {
-    return await supabase.auth.signInWithPassword({ email, password });
+  async signIn(email: string, password: string, captchaToken?: string) {
+    return await supabase.auth.signInWithPassword({ 
+      email, 
+      password,
+      options: {
+        captchaToken
+      }
+    });
   },
 
   async signOut(options: { scope?: 'global' | 'local' | 'others' } = { scope: 'local' }) {
