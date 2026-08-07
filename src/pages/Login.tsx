@@ -96,29 +96,6 @@ const Login: React.FC = () => {
     }
   };
 
-  const verifyTurnstile = async () => {
-    if (!turnstileToken) {
-      setError('Não foi possível validar a verificação de segurança. Tente novamente.');
-      return false;
-    }
-    try {
-      const res = await fetch('/api/verify-turnstile', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: turnstileToken })
-      });
-      const data = await res.json();
-      if (!data.success) {
-        setError(data.error || 'Não foi possível validar a verificação de segurança. Tente novamente.');
-        return false;
-      }
-      return true;
-    } catch (e) {
-      setError('Não foi possível validar a verificação de segurança. Tente novamente.');
-      return false;
-    }
-  };
-
   const handleGoogleLogin = async () => {
     if (!isConfigured) return;
     
@@ -127,8 +104,10 @@ const Login: React.FC = () => {
         setError('É necessário aceitar os Termos de Uso e a Política de Privacidade para criar uma conta.');
         return;
       }
-      const ok = await verifyTurnstile();
-      if (!ok) return;
+      if (!turnstileToken) {
+        setError('Não foi possível validar a verificação de segurança. Tente novamente.');
+        return;
+      }
     }
 
     setLoading(true);
@@ -155,15 +134,17 @@ const Login: React.FC = () => {
       return;
     }
 
-    const ok = await verifyTurnstile();
-    if (!ok) return;
+    if (!turnstileToken) {
+      setError('Não foi possível validar a verificação de segurança. Tente novamente.');
+      return;
+    }
 
     setLoading(true);
     setError(null);
 
     try {
       const acceptanceTimestamp = new Date().toISOString();
-      await signUp(email, password, acceptanceTimestamp);
+      await signUp(email, password, acceptanceTimestamp, turnstileToken);
       setError('Cadastro realizado com sucesso! Verifique seu e-mail para confirmar a conta.');
       setIsSignUp(false);
     } catch (err: any) {

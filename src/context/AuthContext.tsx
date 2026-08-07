@@ -362,9 +362,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return data;
   };
 
-  const signUp = async (email: string, password: string, legalAcceptanceAt?: string) => {
+  const signUp = async (email: string, password: string, legalAcceptanceAt?: string, captchaToken?: string) => {
     setProfileLoaded(false);
-    const { data, error } = await authService.signUp(email, password, legalAcceptanceAt);
+    const { data, error } = await authService.signUp(email, password, legalAcceptanceAt, captchaToken);
     if (error) throw error;
     return data;
   };

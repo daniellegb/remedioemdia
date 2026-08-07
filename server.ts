@@ -420,42 +420,7 @@ async function createServer() {
   app.post('/api/stripe/sync-subscription', (req, res) => syncHandler(req as any, res as any));
   app.post('/api/stripe/webhook', (req, res) => webhookHandler(req as any, res as any));
 
-  // Cloudflare Turnstile Verification Endpoint
-  app.post('/api/verify-turnstile', async (req, res): Promise<any> => {
-    const { token } = req.body;
-    const secretKey = process.env.TURNSTILE_SECRET_KEY;
 
-    if (!secretKey) {
-      console.warn('[Turnstile] TURNSTILE_SECRET_KEY not configured. Bypassing server verification.');
-      return res.json({ success: true });
-    }
-
-    if (!token) {
-      return res.status(400).json({ success: false, error: 'Token Turnstile não fornecido.' });
-    }
-
-    try {
-      const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          secret: secretKey,
-          response: token
-        })
-      });
-
-      const data: any = await response.json();
-      if (data.success) {
-        return res.json({ success: true });
-      } else {
-        console.warn('[Turnstile] Verificação falhou:', data['error-codes']);
-        return res.status(400).json({ success: false, error: 'Não foi possível validar a verificação de segurança. Tente novamente.' });
-      }
-    } catch (err: any) {
-      console.error('[Turnstile] Erro na requisição de verificação:', err);
-      return res.status(500).json({ success: false, error: 'Erro ao validar verificação de segurança.' });
-    }
-  });
 
   // 2. Safe and Secure Authentication-Authorized Account Deletion API Endpoint
   app.post('/api/user/delete', async (req, res): Promise<any> => {
