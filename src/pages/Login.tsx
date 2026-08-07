@@ -31,35 +31,68 @@ const Login: React.FC = () => {
     }
   }, [isAuthenticated, authLoading, navigate]);
 
-  // Gerenciar renderização do Turnstile
+  // Gerenciar renderização do Turnstile sem redundâncias ou múltiplos challenges
   useEffect(() => {
+    let isMounted = true;
+    const container = turnstileWidgetRef.current;
+
     const timer = setTimeout(() => {
-      if ((window as any).turnstile && turnstileWidgetRef.current) {
+      if (!isMounted || !container) return;
+      if ((window as any).turnstile) {
         try {
+          if (container.hasChildNodes()) {
+            container.innerHTML = '';
+          }
           if (widgetIdRef.current !== null) {
-            (window as any).turnstile.remove(widgetIdRef.current);
+            try {
+              (window as any).turnstile.remove(widgetIdRef.current);
+            } catch (err) {
+              // Ignore already removed widget errors
+            }
+            widgetIdRef.current = null;
           }
           const siteKey = (import.meta.env as any).VITE_TURNSTILE_SITE_KEY || '1x00000000000000000000AA';
-          widgetIdRef.current = (window as any).turnstile.render(turnstileWidgetRef.current, {
+          widgetIdRef.current = (window as any).turnstile.render(container, {
             key: siteKey,
             sitekey: siteKey,
             callback: (token: string) => {
-              setTurnstileToken(token);
-              setError(null);
+              if (isMounted) {
+                setTurnstileToken(token);
+                setError(null);
+              }
             },
             'expired-callback': () => {
-              setTurnstileToken(null);
+              if (isMounted) {
+                setTurnstileToken(null);
+              }
             },
             'error-callback': () => {
-              setTurnstileToken(null);
+              if (isMounted) {
+                setTurnstileToken(null);
+              }
             }
           });
         } catch (e) {
           console.error('Error rendering turnstile:', e);
         }
       }
-    }, 100);
-    return () => clearTimeout(timer);
+    }, 150);
+
+    return () => {
+      isMounted = false;
+      clearTimeout(timer);
+      if (widgetIdRef.current !== null && (window as any).turnstile) {
+        try {
+          (window as any).turnstile.remove(widgetIdRef.current);
+        } catch (e) {
+          // Ignore
+        }
+        widgetIdRef.current = null;
+      }
+      if (container) {
+        container.innerHTML = '';
+      }
+    };
   }, [isSignUp]);
 
   // Implementar função handleLogin
