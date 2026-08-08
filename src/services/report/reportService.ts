@@ -211,7 +211,9 @@ export const reportService = {
       // Add to general totals
       totalMeds++;
       totalPlanned += plannedCount;
-      totalTaken += takenCount;
+      if (med.usageCategory !== 'prn') {
+        totalTaken += takenCount;
+      }
       totalMissed += missedCount;
 
       // Section Separator (between medications)
