@@ -95,6 +95,17 @@ const Login: React.FC = () => {
     };
   }, [isSignUp]);
 
+  const resetTurnstile = () => {
+    setTurnstileToken(null);
+    if (widgetIdRef.current !== null && (window as any).turnstile) {
+      try {
+        (window as any).turnstile.reset(widgetIdRef.current);
+      } catch (err) {
+        console.error('Error resetting Turnstile:', err);
+      }
+    }
+  };
+
   // Implementar função handleLogin
   const handleLogin = async (e: React.FormEvent) => {
     // Prevenir default
@@ -123,6 +134,7 @@ const Login: React.FC = () => {
       // Tratar erro se houver
       console.error('Login error:', err);
       setError(err.message || 'Erro ao entrar. Verifique suas credenciais.');
+      resetTurnstile();
     } finally {
       // Finalizar loading
       setLoading(false);
@@ -156,6 +168,7 @@ const Login: React.FC = () => {
       console.error('Google login error (catch):', err);
       setError(err.message || 'Erro ao entrar com Google. Tente novamente.');
       setLoading(false);
+      resetTurnstile();
     }
   };
 
@@ -182,6 +195,7 @@ const Login: React.FC = () => {
     } catch (err: any) {
       console.error('Register error:', err);
       setError(err.message || 'Erro ao realizar cadastro.');
+      resetTurnstile();
     } finally {
       setLoading(false);
     }
