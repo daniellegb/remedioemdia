@@ -63,7 +63,7 @@ export const pushService = {
     const p256dh = subData.keys?.p256dh;
     const auth = subData.keys?.auth;
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-
+    
     // Garantir que o endpoint seja a única restrição de conflito para suportar múltiplos dispositivos
     const { data, error } = await supabase
       .from('push_subscriptions')
@@ -74,7 +74,7 @@ export const pushService = {
         auth: auth,
         subscription: subData, // mantemos o JSON completo por segurança
         timezone: timezone
-      }, {
+      }, { 
         onConflict: 'endpoint' // Requisito Obrigatório: Unicidade por endpoint
       });
 
@@ -112,7 +112,7 @@ export const pushService = {
 
         // 2. Criar novos lembretes baseados nos horários dos medicamentos
         const reminders: any[] = [];
-
+        
         medications.forEach(med => {
           // REGRA: Medicamentos inativos não geram notificações
           if (med.active === false) {
@@ -144,11 +144,11 @@ export const pushService = {
                 const date = new Date();
                 date.setHours(hours, minutes, 0, 0);
                 date.setMinutes(date.getMinutes() - preNotificationMinutes);
-
-                const preTime = date.toLocaleTimeString('pt-BR', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  hour12: false
+                
+                const preTime = date.toLocaleTimeString('pt-BR', { 
+                  hour: '2-digit', 
+                  minute: '2-digit', 
+                  hour12: false 
                 });
 
                 reminders.push({
@@ -166,14 +166,14 @@ export const pushService = {
 
         if (reminders.length > 0) {
           // De-duplicar lembretes antes de inserir para evitar erros de restrição de unicidade
-          const uniqueReminders = Array.from(new Map(reminders.map(r =>
+          const uniqueReminders = Array.from(new Map(reminders.map(r => 
             [`${r.user_id}-${r.medication_id}-${r.reminder_time}-${r.message_template}`, r]
           )).values());
 
           const { error: insertError } = await supabase
             .from('medication_reminders')
             .insert(uniqueReminders);
-
+          
           if (insertError) {
             console.error("Erro ao inserir novos lembretes:", insertError);
             throw insertError;
@@ -195,22 +195,22 @@ export const pushService = {
       // Tentar ler de import.meta.env (Vite) ou process.env (injetado via vite.config.ts)
       const clientVapid = (isVite ? import.meta.env.VITE_VAPID_PUBLIC_KEY : undefined) || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
       const supabaseUrl = (isVite ? import.meta.env.VITE_SUPABASE_URL : undefined) || (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : undefined);
-
+      
       // Verificação básica de configuração
       if (!supabaseUrl || supabaseUrl === 'your-supabase-url') {
         throw new Error('Supabase URL não configurada');
       }
 
       const { data, error } = await supabase.functions.invoke('send-notifications', {
-        body: {
-          debug: true,
-          clientEnv: {
+        body: { 
+          debug: true, 
+          clientEnv: { 
             VAPID_PUBLIC_KEY: clientVapid,
             SUPABASE_URL: supabaseUrl
-          }
+          } 
         }
       });
-
+      
       if (error) throw error;
       return data;
     } catch (err: any) {
@@ -228,7 +228,7 @@ export const pushService = {
     try {
       const isVite = typeof import.meta !== 'undefined' && import.meta.env;
       const supabaseUrl = (isVite ? import.meta.env.VITE_SUPABASE_URL : undefined) || (typeof process !== 'undefined' ? process.env.VITE_SUPABASE_URL : undefined);
-
+      
       // Verificação básica de configuração
       if (!supabaseUrl || supabaseUrl === 'your-supabase-url') {
         throw new Error('Supabase não configurado. Configure as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
@@ -237,7 +237,7 @@ export const pushService = {
       const { data, error } = await supabase.functions.invoke('send-notifications', {
         body: { test: true, userId }
       });
-
+      
       if (error) {
         console.error("Erro detalhado da Edge Function:", error);
         if (error.status === 401) {
@@ -286,31 +286,31 @@ export const subscribeUser = async (userId: string, vapidPublicKey: string) => {
 
   try {
     const registration = await navigator.serviceWorker.ready;
-
+    
     const permission = await Notification.requestPermission();
     if (permission !== 'granted') {
       throw new Error('Permission not granted');
     }
 
     let subscription = await registration.pushManager.getSubscription();
-
+    
     // Se já existe uma subscrição, vamos verificar se a chave é a mesma.
     // Se as chaves mudaram, precisamos cancelar a antiga e criar uma nova.
     if (subscription) {
       const currentKey = subscription.options.applicationServerKey;
       const newKey = urlBase64ToUint8Array(vapidPublicKey);
-
+      
       // Comparar as chaves (Uint8Array)
-      const keysMatch = currentKey &&
+      const keysMatch = currentKey && 
         currentKey.byteLength === newKey.byteLength &&
         newKey.every((val, i) => val === new Uint8Array(currentKey)[i]);
-
+        
       if (!keysMatch) {
         await subscription.unsubscribe();
         subscription = null;
       }
     }
-
+    
     if (!subscription) {
       subscription = await registration.pushManager.subscribe({
         userVisibleOnly: true,

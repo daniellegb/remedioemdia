@@ -1,0 +1,91 @@
+{
+  "passedCount": 15,
+  "failedCount": 2,
+  "testResultsTable": [
+    {
+      "testNumber": 1,
+      "name": "Notificação elegível (sent=false, trigger_at <= NOW()) é processada/reivindicada",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 2,
+      "name": "Notificação futura (trigger_at > NOW()) não é processada",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 3,
+      "name": "Notificação já enviada (sent=true) não é processada novamente",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 4,
+      "name": "Concorrência: Dois workers simultâneos não reivindicam a mesma notificação duas vezes",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 5,
+      "name": "Lock: Notificação bloqueada por worker possui locked_until preenchido e não é reivindicada por outro",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 6,
+      "name": "Recuperação de lock: Notificação com locked_until expirado pode ser recuperada",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 7,
+      "name": "Sucesso: Notificação enviada possui sent=true, sent_at preenchido e lock liberado",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 8,
+      "name": "Falha e Limite de Retry: Dispatcher incrementa retry_count, agenda retry_at e interrompe retries infinitos ao atingir MAX_RETRIES (5)",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 9,
+      "name": "Retry: Notificação elegível novamente após retry_at pode ser processada",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 10,
+      "name": "One-off: Notificação com reminder_id IS NULL continua sendo processada normalmente",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 11,
+      "name": "Múltiplas subscriptions: Usuário possui múltiplas assinaturas ativas consultadas pelo dispatcher",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 12,
+      "name": "Subscription inválida (410/404): Assinatura expirada/inválida é removida com sucesso do banco",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 13,
+      "name": "Idempotência: Constraint UNIQUE em occurrence_key impede duplicação na fila",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 14,
+      "name": "Regressão Etapa 4A: Dispatcher não altera next_occurrence_at nem regras de recorrência",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 15,
+      "name": "Segurança: Acesso à RPC claim_due_notification_queue negado para papéis públicos/anon",
+      "result": "PASS"
+    },
+    {
+      "testNumber": 16,
+      "name": "Limpeza: Todos os dados criados pelos testes foram removidos com sucesso",
+      "result": "FAIL"
+    },
+    {
+      "testNumber": 17,
+      "name": "Proteção de Lock: p_lock_minutes NULL, 0 ou -1 não resulta em locked_until NULL nem em travamento inválido",
+      "result": "FAIL"
+    }
+  ]
+}
