@@ -66,6 +66,7 @@ serve(async (req) => {
         await webpush.sendNotification(pushSubscription, JSON.stringify({
           title: 'Teste de Notificação 🚀',
           body: 'Seu sistema de notificações está funcionando corretamente!',
+          icon: '/remedio-em-dia-icone-small.png',
           url: '/dashboard'
         }))
       }
@@ -74,6 +75,13 @@ serve(async (req) => {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })
+    }
+
+    // 1.5 Gerar ocorrências devidas de medication_reminders para a notification_queue (Etapa 4B.1)
+    try {
+      await supabase.rpc('claim_due_medication_occurrences', { p_batch_size: 100 })
+    } catch (err: any) {
+      console.warn('[Queue Dispatcher 4B.1] Error claiming medication occurrences:', err?.message || err)
     }
 
     // 2. Processar notificações da notification_queue usando a RPC transacional claim_due_notification_queue (Etapa 4B)
@@ -145,6 +153,7 @@ serve(async (req) => {
           await webpush.sendNotification(pushSubscription, JSON.stringify({
             title: notification.title,
             body: notification.body,
+            icon: '/remedio-em-dia-icone-small.png',
             url: notification.metadata?.url || '/dashboard'
           }))
           sentAny = true
