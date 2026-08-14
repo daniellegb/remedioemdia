@@ -26,10 +26,16 @@ self.addEventListener('push', function(event) {
     }
   }
 
+  const resolveUrl = (path) => {
+    if (!path) return new URL('/remedio-em-dia-icone-small.png', self.location.origin).href;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    return new URL(path, self.location.origin).href;
+  };
+
   const options = {
     body: data.body || 'Hora de tomar seu medicamento.',
-    icon: 'https://cdn-icons-png.flaticon.com/512/1048/1048953.png',
-    badge: 'https://cdn-icons-png.flaticon.com/512/1048/1048953.png',
+    icon: resolveUrl(data.icon),
+    badge: resolveUrl(data.badge),
     vibrate: [100, 50, 100],
     data: {
       url: data.url || '/dashboard'
