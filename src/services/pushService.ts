@@ -276,6 +276,32 @@ export const pushService = {
       }
       return { error: err.message || err };
     }
+  },
+
+  async ensureSubscriptionSynced(userId: string) {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      return null;
+    }
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      return null;
+    }
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await pushService.saveSubscription(userId, subscription);
+        return subscription;
+      } else {
+        const isVite = typeof import.meta !== 'undefined' && import.meta.env;
+        const vapidPublicKey = (isVite ? import.meta.env.VITE_VAPID_PUBLIC_KEY : undefined) || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
+        if (vapidPublicKey) {
+          return await subscribeUser(userId, vapidPublicKey);
+        }
+      }
+    } catch (err) {
+      console.warn('[Push] Erro ao re-sincronizar assinatura ao abrir o app:', err);
+    }
+    return null;
   }
 };
 
