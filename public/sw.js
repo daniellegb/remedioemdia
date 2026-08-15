@@ -51,7 +51,10 @@ self.addEventListener('push', function(event) {
     body: data.body || 'Hora de tomar seu medicamento.',
     icon: iconUrl,
     badge: data.badge ? resolveUrl(data.badge) : iconUrl,
-    vibrate: [100, 50, 100],
+    tag: data.tag || 'remedio-em-dia-notification',
+    renotify: true,
+    requireInteraction: data.requireInteraction !== undefined ? data.requireInteraction : true,
+    vibrate: [200, 100, 200, 100, 200],
     data: {
       url: data.url || '/dashboard'
     },
