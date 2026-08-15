@@ -1,4 +1,12 @@
 
+self.addEventListener('install', (event) => {
+  self.skipWaiting();
+});
+
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim());
+});
+
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
@@ -29,13 +37,20 @@ self.addEventListener('push', function(event) {
   const resolveUrl = (path) => {
     if (!path) return new URL('/remedio-em-dia-icone-small.png', self.location.origin).href;
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
-    return new URL(path, self.location.origin).href;
+    try {
+      return new URL(path, self.location.origin).href;
+    } catch (e) {
+      return new URL('/remedio-em-dia-icone-small.png', self.location.origin).href;
+    }
   };
+
+  const defaultIconUrl = new URL('/remedio-em-dia-icone-small.png', self.location.origin).href;
+  const iconUrl = data.icon ? resolveUrl(data.icon) : defaultIconUrl;
 
   const options = {
     body: data.body || 'Hora de tomar seu medicamento.',
-    icon: resolveUrl(data.icon),
-    badge: resolveUrl(data.badge),
+    icon: iconUrl,
+    badge: data.badge ? resolveUrl(data.badge) : iconUrl,
     vibrate: [100, 50, 100],
     data: {
       url: data.url || '/dashboard'
