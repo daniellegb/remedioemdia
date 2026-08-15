@@ -7,6 +7,63 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function formatPushPayload(notification: any, sub?: any) {
+  const pushTitle = 'Remédio em Dia';
+  let pushBody = notification.body || '';
+
+  const formatDateTime = (dateVal: string | Date, timeVal?: string, tz: string = 'America/Sao_Paulo') => {
+    if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim())) {
+      const [, m, d] = dateVal.trim().split('-');
+      const dateStr = `${d}/${m}`;
+      const timeStr = timeVal ? timeVal.substring(0, 5) : '00:00';
+      return { dateStr, timeStr };
+    }
+    const d = new Date(dateVal);
+    if (isNaN(d.getTime())) return { dateStr: '01/01', timeStr: '00:00' };
+    const dateStr = new Intl.DateTimeFormat('pt-BR', { timeZone: tz, day: '2-digit', month: '2-digit' }).format(d);
+    const timeStr = timeVal ? timeVal.substring(0, 5) : new Intl.DateTimeFormat('pt-BR', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
+    return { dateStr, timeStr };
+  };
+
+  if (!pushBody || !pushBody.includes(' — agendada para ')) {
+    const userTz = notification.metadata?.timezone || sub?.timezone || 'America/Sao_Paulo';
+
+    if (notification.appointment_id || notification.metadata?.appointment_id || notification.metadata?.type) {
+      const type = notification.metadata?.type || 'Consulta';
+      const detail = notification.metadata?.doctor_or_specialty || notification.metadata?.specialty || notification.metadata?.doctor || 'Geral';
+      const eventDate = notification.metadata?.event_date;
+      const eventTime = notification.metadata?.event_time;
+
+      const { dateStr, timeStr } = formatDateTime(
+        eventDate || notification.scheduled_at || notification.trigger_at,
+        eventTime,
+        userTz
+      );
+
+      pushBody = `${type}: ${detail} — agendada para ${dateStr} às ${timeStr}.`;
+    } else {
+      let medName = notification.metadata?.medication_name;
+      if (!medName) {
+        medName = (notification.body || '')
+          .replace(/^Lembrete:\s*/i, '')
+          .replace(/^Hora do Medicamento:?\s*/i, '')
+          .replace(/^Tomar\s+/i, '')
+          .replace(/\s*\([^)]*\)/g, '')
+          .trim() || 'Medicamento';
+      }
+      const { dateStr, timeStr } = formatDateTime(
+        notification.scheduled_at || notification.trigger_at,
+        undefined,
+        userTz
+      );
+
+      pushBody = `${medName} — agendada para ${dateStr} às ${timeStr}.`;
+    }
+  }
+
+  return { title: pushTitle, body: pushBody };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -63,9 +120,13 @@ serve(async (req) => {
             auth: sub.auth || (sub.subscription && sub.subscription.keys && sub.subscription.keys.auth)
           }
         };
+        const now = new Date();
+        const dateStr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' }).format(now);
+        const timeStr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
+
         await webpush.sendNotification(pushSubscription, JSON.stringify({
-          title: 'Teste de Notificação 🚀',
-          body: 'Seu sistema de notificações está funcionando corretamente!',
+          title: 'Remédio em Dia',
+          body: `Notificação de teste — agendada para ${dateStr} às ${timeStr}.`,
           icon: '/remedio-em-dia-icone-small.png',
           url: '/dashboard'
         }))
@@ -186,10 +247,11 @@ serve(async (req) => {
         }
 
         try {
-          console.log(`[Push 4B] Sending Web Push to user ${notification.user_id} (endpoint: ${endpoint.substring(0, 30)}...)`);
+          const payload = formatPushPayload(notification, sub);
+          console.log(`[Push 4B] Sending Web Push to user ${notification.user_id} (title: "${payload.title}", body: "${payload.body}")`);
           const pushResult = await webpush.sendNotification(pushSubscription, JSON.stringify({
-            title: notification.title,
-            body: notification.body,
+            title: payload.title,
+            body: payload.body,
             icon: '/remedio-em-dia-icone-small.png',
             url: notification.metadata?.url || '/dashboard'
           }))

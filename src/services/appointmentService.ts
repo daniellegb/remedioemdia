@@ -63,9 +63,11 @@ export const appointmentService = {
       await notificationService.scheduleAppointmentNotification(
         userId,
         created.id,
-        created.doctor || created.specialty || 'Consulta',
-        created.type,
-        triggerDate.toISOString()
+        created.specialty || created.doctor || 'Geral',
+        created.type || 'Consulta',
+        triggerDate.toISOString(),
+        created.date,
+        created.time
       );
     }
 
@@ -109,9 +111,11 @@ export const appointmentService = {
       await notificationService.scheduleAppointmentNotification(
         userId,
         updated.id,
-        updated.doctor || updated.specialty || 'Consulta',
-        updated.type,
-        triggerDate.toISOString()
+        updated.specialty || updated.doctor || 'Geral',
+        updated.type || 'Consulta',
+        triggerDate.toISOString(),
+        updated.date,
+        updated.time
       );
     }
 

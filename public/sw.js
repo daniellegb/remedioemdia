@@ -17,7 +17,7 @@ self.addEventListener('push', function(event) {
   console.log('[Service Worker] Push Received.');
   
   let data = { 
-    title: 'Lembrete de Medicamento', 
+    title: 'Remédio em Dia', 
     body: 'Você tem um novo lembrete do Remédio em Dia.' 
   };
 

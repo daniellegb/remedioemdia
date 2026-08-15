@@ -126,11 +126,8 @@ BEGIN
     
     v_occurrence_key := v_rec.reminder_id || ':' || to_char(v_current_occurrence_at AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"');
 
-    v_title := 'Hora do Medicamento 💊';
-    v_body := COALESCE(
-      v_rec.message_template,
-      'Tomar ' || v_rec.medication_name || CASE WHEN v_rec.dosage IS NOT NULL AND v_rec.dosage != '' THEN ' (' || v_rec.dosage || ')' ELSE '' END
-    );
+    v_title := 'Remédio em Dia';
+    v_body := v_rec.medication_name || ' — agendada para ' || to_char(v_current_occurrence_at AT TIME ZONE v_rec.user_tz, 'DD/MM "às" HH24:MI') || '.';
 
     v_inserted_queue_id := NULL;
 
