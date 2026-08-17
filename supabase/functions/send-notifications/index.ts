@@ -124,12 +124,22 @@ serve(async (req) => {
         const dateStr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' }).format(now);
         const timeStr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
 
-        await webpush.sendNotification(pushSubscription, JSON.stringify({
-          title: 'Remédio em Dia',
-          body: `Notificação de teste — agendada para ${dateStr} às ${timeStr}.`,
-          icon: '/remedio-em-dia-icone-small.png',
-          url: '/dashboard'
-        }))
+        await webpush.sendNotification(
+          pushSubscription,
+          JSON.stringify({
+            title: 'Remédio em Dia',
+            body: `Notificação de teste — agendada para ${dateStr} às ${timeStr}.`,
+            icon: '/remedio-em-dia-icone-small.png',
+            badge: '/remedio-em-dia-icone-small.png',
+            tag: 'test-notification',
+            requireInteraction: true,
+            url: '/dashboard'
+          }),
+          {
+            TTL: 86400,
+            urgency: 'high'
+          }
+        )
       }
 
       return new Response(JSON.stringify({ success: true, message: 'Test notification sent' }), {
@@ -248,20 +258,36 @@ serve(async (req) => {
 
         try {
           const payload = formatPushPayload(notification, sub);
-          console.log(`[Push 4B] Sending Web Push to user ${notification.user_id} (title: "${payload.title}", body: "${payload.body}")`);
-          const pushResult = await webpush.sendNotification(pushSubscription, JSON.stringify({
-            title: payload.title,
-            body: payload.body,
-            icon: '/remedio-em-dia-icone-small.png',
-            url: notification.metadata?.url || '/dashboard'
-          }))
+          const pushSendAttemptedAt = new Date().toISOString();
+          console.log(`[Push 4B] Sending Web Push to user ${notification.user_id} (title: "${payload.title}", body: "${payload.body}", id: "${notification.id}")`);
+          const pushResult = await webpush.sendNotification(
+            pushSubscription,
+            JSON.stringify({
+              id: notification.id,
+              notification_id: notification.id,
+              scheduled_at: notification.scheduled_at || notification.trigger_at,
+              title: payload.title,
+              body: payload.body,
+              icon: '/remedio-em-dia-icone-small.png',
+              badge: '/remedio-em-dia-icone-small.png',
+              tag: notification.id || `medication-${notification.medication_id || Date.now()}`,
+              requireInteraction: true,
+              url: notification.metadata?.url || '/dashboard'
+            }),
+            {
+              TTL: 86400,
+              urgency: 'high',
+              topic: notification.metadata?.topic || undefined
+            }
+          )
 
           sentAny = true
           deliveryAttempts.push({
             endpoint: endpoint.substring(0, 40) + '...',
             success: true,
             statusCode: pushResult.statusCode || 201,
-            attempted_at: new Date().toISOString()
+            attempted_at: pushSendAttemptedAt,
+            accepted_at: new Date().toISOString()
           })
         } catch (err: any) {
           console.error(`[Push 4B] Error sending push:`, err)
@@ -282,13 +308,16 @@ serve(async (req) => {
       }
 
       if (sentAny) {
+        const acceptedAt = new Date().toISOString();
         await supabase.from('notification_queue').update({
           sent: true,
-          sent_at: new Date().toISOString(),
+          sent_at: acceptedAt,
           locked_until: null,
           metadata: {
             ...(notification.metadata || {}),
             status: 'accepted_by_push_service',
+            backend_processed_at: nowIso,
+            push_service_accepted_at: acceptedAt,
             web_push_attempted: true,
             delivery_attempts: deliveryAttempts,
             os_delivery_guarantee: 'asynchronous_device_delivery_not_guaranteed_by_os'

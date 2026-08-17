@@ -544,6 +544,132 @@ async function createServer() {
     }
   });
 
+  // Push Notification Telemetry Endpoint for Service Worker receipts
+  app.post('/api/telemetry/push-received', express.json(), async (req, res) => {
+    const { notification_id, event_type, timestamp, tag, title, user_agent, error } = req.body || {};
+    const eventTime = timestamp || new Date().toISOString();
+
+    console.log(`[Push Telemetry API] ${event_type} for notification ${notification_id} at ${eventTime}`);
+
+    if (!notification_id) {
+      return res.status(400).json({ error: 'notification_id is required' });
+    }
+
+    try {
+      const { data: current } = await supabaseAdmin
+        .from('notification_queue')
+        .select('metadata')
+        .eq('id', notification_id)
+        .maybeSingle();
+
+      if (current) {
+        const existingMeta = current.metadata || {};
+        const telemetryEvents = existingMeta.telemetry_events || [];
+
+        telemetryEvents.push({
+          event_type,
+          timestamp: eventTime,
+          tag,
+          title,
+          user_agent,
+          error
+        });
+
+        const updatedMeta: any = {
+          ...existingMeta,
+          telemetry_events: telemetryEvents,
+          sw_receipt_observed: true,
+          last_sw_event: event_type,
+          last_sw_event_at: eventTime
+        };
+
+        if (event_type === 'service_worker_push_received') {
+          updatedMeta.sw_received_at = eventTime;
+        } else if (event_type === 'show_notification_completed') {
+          updatedMeta.show_notification_completed_at = eventTime;
+        } else if (event_type === 'show_notification_failed') {
+          updatedMeta.show_notification_failed_at = eventTime;
+          updatedMeta.show_notification_error = error;
+        }
+
+        await supabaseAdmin
+          .from('notification_queue')
+          .update({ metadata: updatedMeta })
+          .eq('id', notification_id);
+      }
+
+      return res.json({ success: true, notification_id, event_type, recorded_at: eventTime });
+    } catch (err: any) {
+      console.error('[Push Telemetry API Error]:', err);
+      return res.status(500).json({ error: err?.message || String(err) });
+    }
+  });
+
+  // Push Telemetry Summary Report Endpoint
+  app.get('/api/telemetry/report', async (req, res) => {
+    try {
+      const { data: items, error } = await supabaseAdmin
+        .from('notification_queue')
+        .select('id, user_id, title, trigger_at, scheduled_at, sent, sent_at, metadata, created_at')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+
+      const report = (items || []).map(item => {
+        const meta = item.metadata || {};
+        const scheduled = item.scheduled_at || item.trigger_at;
+        const acceptedAt = meta.push_service_accepted_at || item.sent_at;
+        const swReceivedAt = meta.sw_received_at;
+        const showCompletedAt = meta.show_notification_completed_at;
+        const showFailedAt = meta.show_notification_failed_at;
+
+        let delayMs = null;
+        let delayMinutesStr = 'N/A';
+        if (swReceivedAt && scheduled) {
+          delayMs = new Date(swReceivedAt).getTime() - new Date(scheduled).getTime();
+          delayMinutesStr = (delayMs / 60000).toFixed(2) + ' min';
+        }
+
+        let deliveryState = 'PENDING';
+        if (meta.status === 'discarded') {
+          deliveryState = 'DISCARDED';
+        } else if (meta.status === 'failed') {
+          deliveryState = 'PUSH_SERVICE_FAILED';
+        } else if (meta.status === 'accepted_by_push_service') {
+          if (swReceivedAt) {
+            deliveryState = Math.abs(delayMs || 0) > 120000 ? 'DELIVERED_WITH_DELAY' : 'DELIVERED_PROMPTLY';
+          } else {
+            deliveryState = 'ACCEPTED_BY_PUSH_SERVICE_NO_SW_RECEIPT';
+          }
+        }
+
+        return {
+          notification_id: item.id,
+          title: item.title,
+          scheduled_at: scheduled,
+          backend_processed_at: meta.backend_processed_at,
+          push_service_accepted_at: acceptedAt,
+          sw_received_at: swReceivedAt || null,
+          show_notification_completed_at: showCompletedAt || null,
+          show_notification_failed_at: showFailedAt || null,
+          show_notification_error: meta.show_notification_error || null,
+          delay_from_schedule: delayMinutesStr,
+          delivery_state: deliveryState,
+          events: meta.telemetry_events || []
+        };
+      });
+
+      return res.json({
+        total: report.length,
+        timestamp: new Date().toISOString(),
+        report
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: err?.message || String(err) });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
