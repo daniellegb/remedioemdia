@@ -58,11 +58,21 @@ function calculateNextOccurrenceAt(reminderTime: string): string {
 
 export const pushService = {
   async saveSubscription(userId: string, subscription: PushSubscription) {
-    const subData = subscription.toJSON();
-    const endpoint = subData.endpoint;
-    const p256dh = subData.keys?.p256dh;
-    const auth = subData.keys?.auth;
+    const rawSubData = subscription.toJSON();
+    const endpoint = rawSubData.endpoint;
+    const p256dh = rawSubData.keys?.p256dh;
+    const auth = rawSubData.keys?.auth;
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown';
+    const isAndroid = userAgent.includes('Android');
+    const isIOS = userAgent.includes('iPhone') || userAgent.includes('iPad');
+    const deviceType = isAndroid ? 'android' : (isIOS ? 'ios' : 'desktop');
+
+    const subData = {
+      ...rawSubData,
+      device_type: deviceType,
+      user_agent: userAgent
+    };
     
     // Garantir que o endpoint seja a única restrição de conflito para suportar múltiplos dispositivos
     const { data, error } = await supabase
@@ -72,7 +82,7 @@ export const pushService = {
         endpoint: endpoint,
         p256dh: p256dh,
         auth: auth,
-        subscription: subData, // mantemos o JSON completo por segurança
+        subscription: subData, // mantemos o JSON completo com device_type e user_agent
         timezone: timezone
       }, { 
         onConflict: 'endpoint' // Requisito Obrigatório: Unicidade por endpoint

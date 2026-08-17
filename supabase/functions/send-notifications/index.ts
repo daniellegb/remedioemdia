@@ -124,9 +124,13 @@ serve(async (req) => {
         const dateStr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' }).format(now);
         const timeStr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
 
+        const testId = `test-${Date.now()}`;
         await webpush.sendNotification(
           pushSubscription,
           JSON.stringify({
+            id: testId,
+            notification_id: testId,
+            scheduled_at: now.toISOString(),
             title: 'Remédio em Dia',
             body: `Notificação de teste — agendada para ${dateStr} às ${timeStr}.`,
             icon: '/remedio-em-dia-icone-small.png',
@@ -238,6 +242,10 @@ serve(async (req) => {
         const endpoint = sub.endpoint || (sub.subscription && sub.subscription.endpoint);
         if (!endpoint) continue;
 
+        const subJson = sub.subscription || {};
+        const subDeviceType = sub.device_type || subJson.device_type || (sub.user_agent?.includes('Android') ? 'android' : (subJson.user_agent?.includes('Android') ? 'android' : (subJson.user_agent?.includes('iPhone') ? 'ios' : 'desktop')));
+        const subUserAgent = sub.user_agent || subJson.user_agent || 'unknown';
+
         const pushSubscription = {
           endpoint: endpoint,
           keys: {
@@ -248,7 +256,10 @@ serve(async (req) => {
 
         if (!pushSubscription.keys.p256dh || !pushSubscription.keys.auth) {
           deliveryAttempts.push({
-            endpoint: endpoint.substring(0, 40) + '...',
+            endpoint: endpoint,
+            endpoint_masked: endpoint.substring(0, 40) + '...',
+            device_type: subDeviceType,
+            user_agent: subUserAgent,
             success: false,
             error: 'MISSING_P256DH_OR_AUTH_KEYS',
             attempted_at: new Date().toISOString()
@@ -259,7 +270,7 @@ serve(async (req) => {
         try {
           const payload = formatPushPayload(notification, sub);
           const pushSendAttemptedAt = new Date().toISOString();
-          console.log(`[Push 4B] Sending Web Push to user ${notification.user_id} (title: "${payload.title}", body: "${payload.body}", id: "${notification.id}")`);
+          console.log(`[Push 4B] Sending Web Push to user ${notification.user_id} on ${subDeviceType} (title: "${payload.title}", id: "${notification.id}")`);
           const pushResult = await webpush.sendNotification(
             pushSubscription,
             JSON.stringify({
@@ -283,17 +294,23 @@ serve(async (req) => {
 
           sentAny = true
           deliveryAttempts.push({
-            endpoint: endpoint.substring(0, 40) + '...',
+            endpoint: endpoint,
+            endpoint_masked: endpoint.substring(0, 40) + '...',
+            device_type: subDeviceType,
+            user_agent: subUserAgent,
             success: true,
             statusCode: pushResult.statusCode || 201,
             attempted_at: pushSendAttemptedAt,
             accepted_at: new Date().toISOString()
           })
         } catch (err: any) {
-          console.error(`[Push 4B] Error sending push:`, err)
+          console.error(`[Push 4B] Error sending push to ${subDeviceType}:`, err)
           lastError = err.message || String(err)
           deliveryAttempts.push({
-            endpoint: endpoint.substring(0, 40) + '...',
+            endpoint: endpoint,
+            endpoint_masked: endpoint.substring(0, 40) + '...',
+            device_type: subDeviceType,
+            user_agent: subUserAgent,
             success: false,
             statusCode: err.statusCode,
             error: lastError,

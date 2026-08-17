@@ -544,12 +544,37 @@ async function createServer() {
     }
   });
 
+  // Helper to safely preserve earliest event timestamp
+  function getEarliestIso(a?: string, b?: string): string | undefined {
+    if (!a) return b;
+    if (!b) return a;
+    try {
+      return new Date(a).getTime() <= new Date(b).getTime() ? a : b;
+    } catch {
+      return a || b;
+    }
+  }
+
   // Push Notification Telemetry Endpoint for Service Worker receipts
   app.post('/api/telemetry/push-received', express.json(), async (req, res) => {
-    const { notification_id, event_type, timestamp, tag, title, user_agent, error } = req.body || {};
+    const { 
+      notification_id, 
+      event_type, 
+      timestamp, 
+      tag, 
+      title, 
+      user_agent, 
+      device_type,
+      endpoint,
+      error,
+      show_notification_started_at,
+      completed_at,
+      failed_at,
+      sw_received_at
+    } = req.body || {};
     const eventTime = timestamp || new Date().toISOString();
 
-    console.log(`[Push Telemetry API] ${event_type} for notification ${notification_id} at ${eventTime}`);
+    console.log(`[Push Telemetry API] ${event_type} for notification ${notification_id} on ${device_type || 'unknown'} at ${eventTime}`);
 
     if (!notification_id) {
       return res.status(400).json({ error: 'notification_id is required' });
@@ -558,37 +583,109 @@ async function createServer() {
     try {
       const { data: current } = await supabaseAdmin
         .from('notification_queue')
-        .select('metadata')
+        .select('metadata, scheduled_at, trigger_at')
         .eq('id', notification_id)
         .maybeSingle();
 
       if (current) {
         const existingMeta = current.metadata || {};
-        const telemetryEvents = existingMeta.telemetry_events || [];
+        const telemetryEvents: any[] = existingMeta.telemetry_events || [];
+        const devicesMap: Record<string, any> = existingMeta.devices || {};
 
-        telemetryEvents.push({
-          event_type,
-          timestamp: eventTime,
-          tag,
-          title,
-          user_agent,
-          error
-        });
+        // Generate consistent device key (endpoint suffix or sanitized UA/type)
+        let deviceKey = 'unknown_device';
+        if (endpoint && typeof endpoint === 'string') {
+          const cleanEndpoint = endpoint.split('?')[0];
+          deviceKey = 'ep_' + cleanEndpoint.slice(-32).replace(/[^a-zA-Z0-9_-]/g, '_');
+        } else if (user_agent || device_type) {
+          const uaSlug = (user_agent || 'unknown').slice(0, 35).replace(/[^a-zA-Z0-9_-]/g, '_');
+          deviceKey = `${device_type || 'dev'}_${uaSlug}`;
+        }
+
+        const scheduledTime = current.scheduled_at || current.trigger_at;
+        const existingDevice = devicesMap[deviceKey] || {
+          device_key: deviceKey,
+          device_type: device_type || (user_agent?.includes('Android') ? 'android' : (user_agent?.includes('iPhone') ? 'ios' : 'desktop')),
+          user_agent: user_agent || 'unknown',
+          endpoint_snippet: endpoint && typeof endpoint === 'string' ? (endpoint.length > 50 ? endpoint.slice(0, 30) + '...' + endpoint.slice(-20) : endpoint) : undefined
+        };
+
+        // Update device type and UA if more specific
+        if (device_type && !existingDevice.device_type) {
+          existingDevice.device_type = device_type;
+        }
+        if (user_agent && existingDevice.user_agent === 'unknown') {
+          existingDevice.user_agent = user_agent;
+        }
+
+        if (event_type === 'service_worker_push_received') {
+          const receivedTime = sw_received_at || eventTime;
+          existingDevice.sw_received_at = getEarliestIso(existingDevice.sw_received_at, receivedTime);
+        } else if (event_type === 'show_notification_started') {
+          const startTime = show_notification_started_at || eventTime;
+          existingDevice.show_notification_started_at = getEarliestIso(existingDevice.show_notification_started_at, startTime);
+          if (!existingDevice.sw_received_at) {
+            existingDevice.sw_received_at = existingDevice.show_notification_started_at;
+          }
+        } else if (event_type === 'show_notification_completed') {
+          const compTime = completed_at || eventTime;
+          existingDevice.show_notification_completed_at = getEarliestIso(existingDevice.show_notification_completed_at, compTime);
+        } else if (event_type === 'show_notification_failed') {
+          const failTime = failed_at || eventTime;
+          existingDevice.show_notification_failed_at = getEarliestIso(existingDevice.show_notification_failed_at, failTime);
+          existingDevice.show_notification_error = error;
+        }
+
+        if (existingDevice.sw_received_at && scheduledTime) {
+          const delayMs = new Date(existingDevice.sw_received_at).getTime() - new Date(scheduledTime).getTime();
+          existingDevice.delay_from_schedule_ms = delayMs;
+          existingDevice.delay_from_schedule_str = (delayMs / 60000).toFixed(2) + ' min';
+        }
+
+        existingDevice.last_event = event_type;
+        existingDevice.last_event_at = eventTime;
+        devicesMap[deviceKey] = existingDevice;
+
+        // Avoid adding duplicate telemetry events
+        const isDuplicateEvent = telemetryEvents.some(
+          e => e.device_key === deviceKey && e.event_type === event_type && e.timestamp === eventTime
+        );
+
+        if (!isDuplicateEvent) {
+          telemetryEvents.push({
+            event_type,
+            timestamp: eventTime,
+            tag,
+            title,
+            user_agent,
+            device_type,
+            device_key: deviceKey,
+            endpoint_snippet: existingDevice.endpoint_snippet,
+            error
+          });
+        }
 
         const updatedMeta: any = {
           ...existingMeta,
+          devices: devicesMap,
           telemetry_events: telemetryEvents,
           sw_receipt_observed: true,
           last_sw_event: event_type,
           last_sw_event_at: eventTime
         };
 
+        // Maintain global convenience timestamps using earliest dates
         if (event_type === 'service_worker_push_received') {
-          updatedMeta.sw_received_at = eventTime;
+          updatedMeta.sw_received_at = getEarliestIso(existingMeta.sw_received_at, sw_received_at || eventTime);
+        } else if (event_type === 'show_notification_started') {
+          updatedMeta.show_notification_started_at = getEarliestIso(existingMeta.show_notification_started_at, show_notification_started_at || eventTime);
+          if (!updatedMeta.sw_received_at) {
+            updatedMeta.sw_received_at = updatedMeta.show_notification_started_at;
+          }
         } else if (event_type === 'show_notification_completed') {
-          updatedMeta.show_notification_completed_at = eventTime;
+          updatedMeta.show_notification_completed_at = getEarliestIso(existingMeta.show_notification_completed_at, completed_at || eventTime);
         } else if (event_type === 'show_notification_failed') {
-          updatedMeta.show_notification_failed_at = eventTime;
+          updatedMeta.show_notification_failed_at = getEarliestIso(existingMeta.show_notification_failed_at, failed_at || eventTime);
           updatedMeta.show_notification_error = error;
         }
 
@@ -605,43 +702,216 @@ async function createServer() {
     }
   });
 
-  // Push Telemetry Summary Report Endpoint
+  // Push Telemetry Summary Report Endpoint with Multi-Device Diagnostics
   app.get('/api/telemetry/report', async (req, res) => {
     try {
       const { data: items, error } = await supabaseAdmin
         .from('notification_queue')
         .select('id, user_id, title, trigger_at, scheduled_at, sent, sent_at, metadata, created_at')
         .order('created_at', { ascending: false })
-        .limit(20);
+        .limit(50);
 
       if (error) throw error;
 
-      const report = (items || []).map(item => {
+      const filteredItems = (items || []).filter(item => {
+        const meta = item.metadata || {};
+        return Boolean(
+          meta.backend_processed_at ||
+          meta.web_push_attempted ||
+          (meta.telemetry_events && meta.telemetry_events.length > 0)
+        );
+      }).slice(0, 30);
+
+      const report = filteredItems.map(item => {
         const meta = item.metadata || {};
         const scheduled = item.scheduled_at || item.trigger_at;
         const acceptedAt = meta.push_service_accepted_at || item.sent_at;
-        const swReceivedAt = meta.sw_received_at;
-        const showCompletedAt = meta.show_notification_completed_at;
-        const showFailedAt = meta.show_notification_failed_at;
+        const deliveryAttempts: any[] = meta.delivery_attempts || [];
+        const devicesMap: { [key: string]: any } = meta.devices || {};
 
-        let delayMs = null;
-        let delayMinutesStr = 'N/A';
-        if (swReceivedAt && scheduled) {
-          delayMs = new Date(swReceivedAt).getTime() - new Date(scheduled).getTime();
-          delayMinutesStr = (delayMs / 60000).toFixed(2) + ' min';
+        // Correlate delivery attempts with device telemetry
+        const devicesReport: any[] = [];
+        const seenDeviceKeys = new Set<string>();
+
+        if (deliveryAttempts.length > 0) {
+          deliveryAttempts.forEach((attempt: any) => {
+            const rawEndpoint = attempt.endpoint || '';
+            const cleanEndpoint = rawEndpoint.split('?')[0];
+            const epKey = cleanEndpoint ? 'ep_' + cleanEndpoint.slice(-32).replace(/[^a-zA-Z0-9_-]/g, '_') : '';
+            
+            // Try finding matching telemetry by endpoint key or by device_type/user_agent
+            let telemetryMatch = epKey ? devicesMap[epKey] : null;
+            if (!telemetryMatch) {
+              const matchedKey = Object.keys(devicesMap).find(k => {
+                const dev = devicesMap[k];
+                if (seenDeviceKeys.has(k)) return false;
+                if (dev.device_type === attempt.device_type) return true;
+                if (dev.user_agent && attempt.user_agent && dev.user_agent === attempt.user_agent) return true;
+                return false;
+              });
+              if (matchedKey) {
+                telemetryMatch = devicesMap[matchedKey];
+                seenDeviceKeys.add(matchedKey);
+              }
+            } else {
+              seenDeviceKeys.add(epKey);
+            }
+
+            const devType = telemetryMatch?.device_type || attempt.device_type || (attempt.user_agent?.includes('Android') ? 'android' : (attempt.user_agent?.includes('iPhone') ? 'ios' : 'desktop'));
+            const swReceived = telemetryMatch?.sw_received_at || null;
+            const showStarted = telemetryMatch?.show_notification_started_at || null;
+            const showCompleted = telemetryMatch?.show_notification_completed_at || null;
+            const showFailed = telemetryMatch?.show_notification_failed_at || null;
+            const showErr = telemetryMatch?.show_notification_error || null;
+
+            let devDelayMs: number | null = null;
+            let devDelayStr = 'N/A';
+            if (swReceived && scheduled) {
+              devDelayMs = new Date(swReceived).getTime() - new Date(scheduled).getTime();
+              devDelayStr = (devDelayMs / 60000).toFixed(2) + ' min';
+            }
+
+            let devState = 'PENDING';
+            let diagnosticNote = '';
+
+            if (!attempt.success) {
+              devState = 'PUSH_SERVICE_FAILED';
+              diagnosticNote = `Push service rejected token: ${attempt.error || attempt.statusCode || 'Unknown error'}`;
+            } else if (showFailed || showErr) {
+              devState = 'SHOW_NOTIFICATION_FAILED';
+              diagnosticNote = `Service Worker received push but failed to display notification: ${showErr}`;
+            } else if (swReceived) {
+              if (Math.abs(devDelayMs || 0) > 120000) {
+                devState = 'DELIVERED_WITH_DELAY';
+                diagnosticNote = devType === 'android'
+                  ? `Delivered with delay of ${devDelayStr}. Confirmed by Service Worker (typical of Android Doze Mode / Locked Screen).`
+                  : `Delivered with delay of ${devDelayStr}. Confirmed by Service Worker.`;
+              } else {
+                devState = 'DELIVERED_PROMPTLY';
+                diagnosticNote = 'Delivered promptly on scheduled time.';
+              }
+            } else {
+              devState = 'AWAITING_RECEIPT_CONFIRMATION';
+              diagnosticNote = devType === 'android'
+                ? 'Accepted by push service (FCM). Awaiting Service Worker receipt confirmation (device may be locked, in Doze Mode, or offline).'
+                : 'Accepted by push service. Awaiting Service Worker receipt confirmation.';
+            }
+
+            devicesReport.push({
+              device_type: devType,
+              user_agent: attempt.user_agent || telemetryMatch?.user_agent || 'unknown',
+              endpoint_masked: attempt.endpoint_masked || (rawEndpoint.substring(0, 35) + '...'),
+              push_service_accepted_at: attempt.accepted_at || acceptedAt,
+              sw_received_at: swReceived,
+              show_notification_started_at: showStarted,
+              show_notification_completed_at: showCompleted,
+              show_notification_failed_at: showFailed,
+              show_notification_error: showErr,
+              delay_from_schedule: devDelayStr,
+              delay_ms: devDelayMs,
+              device_state: devState,
+              diagnostic_note: diagnosticNote
+            });
+          });
         }
 
-        let deliveryState = 'PENDING';
-        if (meta.status === 'discarded') {
-          deliveryState = 'DISCARDED';
-        } else if (meta.status === 'failed') {
-          deliveryState = 'PUSH_SERVICE_FAILED';
-        } else if (meta.status === 'accepted_by_push_service') {
-          if (swReceivedAt) {
-            deliveryState = Math.abs(delayMs || 0) > 120000 ? 'DELIVERED_WITH_DELAY' : 'DELIVERED_PROMPTLY';
-          } else {
-            deliveryState = 'ACCEPTED_BY_PUSH_SERVICE_NO_SW_RECEIPT';
+        // Include any additional devices that reported telemetry but weren't in deliveryAttempts
+        Object.keys(devicesMap).forEach(k => {
+          if (seenDeviceKeys.has(k)) return;
+          const dev = devicesMap[k];
+          let devDelayMs: number | null = null;
+          let devDelayStr = 'N/A';
+          if (dev.sw_received_at && scheduled) {
+            devDelayMs = new Date(dev.sw_received_at).getTime() - new Date(scheduled).getTime();
+            devDelayStr = (devDelayMs / 60000).toFixed(2) + ' min';
           }
+
+          let devState = 'PENDING';
+          if (dev.show_notification_failed_at || dev.show_notification_error) {
+            devState = 'SHOW_NOTIFICATION_FAILED';
+          } else if (dev.sw_received_at) {
+            devState = Math.abs(devDelayMs || 0) > 120000 ? 'DELIVERED_WITH_DELAY' : 'DELIVERED_PROMPTLY';
+          }
+
+          devicesReport.push({
+            device_type: dev.device_type || 'unknown',
+            user_agent: dev.user_agent || 'unknown',
+            endpoint_masked: dev.endpoint_snippet || 'unknown',
+            push_service_accepted_at: acceptedAt,
+            sw_received_at: dev.sw_received_at || null,
+            show_notification_started_at: dev.show_notification_started_at || null,
+            show_notification_completed_at: dev.show_notification_completed_at || null,
+            show_notification_failed_at: dev.show_notification_failed_at || null,
+            show_notification_error: dev.show_notification_error || null,
+            delay_from_schedule: devDelayStr,
+            delay_ms: devDelayMs,
+            device_state: devState,
+            diagnostic_note: devState === 'DELIVERED_PROMPTLY' ? 'Delivered promptly' : 'Delivered with delay'
+          });
+        });
+
+        // Global metrics calculation
+        const totalTargeted = devicesReport.length;
+        const promptlyDelivered = devicesReport.filter(d => d.device_state === 'DELIVERED_PROMPTLY').length;
+        const delayedDelivered = devicesReport.filter(d => d.device_state === 'DELIVERED_WITH_DELAY').length;
+        const awaitingConfirmation = devicesReport.filter(d => d.device_state === 'AWAITING_RECEIPT_CONFIRMATION').length;
+        const showFailedCount = devicesReport.filter(d => d.device_state === 'SHOW_NOTIFICATION_FAILED').length;
+        const pushFailedCount = devicesReport.filter(d => d.device_state === 'PUSH_SERVICE_FAILED').length;
+
+        // Overall classification & diagnosis summary
+        let overallDeliveryState = 'PENDING';
+        let diagnosisSummary = '';
+
+        if (meta.status === 'discarded') {
+          overallDeliveryState = 'DISCARDED';
+          diagnosisSummary = 'Notification was discarded (user disabled notifications or no active subscription).';
+        } else if (meta.status === 'failed' || (pushFailedCount === totalTargeted && totalTargeted > 0)) {
+          overallDeliveryState = 'PUSH_SERVICE_FAILED';
+          diagnosisSummary = 'Failed to dispatch Web Push to push service.';
+        } else if (showFailedCount > 0) {
+          overallDeliveryState = 'SHOW_NOTIFICATION_FAILED';
+          diagnosisSummary = `${showFailedCount} device(s) failed inside showNotification.`;
+        } else if (totalTargeted > 0) {
+          const pcDevice = devicesReport.find(d => d.device_type === 'desktop');
+          const mobileDevice = devicesReport.find(d => d.device_type === 'android' || d.device_type === 'ios');
+
+          if (promptlyDelivered === totalTargeted) {
+            overallDeliveryState = 'ALL_DEVICES_DELIVERED_PROMPTLY';
+            diagnosisSummary = `All ${totalTargeted} device(s) received and displayed the notification promptly.`;
+          } else if (pcDevice?.device_state === 'DELIVERED_PROMPTLY' && mobileDevice?.device_state === 'DELIVERED_WITH_DELAY') {
+            overallDeliveryState = 'PC_PROMPT_ANDROID_DELAYED';
+            diagnosisSummary = `PC delivered promptly, but Android was delayed by ${mobileDevice.delay_from_schedule} (Service Worker confirmed receipt after delay).`;
+          } else if (pcDevice?.device_state === 'DELIVERED_PROMPTLY' && mobileDevice?.device_state === 'AWAITING_RECEIPT_CONFIRMATION') {
+            overallDeliveryState = 'PC_PROMPT_ANDROID_AWAITING_RECEIPT';
+            diagnosisSummary = `PC delivered promptly. Android has not reported receipt confirmation yet (device may be locked, in Doze Mode, or offline).`;
+          } else if (delayedDelivered === totalTargeted) {
+            overallDeliveryState = 'DELIVERED_WITH_DELAY';
+            diagnosisSummary = `All ${totalTargeted} device(s) experienced delivery delay.`;
+          } else if (awaitingConfirmation === totalTargeted) {
+            overallDeliveryState = 'ACCEPTED_BY_PUSH_SERVICE_AWAITING_DEVICES';
+            diagnosisSummary = `Push accepted by push service. All ${totalTargeted} device(s) are awaiting receipt confirmation.`;
+          } else {
+            overallDeliveryState = 'PARTIAL_DELIVERY';
+            diagnosisSummary = `${promptlyDelivered}/${totalTargeted} devices delivered promptly (${awaitingConfirmation} awaiting confirmation, ${delayedDelivered} delayed).`;
+          }
+        } else {
+          // Fallback if no device attempts array
+          const swReceivedAt = meta.sw_received_at;
+          const showFailedAt = meta.show_notification_failed_at;
+          let delayMs = null;
+          let delayMinutesStr = 'N/A';
+          if (swReceivedAt && scheduled) {
+            delayMs = new Date(swReceivedAt).getTime() - new Date(scheduled).getTime();
+            delayMinutesStr = (delayMs / 60000).toFixed(2) + ' min';
+          }
+          if (showFailedAt || meta.show_notification_error) {
+            overallDeliveryState = 'SHOW_NOTIFICATION_FAILED';
+          } else if (swReceivedAt) {
+            overallDeliveryState = Math.abs(delayMs || 0) > 120000 ? 'DELIVERED_WITH_DELAY' : 'DELIVERED_PROMPTLY';
+          } else {
+            overallDeliveryState = 'ACCEPTED_BY_PUSH_SERVICE_NO_SW_RECEIPT';
+          }
+          diagnosisSummary = `Overall state: ${overallDeliveryState}`;
         }
 
         return {
@@ -650,12 +920,21 @@ async function createServer() {
           scheduled_at: scheduled,
           backend_processed_at: meta.backend_processed_at,
           push_service_accepted_at: acceptedAt,
-          sw_received_at: swReceivedAt || null,
-          show_notification_completed_at: showCompletedAt || null,
-          show_notification_failed_at: showFailedAt || null,
-          show_notification_error: meta.show_notification_error || null,
-          delay_from_schedule: delayMinutesStr,
-          delivery_state: deliveryState,
+          overall_delivery_state: overallDeliveryState,
+          diagnosis_summary: diagnosisSummary,
+          targeted_devices_count: totalTargeted,
+          delivered_promptly_count: promptlyDelivered,
+          delayed_delivered_count: delayedDelivered,
+          awaiting_confirmation_count: awaitingConfirmation,
+          devices: devicesReport,
+          legacy: {
+            sw_received_at: meta.sw_received_at || null,
+            show_notification_started_at: meta.show_notification_started_at || null,
+            show_notification_completed_at: meta.show_notification_completed_at || null,
+            show_notification_failed_at: meta.show_notification_failed_at || null,
+            show_notification_error: meta.show_notification_error || null,
+            delivery_state: overallDeliveryState
+          },
           events: meta.telemetry_events || []
         };
       });
