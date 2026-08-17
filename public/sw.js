@@ -167,15 +167,6 @@ self.addEventListener('push', function(event) {
     });
   };
 
-  // Flush any previously stored telemetry events that failed during offline/Doze Mode
-  const flushPromise = flushPendingTelemetry();
-
-  // Report initial SW push receipt immediately
-  const receiptTelemetryPromise = sendTelemetry('service_worker_push_received', {
-    sw_received_at: swReceivedAt,
-    scheduled_at: data.scheduled_at
-  });
-
   const resolveUrl = function(path) {
     if (!path) return new URL('/remedio-em-dia-icone-small.png', self.location.origin).href;
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
@@ -205,11 +196,9 @@ self.addEventListener('push', function(event) {
   };
 
   const showStartedAt = new Date().toISOString();
-  console.log('[Service Worker] Starting showNotification at:', showStartedAt, 'for ID:', notificationId);
-  const startedTelemetryPromise = sendTelemetry('show_notification_started', {
-    show_notification_started_at: showStartedAt
-  });
+  console.log('[Service Worker] Immediate showNotification dispatched at:', showStartedAt, 'for ID:', notificationId);
 
+  // 1. CRITICAL PATH: Execute showNotification immediately without waiting for any network/DB/endpoint operations
   const showNotificationPromise = self.registration.showNotification(data.title || 'Remédio em Dia', options)
     .then(function() {
       console.log('[Service Worker] showNotification succeeded for ID:', notificationId);
@@ -225,7 +214,18 @@ self.addEventListener('push', function(event) {
       });
     });
 
-  event.waitUntil(Promise.all([flushPromise, receiptTelemetryPromise, startedTelemetryPromise, showNotificationPromise]));
+  // 2. Telemetry and queue maintenance run concurrently in the background
+  const receiptTelemetryPromise = sendTelemetry('service_worker_push_received', {
+    sw_received_at: swReceivedAt,
+    scheduled_at: data.scheduled_at
+  });
+  const startedTelemetryPromise = sendTelemetry('show_notification_started', {
+    show_notification_started_at: showStartedAt
+  });
+  const flushPromise = flushPendingTelemetry();
+
+  // event.waitUntil keeps SW alive until notification and background telemetries finish
+  event.waitUntil(Promise.all([showNotificationPromise, receiptTelemetryPromise, startedTelemetryPromise, flushPromise]));
 });
 
 self.addEventListener('notificationclick', function(event) {
