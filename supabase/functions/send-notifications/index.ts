@@ -80,10 +80,10 @@ serve(async (req) => {
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-
+    
     // 1. Lógica de Teste e Debug (mantida para compatibilidade do botão de teste)
     const body = await req.json().catch(() => ({}))
-
+    
     if (body.debug) {
       return new Response(JSON.stringify({
         success: true,
@@ -101,7 +101,7 @@ serve(async (req) => {
         .from('push_subscriptions')
         .select('*')
         .eq('user_id', body.userId)
-
+      
       if (!subs || subs.length === 0) {
         return new Response(JSON.stringify({ error: 'No subscriptions found for user' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },

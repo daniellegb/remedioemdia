@@ -42,7 +42,7 @@ function getMatchingSupabaseUrl(): string {
   const serviceKeyRef = getProjectRefFromKey(supabaseServiceKey);
   const dbUrl = process.env.SUPABASE_DB_URL || '';
   const viteUrl = process.env.VITE_SUPABASE_URL || '';
-
+  
   if (serviceKeyRef) {
     if (getProjectRefFromUrl(dbUrl) === serviceKeyRef) {
       return dbUrl;
@@ -76,11 +76,11 @@ async function runSchemaMigration() {
     console.warn('[Migration] SUPABASE_DB_URL is missing. Skipping direct schema checks.');
     return;
   }
-
+  
   try {
     console.log('[Migration] Conectando ao banco PostgreSQL para verificar colunas de exclusão de conta...');
     const sql = postgres(dbUrl, { ssl: 'require', connect_timeout: 10, max: 1 });
-
+    
     await sql`
       ALTER TABLE public.profiles 
       ADD COLUMN IF NOT EXISTS account_status TEXT DEFAULT 'active' CHECK (account_status IN ('active', 'pending_deletion')),
@@ -105,7 +105,7 @@ async function runSchemaMigration() {
       ADD COLUMN IF NOT EXISTS keep_history BOOLEAN DEFAULT TRUE,
       ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;
     `;
-
+    
     console.log('[Migration] Configurando limites de plano (Gratuito vs Premium) e triggers...');
     await sql`
       CREATE OR REPLACE FUNCTION public.has_premium_access(user_uuid UUID)
@@ -221,9 +221,9 @@ async function runSchemaMigration() {
           EXECUTE FUNCTION public.enforce_appointments_limit();
     `;
     console.log('[Migration] Triggers e funções de limite de plano criados/atualizados com sucesso!');
-
+    
     console.log('[Migration] Verificando se a tabela public.active_sessions existe com a nova estrutura de chaves...');
-
+    
     // Check primary key of public.active_sessions to migrate safely if needed
     let isSessionIdPK = false;
     try {
@@ -235,7 +235,7 @@ async function runSchemaMigration() {
         AND    i.indisprimary;
       `;
       isSessionIdPK = keyCheck.some(row => row.attname === 'session_id');
-
+      
       if (keyCheck.length > 0 && !isSessionIdPK) {
         console.log('[Migration] Estrutura antiga de active_sessions detectada. Recriando tabela para suportar replicação Realtime...');
         await sql`DROP TABLE IF EXISTS public.active_sessions CASCADE;`;
@@ -299,7 +299,7 @@ async function runSchemaMigration() {
     `;
 
     console.log('[Migration] Colunas de exclusão e tabela de sessões verificadas/criadas com sucesso no banco de dados!');
-
+    
     // Force Supabase API cache (PostgREST) to reload and pick up the new columns immediately
     try {
       console.log('[Migration] Notificando PostgREST para recarregar o cache do schema...');
@@ -320,12 +320,12 @@ async function runSchemaMigration() {
  */
 function startScheduledDeletionWorker() {
   console.log('[Worker] Iniciando worker de exclusão de contas agendadas...');
-
+  
   const checkAndRunDeletions = async () => {
     try {
       const now = new Date().toISOString();
       console.log(`[Worker] Verificando exclusões programadas pendentes... (Hora atual: ${now})`);
-
+      
       let pendingDeletions: Array<{ id: string; email?: string }> = [];
 
       // 1. Try profiles table
@@ -371,16 +371,16 @@ function startScheduledDeletionWorker() {
       } catch (listCatch: any) {
         console.error('[Worker] listUsers fallback threw exception:', listCatch.message || listCatch);
       }
-
+      
       if (pendingDeletions.length === 0) {
         return;
       }
-
+      
       console.log(`[Worker] Encontradas ${pendingDeletions.length} contas para exclusão definitiva.`);
-
+      
       for (const profile of pendingDeletions) {
         console.log(`[Worker] Excluindo permanentemente a conta do usuário ${profile.id} (${profile.email || 'sem e-mail'})`);
-
+        
         const { error: deleteErr } = await supabaseAdmin.auth.admin.deleteUser(profile.id);
         if (deleteErr) {
           console.error(`[Worker] Falha ao excluir usuário ${profile.id}:`, deleteErr.message);
@@ -392,10 +392,10 @@ function startScheduledDeletionWorker() {
       console.error('[Worker] Erro inesperado no job de exclusão:', err.message || err);
     }
   };
-
+  
   // Run on startup
   checkAndRunDeletions();
-
+  
   // Run every 10 minutes
   setInterval(checkAndRunDeletions, 10 * 60 * 1000);
 }
@@ -457,7 +457,7 @@ async function createServer() {
       }
 
       if (action === 'delete') {
-        const isPremiumActive = profile.plan === 'premium' &&
+        const isPremiumActive = profile.plan === 'premium' && 
           (profile.subscription_status === 'active' || profile.subscription_status === 'trial');
 
         if (isPremiumActive) {
@@ -566,12 +566,12 @@ const PORT = 3000;
 createServer().then(app => {
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`Server running on http://localhost:${PORT}`);
-
+    
     // Run PostgreSQL direct schema migration without blocking server startup
     runSchemaMigration().catch(err => {
       console.error('[Migration] Non-blocking schema migration error:', err);
     });
-
+    
     // Start the background cron worker to complete scheduled deletions
     startScheduledDeletionWorker();
   });

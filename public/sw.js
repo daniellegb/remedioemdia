@@ -1,21 +1,21 @@
 // Remédio em Dia - Service Worker
-self.addEventListener('install', function (event) {
+self.addEventListener('install', function(event) {
   self.skipWaiting();
 });
 
-self.addEventListener('activate', function (event) {
+self.addEventListener('activate', function(event) {
   event.waitUntil(self.clients.claim());
 });
 
-self.addEventListener('message', function (event) {
+self.addEventListener('message', function(event) {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
   }
 });
 
-self.addEventListener('push', function (event) {
-  let data = {
-    title: 'Remédio em Dia',
+self.addEventListener('push', function(event) {
+  let data = { 
+    title: 'Remédio em Dia', 
     body: 'Passamos por um horário de administração. Confira seus remédios no Painel Hoje.',
     icon: '/remedio-em-dia-icone-small.png',
     tag: 'medication-reminder'
@@ -29,7 +29,7 @@ self.addEventListener('push', function (event) {
     }
   }
 
-  const resolveUrl = function (path) {
+  const resolveUrl = function(path) {
     if (!path) return new URL('/remedio-em-dia-icone-small.png', self.location.origin).href;
     if (path.startsWith('http://') || path.startsWith('https://')) return path;
     try {
@@ -64,19 +64,19 @@ self.addEventListener('push', function (event) {
   );
 });
 
-self.addEventListener('notificationclick', function (event) {
+self.addEventListener('notificationclick', function(event) {
   event.notification.close();
-
+  
   const action = event.action;
   const notificationData = event.notification.data || {};
   let redirectUrl = notificationData.url || '/historico';
-
+  
   if (action === 'take') {
     redirectUrl = '/historico?action=take';
   }
 
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (clientList) {
+    clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function(clientList) {
       for (let i = 0; i < clientList.length; i++) {
         const client = clientList[i];
         if (client.url && 'focus' in client) {
