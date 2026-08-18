@@ -80,10 +80,10 @@ serve(async (req) => {
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey)
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
-    
+
     // 1. Lógica de Teste e Debug (mantida para compatibilidade do botão de teste)
     const body = await req.json().catch(() => ({}))
-    
+
     if (body.debug) {
       return new Response(JSON.stringify({
         success: true,
@@ -101,7 +101,7 @@ serve(async (req) => {
         .from('push_subscriptions')
         .select('*')
         .eq('user_id', body.userId)
-      
+
       if (!subs || subs.length === 0) {
         return new Response(JSON.stringify({ error: 'No subscriptions found for user' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -208,9 +208,7 @@ serve(async (req) => {
             ...(notification.metadata || {}),
             status: 'discarded',
             discarded_reason: 'PUSH_NOTIFICATIONS_DISABLED',
-            discarded_at: nowIso,
-            web_push_attempted: false,
-            os_delivery_guarantee: 'none_not_attempted'
+            discarded_at: nowIso
           }
         }).eq('id', notification.id)
         processedCount++
@@ -228,9 +226,7 @@ serve(async (req) => {
             ...(notification.metadata || {}),
             status: 'discarded',
             discarded_reason: 'NO_ACTIVE_SUBSCRIPTION',
-            discarded_at: nowIso,
-            web_push_attempted: false,
-            os_delivery_guarantee: 'none_not_attempted'
+            discarded_at: nowIso
           }
         }).eq('id', notification.id)
         processedCount++
@@ -238,16 +234,11 @@ serve(async (req) => {
       }
 
       let sentAny = false
-      const deliveryAttempts: any[] = []
       let lastError: string | null = null
 
       for (const sub of userSubs) {
         const endpoint = sub.endpoint || (sub.subscription && sub.subscription.endpoint);
         if (!endpoint) continue;
-
-        const subJson = sub.subscription || {};
-        const subDeviceType = sub.device_type || subJson.device_type || (sub.user_agent?.includes('Android') ? 'android' : (subJson.user_agent?.includes('Android') ? 'android' : (subJson.user_agent?.includes('iPhone') ? 'ios' : 'desktop')));
-        const subUserAgent = sub.user_agent || subJson.user_agent || 'unknown';
 
         const pushSubscription = {
           endpoint: endpoint,
@@ -258,23 +249,12 @@ serve(async (req) => {
         };
 
         if (!pushSubscription.keys.p256dh || !pushSubscription.keys.auth) {
-          deliveryAttempts.push({
-            endpoint: endpoint,
-            endpoint_masked: endpoint.substring(0, 40) + '...',
-            device_type: subDeviceType,
-            user_agent: subUserAgent,
-            success: false,
-            error: 'MISSING_P256DH_OR_AUTH_KEYS',
-            attempted_at: new Date().toISOString()
-          })
           continue;
         }
 
         try {
           const payload = formatPushPayload(notification, sub);
-          const pushSendAttemptedAt = new Date().toISOString();
-          console.log(`[Push 4B] Sending Web Push to user ${notification.user_id} on ${subDeviceType} (title: "${payload.title}", id: "${notification.id}")`);
-          const pushResult = await webpush.sendNotification(
+          await webpush.sendNotification(
             pushSubscription,
             JSON.stringify({
               id: notification.id,
@@ -286,7 +266,7 @@ serve(async (req) => {
               badge: '/remedio-em-dia-icone-small.png',
               tag: notification.id || `medication-${notification.medication_id || Date.now()}`,
               requireInteraction: true,
-              url: notification.metadata?.url || '/dashboard'
+              url: notification.metadata?.url || '/historico'
             }),
             {
               TTL: 86400,
@@ -296,29 +276,9 @@ serve(async (req) => {
           )
 
           sentAny = true
-          deliveryAttempts.push({
-            endpoint: endpoint,
-            endpoint_masked: endpoint.substring(0, 40) + '...',
-            device_type: subDeviceType,
-            user_agent: subUserAgent,
-            success: true,
-            statusCode: pushResult.statusCode || 201,
-            attempted_at: pushSendAttemptedAt,
-            accepted_at: new Date().toISOString()
-          })
         } catch (err: any) {
-          console.error(`[Push 4B] Error sending push to ${subDeviceType}:`, err)
+          console.error(`[Push 4B] Error sending push:`, err)
           lastError = err.message || String(err)
-          deliveryAttempts.push({
-            endpoint: endpoint,
-            endpoint_masked: endpoint.substring(0, 40) + '...',
-            device_type: subDeviceType,
-            user_agent: subUserAgent,
-            success: false,
-            statusCode: err.statusCode,
-            error: lastError,
-            attempted_at: new Date().toISOString()
-          })
 
           if (err.statusCode === 410 || err.statusCode === 404) {
             console.log(`[Push 4B] Subscription expired or missing (HTTP ${err.statusCode}). Deleting subscription endpoint: ${endpoint.substring(0, 30)}...`);
@@ -328,19 +288,13 @@ serve(async (req) => {
       }
 
       if (sentAny) {
-        const acceptedAt = new Date().toISOString();
         await supabase.from('notification_queue').update({
           sent: true,
-          sent_at: acceptedAt,
+          sent_at: new Date().toISOString(),
           locked_until: null,
           metadata: {
             ...(notification.metadata || {}),
-            status: 'accepted_by_push_service',
-            backend_processed_at: nowIso,
-            push_service_accepted_at: acceptedAt,
-            web_push_attempted: true,
-            delivery_attempts: deliveryAttempts,
-            os_delivery_guarantee: 'asynchronous_device_delivery_not_guaranteed_by_os'
+            status: 'sent'
           }
         }).eq('id', notification.id)
         processedCount++
@@ -358,11 +312,8 @@ serve(async (req) => {
               ...(notification.metadata || {}),
               status: 'failed',
               failed_reason: 'PUSH_SERVICE_ERROR_MAX_RETRIES',
-              web_push_attempted: true,
               last_error: lastError,
-              delivery_attempts: deliveryAttempts,
-              failed_at: new Date().toISOString(),
-              os_delivery_guarantee: 'failed_push_service_error'
+              failed_at: new Date().toISOString()
             }
           }).eq('id', notification.id)
           processedCount++
@@ -376,9 +327,7 @@ serve(async (req) => {
             metadata: {
               ...(notification.metadata || {}),
               status: 'retrying',
-              web_push_attempted: true,
               last_error: lastError,
-              delivery_attempts: deliveryAttempts,
               last_attempt_at: new Date().toISOString()
             }
           }).eq('id', notification.id)
