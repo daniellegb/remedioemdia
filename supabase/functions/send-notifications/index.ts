@@ -7,61 +7,58 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
-function formatPushPayload(notification: any, sub?: any) {
+function formatPushPayload(notification: any, _sub?: any) {
   const pushTitle = 'Remédio em Dia';
-  let pushBody = notification.body || '';
+  const metaType = notification.metadata?.type || '';
+  const bodyText = notification.body || '';
 
-  const formatDateTime = (dateVal: string | Date, timeVal?: string, tz: string = 'America/Sao_Paulo') => {
-    if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim())) {
-      const [, m, d] = dateVal.trim().split('-');
-      const dateStr = `${d}/${m}`;
-      const timeStr = timeVal ? timeVal.substring(0, 5) : '00:00';
-      return { dateStr, timeStr };
-    }
-    const d = new Date(dateVal);
-    if (isNaN(d.getTime())) return { dateStr: '01/01', timeStr: '00:00' };
-    const dateStr = new Intl.DateTimeFormat('pt-BR', { timeZone: tz, day: '2-digit', month: '2-digit' }).format(d);
-    const timeStr = timeVal ? timeVal.substring(0, 5) : new Intl.DateTimeFormat('pt-BR', { timeZone: tz, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(d);
-    return { dateStr, timeStr };
-  };
-
-  if (!pushBody || !pushBody.includes(' — agendada para ')) {
-    const userTz = notification.metadata?.timezone || sub?.timezone || 'America/Sao_Paulo';
-
-    if (notification.appointment_id || notification.metadata?.appointment_id || notification.metadata?.type) {
-      const type = notification.metadata?.type || 'Consulta';
-      const detail = notification.metadata?.doctor_or_specialty || notification.metadata?.specialty || notification.metadata?.doctor || 'Geral';
-      const eventDate = notification.metadata?.event_date;
-      const eventTime = notification.metadata?.event_time;
-
-      const { dateStr, timeStr } = formatDateTime(
-        eventDate || notification.scheduled_at || notification.trigger_at,
-        eventTime,
-        userTz
-      );
-
-      pushBody = `${type}: ${detail} — agendada para ${dateStr} às ${timeStr}.`;
-    } else {
-      let medName = notification.metadata?.medication_name;
-      if (!medName) {
-        medName = (notification.body || '')
-          .replace(/^Lembrete:\s*/i, '')
-          .replace(/^Hora do Medicamento:?\s*/i, '')
-          .replace(/^Tomar\s+/i, '')
-          .replace(/\s*\([^)]*\)/g, '')
-          .trim() || 'Medicamento';
-      }
-      const { dateStr, timeStr } = formatDateTime(
-        notification.scheduled_at || notification.trigger_at,
-        undefined,
-        userTz
-      );
-
-      pushBody = `${medName} — agendada para ${dateStr} às ${timeStr}.`;
-    }
+  // 1. Notificação de Medicamento Vencido
+  if (metaType === 'medication_expired' || bodyText.includes('Remédio vencido') || bodyText.toLowerCase().includes('vencido')) {
+    return {
+      title: pushTitle,
+      body: 'Remédio vencido. Verifique no Painel Hoje.'
+    };
   }
 
-  return { title: pushTitle, body: pushBody };
+  // 2. Notificação de Medicamento Próximo da Validade
+  if (metaType === 'medication_expiring_soon' || bodyText.includes('próximo da data de validade') || bodyText.toLowerCase().includes('validade')) {
+    return {
+      title: pushTitle,
+      body: 'Remédio próximo da data de validade. Verifique no Painel Hoje.'
+    };
+  }
+
+  // 3. Notificação de Medicamento Sem Estoque
+  if (metaType === 'medication_out_of_stock' || bodyText.includes('sem estoque') || bodyText.toLowerCase().includes('sem estoque')) {
+    return {
+      title: pushTitle,
+      body: 'Remédio sem estoque. Verifique no Painel Hoje.'
+    };
+  }
+
+  // 4. Notificação de Medicamento Próximo de Acabar
+  if (metaType === 'medication_stock_running_out' || bodyText.includes('próximo de acabar') || bodyText.toLowerCase().includes('acabar')) {
+    return {
+      title: pushTitle,
+      body: 'Remédio próximo de acabar. Verifique no Painel Hoje.'
+    };
+  }
+
+  // 5. Notificação de Consulta Médica (se aplicável)
+  if (notification.appointment_id || notification.metadata?.appointment_id) {
+    const type = notification.metadata?.type || 'Consulta';
+    const detail = notification.metadata?.doctor_or_specialty || notification.metadata?.specialty || notification.metadata?.doctor || 'Geral';
+    return {
+      title: pushTitle,
+      body: `${type}: ${detail}. Verifique no Painel Hoje.`
+    };
+  }
+
+  // 6. Política Padrão / Notificação de Administração (Horário de dose)
+  return {
+    title: pushTitle,
+    body: 'Passamos por um horário de administração. Confira seus remédios no Painel Hoje.'
+  };
 }
 
 serve(async (req) => {
@@ -152,11 +149,17 @@ serve(async (req) => {
       })
     }
 
-    // 1.5 Gerar ocorrências devidas de medication_reminders para a notification_queue (Etapa 4B.1)
+    // 1.5 Gerar ocorrências devidas de medicação, estoque e validade para a notification_queue (Etapa 4B.1)
     try {
       await supabase.rpc('claim_due_medication_occurrences', { p_batch_size: 100 })
     } catch (err: any) {
       console.warn('[Queue Dispatcher 4B.1] Error claiming medication occurrences:', err?.message || err)
+    }
+
+    try {
+      await supabase.rpc('claim_due_stock_and_expiry_occurrences', { p_batch_size: 100 })
+    } catch (err: any) {
+      console.warn('[Queue Dispatcher 4B.1] Error claiming stock/expiry occurrences:', err?.message || err)
     }
 
     // 2. Processar notificações da notification_queue usando a RPC transacional claim_due_notification_queue (Etapa 4B)

@@ -178,7 +178,7 @@ self.addEventListener('push', function(event) {
   };
 
   const options = {
-    body: data.body || 'Você tem um medicamento para tomar agora.',
+    body: data.body || 'Passamos por um horário de administração. Confira seus remédios no Painel Hoje.',
     icon: resolveUrl(data.icon),
     badge: resolveUrl('/remedio-em-dia-icone-small.png'),
     vibrate: [200, 100, 200, 100, 200],
@@ -190,7 +190,7 @@ self.addEventListener('push', function(event) {
       notificationId: notificationId
     },
     actions: [
-      { action: 'take', title: 'Tomar Medicamento' },
+      { action: 'view', title: 'Ver no Painel Hoje' },
       { action: 'dismiss', title: 'Ignorar' }
     ]
   };

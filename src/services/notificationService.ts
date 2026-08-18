@@ -45,9 +45,8 @@ export const notificationService = {
 
     if (existing) return;
 
-    const { dateStr, timeStr } = formatEventDateTime(triggerAt);
     const title = 'Remédio em Dia';
-    const body = `${medicationName} — agendada para ${dateStr} às ${timeStr}.`;
+    const body = 'Passamos por um horário de administração. Confira seus remédios no Painel Hoje.';
 
     const { error } = await supabase
       .from('notification_queue')
@@ -60,8 +59,11 @@ export const notificationService = {
         scheduled_at: triggerAt,
         sent: false,
         metadata: {
+          type: 'medication_administration',
           medication_id: medicationId,
-          medication_name: medicationName
+          medication_name: medicationName,
+          dosage,
+          url: '/historico'
         }
       }]);
 
