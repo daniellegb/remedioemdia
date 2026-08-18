@@ -33,43 +33,6 @@ function formatEventDateTime(dateVal: string | Date, timeVal?: string, userTz: s
 }
 
 export const notificationService = {
-  async scheduleMedicationNotification(userId: string, medicationId: string, medicationName: string, dosage: string, triggerAt: string) {
-    // Evitar duplicatas para o mesmo horário e medicamento
-    const { data: existing } = await supabase
-      .from('notification_queue')
-      .select('id')
-      .eq('medication_id', medicationId)
-      .eq('trigger_at', triggerAt)
-      .eq('sent', false)
-      .maybeSingle();
-
-    if (existing) return;
-
-    const title = 'Remédio em Dia';
-    const body = 'Passamos por um horário de administração. Confira seus remédios no Painel Hoje.';
-
-    const { error } = await supabase
-      .from('notification_queue')
-      .insert([{
-        user_id: userId,
-        medication_id: medicationId,
-        title,
-        body,
-        trigger_at: triggerAt,
-        scheduled_at: triggerAt,
-        sent: false,
-        metadata: {
-          type: 'medication_administration',
-          medication_id: medicationId,
-          medication_name: medicationName,
-          dosage,
-          url: '/historico'
-        }
-      }]);
-
-    if (error) console.error('Error scheduling notification:', error);
-  },
-
   async scheduleAppointmentNotification(
     userId: string,
     appointmentId: string,

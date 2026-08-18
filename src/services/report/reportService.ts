@@ -238,8 +238,8 @@ export const reportService = {
       doc.setFontSize(9);
       doc.setTextColor(71, 85, 105); // slate-600
       const dosageStr = med.dosage ? `${med.dosage} ${formatUnit(med.unit, 2)}` : 'Não informada';
-      const frequencyStr = med.usageCategory === 'prn' ? 'Se necessário' : 
-                           med.times && med.times.length > 0 ? `${med.times.length}x ao dia (${med.times.join(', ')})` : '-';
+      const frequencyStr = med.usageCategory === 'prn' ? 'Se necessário' :
+        med.times && med.times.length > 0 ? `${med.times.length}x ao dia (${med.times.join(', ')})` : '-';
       const categoryStr = getUsageCategoryLabel(med.usageCategory);
       doc.text(`Dosagem: ${dosageStr}   |   Frequência: ${frequencyStr}   |   Categoria: ${categoryStr}`, 15, currentY);
       currentY += 7;
@@ -248,7 +248,7 @@ export const reportService = {
       checkPageOverflow(15);
       doc.setFillColor(248, 250, 252); // slate-50
       doc.rect(15, currentY - 4, 180, 8, 'F');
-      
+
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8.5);
       doc.setTextColor(100, 116, 139); // slate-500
@@ -256,7 +256,7 @@ export const reportService = {
       doc.text("Horário Previsto", 63, currentY + 1);
       doc.text("Confirmação", 108, currentY + 1);
       doc.text("Situação", 158, currentY + 1);
-      
+
       doc.setDrawColor(226, 232, 240); // slate-200
       doc.setLineWidth(0.2);
       doc.line(15, currentY + 4, 195, currentY + 4);
@@ -276,11 +276,11 @@ export const reportService = {
           doc.setFont('helvetica', 'normal');
           doc.setFontSize(9);
           doc.setTextColor(51, 65, 85); // slate-700
-          
+
           doc.text(formatBrazilianDate(dose.date), 18, currentY);
           doc.text(dose.scheduledTime, 63, currentY);
           doc.text(dose.confirmationTime || 'Não confirmada', 108, currentY);
-          
+
           if (dose.status === 'taken') {
             doc.setTextColor(16, 185, 129); // emerald-500
             doc.text("Tomado", 158, currentY);
@@ -294,7 +294,7 @@ export const reportService = {
             doc.setTextColor(100, 116, 139); // slate-500
             doc.text("Pendente", 158, currentY);
           }
-          
+
           doc.setDrawColor(241, 245, 249); // slate-100
           doc.setLineWidth(0.15);
           doc.line(15, currentY + 2, 195, currentY + 2);
@@ -418,7 +418,7 @@ export const reportService = {
     // --- HEADERS AND FOOTERS LOOP ---
     applyHeadersAndFooters(doc, {
       logoDataUrl,
-      reportTitle: "Relatório de Histórico de Tomadas"
+      reportTitle: "Relatório de Histórico de Administrações"
     });
 
     // Save the PDF
@@ -483,11 +483,11 @@ export const reportService = {
       } else {
         doc.setTextColor(51, 65, 85); // slate-700 default
       }
-      
+
       const width = options?.maxWidth || (195 - x);
       const splitLines = doc.splitTextToSize(text, width);
       const neededHeight = splitLines.length * ((options?.fontSize || 9) * 0.45);
-      
+
       if (currentY + neededHeight > pageHeight - marginBottom) {
         doc.addPage();
         currentY = 40;
@@ -500,7 +500,7 @@ export const reportService = {
       } else {
         doc.setTextColor(51, 65, 85);
       }
-      
+
       doc.text(splitLines, x, currentY);
       currentY += neededHeight + 2.5;
     };
@@ -526,7 +526,7 @@ export const reportService = {
       doc.setDrawColor(46, 124, 195); // Brand Blue `#2E7CC3`
       doc.setLineWidth(0.4);
       doc.line(15, currentY, 15, currentY + 8); // left accent bar
-      
+
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(10.5);
       doc.setTextColor(46, 124, 195); // Brand Blue `#2E7CC3`
@@ -541,17 +541,17 @@ export const reportService = {
 
     // --- DADOS DA CONTA ---
     addSectionHeader("1. Dados da Conta");
-    
-    const uName = profile?.mode === 'caregiver' && profile?.caregiver_name 
+
+    const uName = profile?.mode === 'caregiver' && profile?.caregiver_name
       ? `${profile.caregiver_name} (Cuidador de ${profile?.patient_name || 'Paciente'})`
       : (profile?.name || user?.user_metadata?.full_name || 'Não cadastrado');
-    
+
     addText(`• Nome do Titular: ${uName}`, 18, { fontSize: 9.5 });
     addText(`• E-mail cadastrado: ${user.email || 'Não informado'}`, 18, { fontSize: 9.5 });
-    
+
     const registrationDate = user?.created_at ? formatBrazilianDate(user.created_at) : 'Não identificada';
     addText(`• Data de criação da conta: ${registrationDate}`, 18, { fontSize: 9.5 });
-    
+
     currentY += 4;
     addSeparatorLine();
 
@@ -574,7 +574,7 @@ export const reportService = {
         if (med.notes) {
           addText(`   • Anotações: ${med.notes}`, 18, { fontSize: 9, maxWidth: 165 });
         }
-        
+
         // Adiciona histórico de consumo
         const records = (consumptionRecords || []).filter((r: any) => r.medication_id === med.id);
         if (records.length > 0) {
@@ -680,7 +680,7 @@ export const reportService = {
     // --- EXPORT INFORMATION ---
     addText("Informações da Exportação", 15, { fontSize: 10.5, fontStyle: 'bold', color: [100, 116, 139] });
     currentY += 1;
-    
+
     const generationDate = new Date();
     addText(`• Gerado em: ${generationDate.toLocaleString('pt-BR')}`, 18, { fontSize: 8.5, color: [100, 116, 139] });
     addText("• Observação: Este relatório foi gerado diretamente pelo sistema e contém apenas informações relacionadas à sua conta e utilização do aplicativo.", 18, { fontSize: 8.5, color: [100, 116, 139], maxWidth: 175 });
