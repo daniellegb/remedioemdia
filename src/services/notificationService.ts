@@ -1,35 +1,35 @@
 
 import { supabase } from '../lib/supabase';
+import { convertLocalToUTC } from '../domain/nextOccurrenceCalculator';
 
-function formatEventDateTime(dateVal: string | Date, timeVal?: string, userTz: string = 'America/Sao_Paulo'): { dateStr: string, timeStr: string } {
-  if (typeof dateVal === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateVal.trim())) {
-    const [, month, day] = dateVal.trim().split('-');
-    const dateStr = `${day}/${month}`;
-    const timeStr = timeVal ? timeVal.substring(0, 5) : '00:00';
-    return { dateStr, timeStr };
+export function calculateAppointmentTriggerAt(
+  eventDate: string,
+  eventTime?: string,
+  userTz: string = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo'
+): string {
+  const [yearStr, monthStr, dayStr] = eventDate.trim().split('-');
+  const [hourStr, minuteStr] = (eventTime ? eventTime.trim() : '09:00').split(':');
+
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  const day = parseInt(dayStr, 10);
+  const hour = parseInt(hourStr, 10) || 0;
+  const minute = parseInt(minuteStr, 10) || 0;
+
+  // Subtrair exatamente 1 dia civil (24 horas antes)
+  const civilDate = new Date(Date.UTC(year, month - 1, day));
+  civilDate.setUTCDate(civilDate.getUTCDate() - 1);
+
+  const prevYear = civilDate.getUTCFullYear();
+  const prevMonth = civilDate.getUTCMonth() + 1;
+  const prevDay = civilDate.getUTCDate();
+
+  const utcDate = convertLocalToUTC(prevYear, prevMonth, prevDay, hour, minute, userTz);
+  if (utcDate) {
+    return utcDate.toISOString();
   }
 
-  const d = new Date(dateVal);
-  if (isNaN(d.getTime())) {
-    return { dateStr: '01/01', timeStr: '00:00' };
-  }
-
-  const formatterDate = new Intl.DateTimeFormat('pt-BR', {
-    timeZone: userTz,
-    day: '2-digit',
-    month: '2-digit'
-  });
-  const dateStr = formatterDate.format(d);
-
-  const formatterTime = new Intl.DateTimeFormat('pt-BR', {
-    timeZone: userTz,
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23'
-  });
-  const timeStr = timeVal ? timeVal.substring(0, 5) : formatterTime.format(d);
-
-  return { dateStr, timeStr };
+  return new Date(Date.UTC(prevYear, prevMonth - 1, prevDay, hour, minute, 0)).toISOString();
 }
 
 export const notificationService = {
@@ -38,19 +38,18 @@ export const notificationService = {
     appointmentId: string,
     doctorOrSpecialty: string,
     type: string,
-    triggerAt: string,
-    eventDate?: string,
-    eventTime?: string
+    eventDate: string,
+    eventTime?: string,
+    userTz: string = Intl.DateTimeFormat().resolvedOptions().timeZone || 'America/Sao_Paulo'
   ) {
-    const { dateStr, timeStr } = formatEventDateTime(
-      eventDate || triggerAt,
-      eventTime
-    );
-
-    const appType = type || 'Consulta';
-    const detail = doctorOrSpecialty || 'Geral';
+    const isExam = (type || '').trim().toLowerCase() === 'exame';
+    const appType = isExam ? 'Exame' : 'Consulta';
     const title = 'Remédio em Dia';
-    const body = `${appType}: ${detail} — agendada para ${dateStr} às ${timeStr}.`;
+    const body = isExam
+      ? 'Você tem um exame agendado. Confira os detalhes no Painel Hoje.'
+      : 'Você tem uma consulta agendada. Confira os detalhes no Painel Hoje.';
+
+    const triggerAt = calculateAppointmentTriggerAt(eventDate, eventTime, userTz);
 
     const { error } = await supabase
       .from('notification_queue')
@@ -65,12 +64,14 @@ export const notificationService = {
         metadata: {
           appointment_id: appointmentId,
           type: appType,
-          doctor_or_specialty: detail,
+          doctor_or_specialty: doctorOrSpecialty || 'Geral',
           event_date: eventDate,
-          event_time: eventTime
+          event_time: eventTime,
+          timezone: userTz
         }
       }]);
 
     if (error) console.error('Error scheduling appointment notification:', error);
   }
 };
+

@@ -44,13 +44,15 @@ function formatPushPayload(notification: any, _sub?: any) {
     };
   }
 
-  // 5. Notificação de Consulta Médica (se aplicável)
+  // 5. Notificação de Consulta Médica ou Exame (se aplicável)
   if (notification.appointment_id || notification.metadata?.appointment_id) {
-    const type = notification.metadata?.type || 'Consulta';
-    const detail = notification.metadata?.doctor_or_specialty || notification.metadata?.specialty || notification.metadata?.doctor || 'Geral';
+    const rawType = String(notification.metadata?.type || notification.body || '').toLowerCase();
+    const isExam = rawType.includes('exame');
     return {
       title: pushTitle,
-      body: `${type}: ${detail}. Verifique no Painel Hoje.`
+      body: isExam
+        ? 'Você tem um exame agendado. Confira os detalhes no Painel Hoje.'
+        : 'Você tem uma consulta agendada. Confira os detalhes no Painel Hoje.'
     };
   }
 

@@ -54,18 +54,13 @@ export const appointmentService = {
 
     if (error) throw error;
 
-    // Agendar notificação para o dia anterior às 08:00
+    // Agendar notificação para 1 dia antes no mesmo horário do compromisso
     if (created.date && created.active !== false) {
-      const triggerDate = new Date(created.date);
-      triggerDate.setDate(triggerDate.getDate() - 1);
-      triggerDate.setHours(8, 0, 0, 0);
-      
       await notificationService.scheduleAppointmentNotification(
         userId,
         created.id,
         created.specialty || created.doctor || 'Geral',
         created.type || 'Consulta',
-        triggerDate.toISOString(),
         created.date,
         created.time
       );
@@ -104,16 +99,11 @@ export const appointmentService = {
         .eq('appointment_id', id)
         .eq('sent', false);
 
-      const triggerDate = new Date(updated.date);
-      triggerDate.setDate(triggerDate.getDate() - 1);
-      triggerDate.setHours(8, 0, 0, 0);
-      
       await notificationService.scheduleAppointmentNotification(
         userId,
         updated.id,
         updated.specialty || updated.doctor || 'Geral',
         updated.type || 'Consulta',
-        triggerDate.toISOString(),
         updated.date,
         updated.time
       );
