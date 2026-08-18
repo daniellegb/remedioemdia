@@ -247,8 +247,28 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
           </div>
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-500 uppercase tracking-wider">Dosagem</label>
-              <input required className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ex: 1 (comprimido)" value={formData.dosage} onChange={e => setFormData({...formData, dosage: e.target.value})} />
+              <label htmlFor="medication-dosage" className="text-sm font-bold text-slate-500 uppercase tracking-wider">Dosagem</label>
+              <input 
+                id="medication-dosage"
+                type="text" 
+                inputMode="decimal" 
+                required 
+                className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none font-bold" 
+                placeholder="Ex: 1 ou 0.5" 
+                value={formData.dosage} 
+                onChange={e => {
+                  let cleaned = e.target.value.replace(/[^0-9.,]/g, '');
+                  const firstSep = cleaned.match(/[.,]/);
+                  if (firstSep && firstSep.index !== undefined) {
+                    const sep = firstSep[0];
+                    const idx = firstSep.index;
+                    const intPart = cleaned.substring(0, idx).replace(/[.,]/g, '');
+                    const decPart = cleaned.substring(idx + 1).replace(/[.,]/g, '');
+                    cleaned = `${intPart}${sep}${decPart}`;
+                  }
+                  setFormData({ ...formData, dosage: cleaned });
+                }} 
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-bold text-slate-500 uppercase tracking-wider">Unidade</label>
