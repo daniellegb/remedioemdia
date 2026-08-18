@@ -3,13 +3,76 @@ import { supabase } from '../lib/supabase';
 
 let syncPromise: Promise<void> = Promise.resolve();
 
+function calculateNextOccurrenceAt(reminderTime: string): string {
+  const userTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const now = new Date();
+
+  const parts = reminderTime.split(':').map(Number);
+  const targetHour = isNaN(parts[0]) ? 0 : parts[0];
+  const targetMinute = isNaN(parts[1]) ? 0 : parts[1];
+  const targetSecond = isNaN(parts[2]) ? 0 : parts[2];
+
+  function getParts(date: Date, tz: string) {
+    const formatter = new Intl.DateTimeFormat('en-US', {
+      timeZone: tz,
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+      hour12: false,
+      hourCycle: 'h23'
+    });
+    const p: Record<string, string> = {};
+    formatter.formatToParts(date).forEach(pt => { p[pt.type] = pt.value; });
+    let h = parseInt(p.hour, 10);
+    if (h === 24) h = 0;
+    return {
+      year: parseInt(p.year, 10),
+      month: parseInt(p.month, 10) - 1,
+      day: parseInt(p.day, 10),
+      hour: h,
+      minute: parseInt(p.minute, 10),
+      second: parseInt(p.second, 10)
+    };
+  }
+
+  function createTzDate(y: number, m: number, d: number, h: number, min: number, s: number, tz: string): Date {
+    const candidateUtc = new Date(Date.UTC(y, m, d, h, min, s));
+    const p = getParts(candidateUtc, tz);
+    const asUtc = Date.UTC(p.year, p.month, p.day, p.hour, p.minute, p.second);
+    const offsetMs = asUtc - candidateUtc.getTime();
+    return new Date(candidateUtc.getTime() - offsetMs);
+  }
+
+  const nowParts = getParts(now, userTimezone);
+  let targetDate = createTzDate(nowParts.year, nowParts.month, nowParts.day, targetHour, targetMinute, targetSecond, userTimezone);
+
+  if (targetDate.getTime() <= now.getTime()) {
+    targetDate = createTzDate(nowParts.year, nowParts.month, nowParts.day + 1, targetHour, targetMinute, targetSecond, userTimezone);
+  }
+
+  return targetDate.toISOString();
+}
+
 export const pushService = {
   async saveSubscription(userId: string, subscription: PushSubscription) {
-    const subData = subscription.toJSON();
-    const endpoint = subData.endpoint;
-    const p256dh = subData.keys?.p256dh;
-    const auth = subData.keys?.auth;
+    const rawSubData = subscription.toJSON();
+    const endpoint = rawSubData.endpoint;
+    const p256dh = rawSubData.keys?.p256dh;
+    const auth = rawSubData.keys?.auth;
     const timezone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const userAgent = typeof navigator !== 'undefined' ? navigator.userAgent : 'unknown';
+    const isAndroid = userAgent.includes('Android');
+    const isIOS = userAgent.includes('iPhone') || userAgent.includes('iPad');
+    const deviceType = isAndroid ? 'android' : (isIOS ? 'ios' : 'desktop');
+
+    const subData = {
+      ...rawSubData,
+      device_type: deviceType,
+      user_agent: userAgent
+    };
     
     // Garantir que o endpoint seja a única restrição de conflito para suportar múltiplos dispositivos
     const { data, error } = await supabase
@@ -19,7 +82,7 @@ export const pushService = {
         endpoint: endpoint,
         p256dh: p256dh,
         auth: auth,
-        subscription: subData, // mantemos o JSON completo por segurança
+        subscription: subData, // mantemos o JSON completo com device_type e user_agent
         timezone: timezone
       }, { 
         onConflict: 'endpoint' // Requisito Obrigatório: Unicidade por endpoint
@@ -73,14 +136,16 @@ export const pushService = {
 
           if (med.times && Array.isArray(med.times)) {
             med.times.forEach((time: string) => {
-              // Lembrete na hora exata
+              // Lembrete na hora exata com próxima ocorrência calculada no timezone do usuário
+              const nextOccurrenceAt = calculateNextOccurrenceAt(time);
               reminders.push({
                 user_id: userId,
                 medication_id: med.id,
                 medication_name: med.name,
                 reminder_time: time,
                 active: true,
-                message_template: `Tomar ${med.name}`
+                message_template: `Tomar ${med.name}`,
+                next_occurrence_at: nextOccurrenceAt
               });
 
               // Lembrete antecipado (se configurado) - Desabilitado para o MVP
@@ -161,7 +226,7 @@ export const pushService = {
     } catch (err: any) {
       // Diferenciar erro de rede/implantação de erro de lógica
       if (err.message?.includes('Failed to send a request') || err.message?.includes('fetch')) {
-        console.warn("Edge Function não encontrada ou inacessível. Certifique-se de que 'send-reminder-notifications' está implantada.");
+        console.warn("Edge Function não encontrada ou inacessível. Certifique-se de que 'send-notifications' está implantada.");
         return { error: 'unreachable', message: err.message };
       }
       console.error("Erro ao verificar VAPID match:", err);
@@ -221,6 +286,32 @@ export const pushService = {
       }
       return { error: err.message || err };
     }
+  },
+
+  async ensureSubscriptionSynced(userId: string) {
+    if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
+      return null;
+    }
+    if (typeof Notification === 'undefined' || Notification.permission !== 'granted') {
+      return null;
+    }
+    try {
+      const registration = await navigator.serviceWorker.ready;
+      const subscription = await registration.pushManager.getSubscription();
+      if (subscription) {
+        await pushService.saveSubscription(userId, subscription);
+        return subscription;
+      } else {
+        const isVite = typeof import.meta !== 'undefined' && import.meta.env;
+        const vapidPublicKey = (isVite ? import.meta.env.VITE_VAPID_PUBLIC_KEY : undefined) || (typeof process !== 'undefined' ? process.env.VITE_VAPID_PUBLIC_KEY : undefined);
+        if (vapidPublicKey) {
+          return await subscribeUser(userId, vapidPublicKey);
+        }
+      }
+    } catch (err) {
+      console.warn('[Push] Erro ao re-sincronizar assinatura ao abrir o app:', err);
+    }
+    return null;
   }
 };
 

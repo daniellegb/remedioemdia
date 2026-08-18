@@ -343,7 +343,7 @@ const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData, se
                           }
 
                           if (debug.error === 'unreachable') {
-                            alert("⚠️ Erro de Conexão: Não foi possível alcançar a Edge Function.\n\nIsso geralmente significa que a função 'send-reminder-notifications' não foi implantada no seu projeto Supabase ou o URL está incorreto.");
+                            alert("⚠️ Erro de Conexão: Não foi possível alcançar a Edge Function.\n\nIsso geralmente significa que a função 'send-notifications' não foi implantada no seu projeto Supabase ou o URL está incorreto.");
                             return;
                           }
 

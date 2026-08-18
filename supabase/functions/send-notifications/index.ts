@@ -7,6 +7,62 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 }
 
+function formatPushPayload(notification: any, _sub?: any) {
+  const pushTitle = 'Remédio em Dia';
+  const metaType = notification.metadata?.type || '';
+  const bodyText = notification.body || '';
+
+  // 1. Notificação de Medicamento Vencido
+  if (metaType === 'medication_expired' || bodyText.includes('Remédio vencido') || bodyText.toLowerCase().includes('vencido')) {
+    return {
+      title: pushTitle,
+      body: 'Remédio vencido. Verifique no Painel Hoje.'
+    };
+  }
+
+  // 2. Notificação de Medicamento Próximo da Validade
+  if (metaType === 'medication_expiring_soon' || bodyText.includes('próximo da data de validade') || bodyText.toLowerCase().includes('validade')) {
+    return {
+      title: pushTitle,
+      body: 'Remédio próximo da data de validade. Verifique no Painel Hoje.'
+    };
+  }
+
+  // 3. Notificação de Medicamento Sem Estoque
+  if (metaType === 'medication_out_of_stock' || bodyText.includes('sem estoque') || bodyText.toLowerCase().includes('sem estoque')) {
+    return {
+      title: pushTitle,
+      body: 'Remédio sem estoque. Verifique no Painel Hoje.'
+    };
+  }
+
+  // 4. Notificação de Medicamento Próximo de Acabar
+  if (metaType === 'medication_stock_running_out' || bodyText.includes('próximo de acabar') || bodyText.toLowerCase().includes('acabar')) {
+    return {
+      title: pushTitle,
+      body: 'Remédio próximo de acabar. Verifique no Painel Hoje.'
+    };
+  }
+
+  // 5. Notificação de Consulta Médica ou Exame (se aplicável)
+  if (notification.appointment_id || notification.metadata?.appointment_id) {
+    const rawType = String(notification.metadata?.type || notification.body || '').toLowerCase();
+    const isExam = rawType.includes('exame');
+    return {
+      title: pushTitle,
+      body: isExam
+        ? 'Você tem um exame agendado. Confira os detalhes no Painel Hoje.'
+        : 'Você tem uma consulta agendada. Confira os detalhes no Painel Hoje.'
+    };
+  }
+
+  // 6. Política Padrão / Notificação de Administração (Horário de dose)
+  return {
+    title: pushTitle,
+    body: 'Passamos por um horário de administração. Confira seus remédios no Painel Hoje.'
+  };
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
@@ -27,7 +83,7 @@ serve(async (req) => {
 
     const supabase = createClient(supabaseUrl, supabaseServiceKey)
     
-    // 4. Lógica de Teste e Debug (para manter compatibilidade com o botão de teste)
+    // 1. Lógica de Teste e Debug (mantida para compatibilidade do botão de teste)
     const body = await req.json().catch(() => ({}))
     
     if (body.debug) {
@@ -63,11 +119,30 @@ serve(async (req) => {
             auth: sub.auth || (sub.subscription && sub.subscription.keys && sub.subscription.keys.auth)
           }
         };
-        await webpush.sendNotification(pushSubscription, JSON.stringify({
-          title: 'Teste de Notificação 🚀',
-          body: 'Seu sistema de notificações está funcionando corretamente!',
-          url: '/dashboard'
-        }))
+        const now = new Date();
+        const dateStr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit' }).format(now);
+        const timeStr = new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(now);
+
+        const testId = `test-${Date.now()}`;
+        await webpush.sendNotification(
+          pushSubscription,
+          JSON.stringify({
+            id: testId,
+            notification_id: testId,
+            scheduled_at: now.toISOString(),
+            title: 'Remédio em Dia',
+            body: `Notificação de teste — agendada para ${dateStr} às ${timeStr}.`,
+            icon: '/remedio-em-dia-icone-small.png',
+            badge: '/remedio-em-dia-icone-small.png',
+            tag: 'test-notification',
+            requireInteraction: true,
+            url: '/dashboard'
+          }),
+          {
+            TTL: 86400,
+            urgency: 'high'
+          }
+        )
       }
 
       return new Response(JSON.stringify({ success: true, message: 'Test notification sent' }), {
@@ -76,197 +151,198 @@ serve(async (req) => {
       })
     }
 
-    const now = new Date()
-    const minuteKey = now.toISOString().substring(0, 16) // YYYY-MM-DDTHH:mm
-    const oneMinuteAgo = new Date(now.getTime() - 60000)
+    // 1.5 Gerar ocorrências devidas de medicação, estoque e validade para a notification_queue (Etapa 4B.1)
+    try {
+      await supabase.rpc('claim_due_medication_occurrences', { p_batch_size: 100 })
+    } catch (err: any) {
+      console.warn('[Queue Dispatcher 4B.1] Error claiming medication occurrences:', err?.message || err)
+    }
 
-    // 1. Lock atômico: Marcar como enviada ANTES de processar para evitar duplicação por concorrência
-    const { data: queuedNotifications, error: queueError } = await supabase
-      .from('notification_queue')
-      .update({
-        sent: true,
-        sent_at: now.toISOString()
-      })
-      .eq('sent', false)
-      .lte('scheduled_at', now.toISOString())
-      .select('*')
-      .limit(50)
+    try {
+      await supabase.rpc('claim_due_stock_and_expiry_occurrences', { p_batch_size: 100 })
+    } catch (err: any) {
+      console.warn('[Queue Dispatcher 4B.1] Error claiming stock/expiry occurrences:', err?.message || err)
+    }
 
-    if (queueError) throw queueError
-    console.log(`[Cron] Claimed ${queuedNotifications?.length || 0} queued notifications.`);
+    // 2. Processar notificações da notification_queue usando a RPC transacional claim_due_notification_queue (Etapa 4B)
+    const { data: queuedNotifications, error: rpcError } = await supabase.rpc('claim_due_notification_queue', {
+      p_batch_size: 50,
+      p_lock_minutes: 5
+    })
 
-    // 2. Buscar lembretes de medicação recorrentes (para manter a funcionalidade atual)
-    const { data: reminders, error: remindersError } = await supabase
-      .from('medication_reminders')
-      .select(`
-        *,
-        medications!inner(usage_category)
-      `)
-      .eq('active', true)
-      .neq('medications.usage_category', 'prn')
+    if (rpcError) throw rpcError
+    console.log(`[Queue Dispatcher 4B] Claimed ${queuedNotifications?.length || 0} queued notifications.`);
 
-    if (remindersError) throw remindersError
-    console.log(`[Cron] Found ${reminders?.length || 0} active reminders to check.`);
-
-    const userIds = [
-      ...(reminders?.map(r => r.user_id) || []),
-      ...(queuedNotifications?.map(n => n.user_id) || [])
-    ]
-    
-    const uniqueUserIds = [...new Set(userIds)]
-    if (uniqueUserIds.length === 0) {
+    if (!queuedNotifications || queuedNotifications.length === 0) {
       return new Response(JSON.stringify({ success: true, processed: 0 }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         status: 200,
       })
     }
 
-    // 3. Buscar usuários habilitados e suas assinaturas
-    const { data: enabledPrefs } = await supabase
+    const userIds = [...new Set(queuedNotifications.map((n: any) => n.user_id).filter(Boolean))]
+
+    // Buscar usuários habilitados e suas assinaturas
+    const { data: enabledPrefs } = userIds.length > 0 ? await supabase
       .from('user_preferences')
       .select('user_id')
       .eq('push_notifications_enabled', true)
-      .in('user_id', uniqueUserIds)
+      .in('user_id', userIds) : { data: [] }
 
-    const enabledUserIds = new Set(enabledPrefs?.map(p => p.user_id) || [])
+    const enabledUserIds = new Set(enabledPrefs?.map((p: any) => p.user_id) || [])
 
-    const { data: allSubscriptions } = await supabase
+    const { data: allSubscriptions } = userIds.length > 0 ? await supabase
       .from('push_subscriptions')
       .select('user_id, subscription, timezone, endpoint, p256dh, auth')
-      .in('user_id', Array.from(enabledUserIds))
+      .in('user_id', Array.from(enabledUserIds)) : { data: [] }
 
-    const results = []
-    const sentEndpoints = new Set<string>()
+    let processedCount = 0
 
-    // Processar notificações da fila (one-off) - PRIORIDADE
-    if (queuedNotifications && queuedNotifications.length > 0) {
-      for (const notification of queuedNotifications) {
-        if (!enabledUserIds.has(notification.user_id)) continue;
+    for (const notification of queuedNotifications) {
+      const nowIso = new Date().toISOString()
 
-        const userSubs = allSubscriptions?.filter(s => s.user_id === notification.user_id) || []
-        for (const sub of userSubs) {
-          const endpoint = sub.endpoint || (sub.subscription && sub.subscription.endpoint);
-          if (!endpoint || sentEndpoints.has(endpoint)) continue;
-
-          try {
-            const pushSubscription = {
-              endpoint: endpoint,
-              keys: {
-                p256dh: sub.p256dh || (sub.subscription && sub.subscription.keys && sub.subscription.keys.p256dh),
-                auth: sub.auth || (sub.subscription && sub.subscription.keys && sub.subscription.keys.auth)
-              }
-            };
-
-            if (!pushSubscription.keys.p256dh || !pushSubscription.keys.auth) continue;
-
-            console.log(`[Push] Sending to user ${notification.user_id} (sub: ${endpoint.substring(0, 30)}...)`);
-            await webpush.sendNotification(pushSubscription, JSON.stringify({
-              title: notification.title,
-              body: notification.body,
-              url: '/dashboard'
-            }))
-            sentEndpoints.add(endpoint);
-            results.push({ type: 'queue', id: notification.id })
-          } catch (err) {
-            console.error(`Error sending queued push:`, err)
-            if (err.statusCode === 410 || err.statusCode === 404) {
-              await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
-            }
+      // Caso 1: Usuário desabilitou notificações push nas preferências
+      if (notification.user_id && !enabledUserIds.has(notification.user_id)) {
+        await supabase.from('notification_queue').update({
+          sent: false,
+          locked_until: null,
+          metadata: {
+            ...(notification.metadata || {}),
+            status: 'discarded',
+            discarded_reason: 'PUSH_NOTIFICATIONS_DISABLED',
+            discarded_at: nowIso
           }
+        }).eq('id', notification.id)
+        processedCount++
+        continue;
+      }
+
+      const userSubs = notification.user_id ? (allSubscriptions?.filter((s: any) => s.user_id === notification.user_id) || []) : []
+
+      // Caso 2: Não há usuário ou não existe subscription ativa para o usuário
+      if (!notification.user_id || userSubs.length === 0) {
+        await supabase.from('notification_queue').update({
+          sent: false,
+          locked_until: null,
+          metadata: {
+            ...(notification.metadata || {}),
+            status: 'discarded',
+            discarded_reason: 'NO_ACTIVE_SUBSCRIPTION',
+            discarded_at: nowIso
+          }
+        }).eq('id', notification.id)
+        processedCount++
+        continue;
+      }
+
+      let sentAny = false
+      let lastError: string | null = null
+
+      for (const sub of userSubs) {
+        const endpoint = sub.endpoint || (sub.subscription && sub.subscription.endpoint);
+        if (!endpoint) continue;
+
+        const pushSubscription = {
+          endpoint: endpoint,
+          keys: {
+            p256dh: sub.p256dh || (sub.subscription && sub.subscription.keys && sub.subscription.keys.p256dh),
+            auth: sub.auth || (sub.subscription && sub.subscription.keys && sub.subscription.keys.auth)
+          }
+        };
+
+        if (!pushSubscription.keys.p256dh || !pushSubscription.keys.auth) {
+          continue;
+        }
+
+        try {
+          const payload = formatPushPayload(notification, sub);
+          await webpush.sendNotification(
+            pushSubscription,
+            JSON.stringify({
+              id: notification.id,
+              notification_id: notification.id,
+              scheduled_at: notification.scheduled_at || notification.trigger_at,
+              title: payload.title,
+              body: payload.body,
+              icon: '/remedio-em-dia-icone-small.png',
+              badge: '/remedio-em-dia-icone-small.png',
+              tag: notification.id || `medication-${notification.medication_id || Date.now()}`,
+              requireInteraction: true,
+              url: notification.metadata?.url || '/historico'
+            }),
+            {
+              TTL: 86400,
+              urgency: 'high',
+              topic: notification.metadata?.topic || undefined
+            }
+          )
+
+          sentAny = true
+        } catch (err: any) {
+          console.error(`[Push 4B] Error sending push:`, err)
+          lastError = err.message || String(err)
+
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            console.log(`[Push 4B] Subscription expired or missing (HTTP ${err.statusCode}). Deleting subscription endpoint: ${endpoint.substring(0, 30)}...`);
+            await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
+          }
+        }
+      }
+
+      if (sentAny) {
+        await supabase.from('notification_queue').update({
+          sent: true,
+          sent_at: new Date().toISOString(),
+          locked_until: null,
+          metadata: {
+            ...(notification.metadata || {}),
+            status: 'sent'
+          }
+        }).eq('id', notification.id)
+        processedCount++
+      } else {
+        const newRetryCount = (notification.retry_count || 0) + 1
+        const MAX_RETRIES = 5
+
+        if (newRetryCount >= MAX_RETRIES) {
+          console.warn(`[Push 4B.1] Notification ${notification.id} reached max retries (${newRetryCount}). Marking status='failed'.`);
+          await supabase.from('notification_queue').update({
+            sent: false,
+            retry_count: newRetryCount,
+            locked_until: null,
+            metadata: {
+              ...(notification.metadata || {}),
+              status: 'failed',
+              failed_reason: 'PUSH_SERVICE_ERROR_MAX_RETRIES',
+              last_error: lastError,
+              failed_at: new Date().toISOString()
+            }
+          }).eq('id', notification.id)
+          processedCount++
+        } else {
+          const retryAtDate = new Date(Date.now() + 10 * 60 * 1000).toISOString()
+          await supabase.from('notification_queue').update({
+            sent: false,
+            retry_count: newRetryCount,
+            retry_at: retryAtDate,
+            locked_until: null,
+            metadata: {
+              ...(notification.metadata || {}),
+              status: 'retrying',
+              last_error: lastError,
+              last_attempt_at: new Date().toISOString()
+            }
+          }).eq('id', notification.id)
         }
       }
     }
 
-    // Processar lembretes recorrentes
-    if (reminders && reminders.length > 0) {
-      // De-duplicar lembretes em memória
-      const uniqueReminders = Array.from(new Map(reminders.map(r => 
-        [`${r.user_id}-${r.medication_id}-${r.reminder_time}-${r.message_template}`, r]
-      )).values());
-
-      for (const reminder of uniqueReminders) {
-        if (!enabledUserIds.has(reminder.user_id)) continue;
-
-        const userSubs = allSubscriptions?.filter(s => s.user_id === reminder.user_id) || []
-        let reminderClaimed = false; // Track if this process claimed the reminder for this minute
-
-        for (const sub of userSubs) {
-          const endpoint = sub.endpoint || (sub.subscription && sub.subscription.endpoint);
-          if (!endpoint || sentEndpoints.has(endpoint)) continue;
-
-          const userTime = now.toLocaleTimeString('pt-BR', {
-            timeZone: sub.timezone || 'UTC',
-            hour12: false,
-            hour: '2-digit',
-            minute: '2-digit'
-          })
-          const reminderTimeShort = reminder.reminder_time.substring(0, 5)
-
-          if (userTime === reminderTimeShort) {
-            // Lock atômico no banco: Apenas uma execução do cron consegue atualizar last_sent_at
-            if (!reminderClaimed) {
-              const { data: lockedReminder } = await supabase
-                .from('medication_reminders')
-                .update({
-                  last_sent_at: now.toISOString()
-                })
-                .eq('id', reminder.id)
-                .or(`last_sent_at.is.null,last_sent_at.lt.${minuteKey}:00`)
-                .select()
-                .maybeSingle()
-
-              if (lockedReminder) {
-                reminderClaimed = true;
-                console.log(`[Reminder] Claimed lock for reminder ${reminder.id} at ${userTime}`);
-              } else {
-                // Outro processo já enviou ou está enviando este lembrete neste minuto
-                console.log(`[Reminder] Lock already taken for reminder ${reminder.id} at ${userTime}`);
-                break; 
-              }
-            }
-
-            console.log(`[Reminder] Triggering push for user ${reminder.user_id} at ${userTime} (matches ${reminderTimeShort})`);
-            try {
-              const pushSubscription = {
-                endpoint: endpoint,
-                keys: {
-                  p256dh: sub.p256dh || (sub.subscription && sub.subscription.keys && sub.subscription.keys.p256dh),
-                  auth: sub.auth || (sub.subscription && sub.subscription.keys && sub.subscription.keys.auth)
-                }
-              };
-
-              if (!pushSubscription.keys.p256dh || !pushSubscription.keys.auth) continue;
-
-              const userDateStr = now.toLocaleDateString('pt-BR', {
-                timeZone: sub.timezone || 'UTC'
-              });
-              const formattedBody = `Tomar ${reminder.medication_name}, às ${reminderTimeShort} de ${userDateStr}.`;
-
-              await webpush.sendNotification(pushSubscription, JSON.stringify({
-                title: 'Hora do Medicamento 💊',
-                body: formattedBody,
-                url: '/dashboard'
-              }))
-              sentEndpoints.add(endpoint);
-              results.push({ type: 'medication', id: reminder.id })
-              console.log(`[Reminder] Success for user ${reminder.user_id}`);
-            } catch (err) {
-              console.error(`Error sending push:`, err)
-              if (err.statusCode === 410 || err.statusCode === 404) {
-                await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint)
-              }
-            }
-          }
-        }
-      }
-    }
-
-    return new Response(JSON.stringify({ success: true, processed: results.length }), {
+    return new Response(JSON.stringify({ success: true, processed: processedCount }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
 
-  } catch (error) {
+  } catch (error: any) {
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 500,

@@ -418,7 +418,7 @@ export const reportService = {
     // --- HEADERS AND FOOTERS LOOP ---
     applyHeadersAndFooters(doc, {
       logoDataUrl,
-      reportTitle: "Relatório de Histórico de Tomadas"
+      reportTitle: "Relatório de Histórico de Administrações"
     });
 
     // Save the PDF

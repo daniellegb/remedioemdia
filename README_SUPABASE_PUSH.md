@@ -11,9 +11,9 @@ Execute o conteúdo do arquivo `supabase/migrations/20260313_push_notifications_
 
 ## 2. Edge Function
 1. Instale a CLI do Supabase localmente se ainda não tiver.
-2. Faça o deploy da função:
+2. Faça o deploy da função unificada:
    ```bash
-   supabase functions deploy send-reminder-notifications
+   supabase functions deploy send-notifications
    ```
 3. Configure as variáveis de ambiente na Edge Function:
    ```bash
@@ -31,7 +31,7 @@ Como o plano gratuito da Vercel limita cron jobs a 1x por dia e o Supabase Free 
 
 1.  Acesse **[cron-job.org](https://cron-job.org/)** (Gratuito e ilimitado).
 2.  Crie um novo job:
-    *   **URL:** `https://<SUA_REF_PROJETO>.supabase.co/functions/v1/send-reminder-notifications`
+    *   **URL:** `https://<SUA_REF_PROJETO>.supabase.co/functions/v1/send-notifications`
     *   **Schedule:** Every 1 minute.
     *   **Headers:** Adicione um header `Authorization` com o valor `Bearer <SUA_SERVICE_ROLE_KEY>`.
 3.  Isso ativará sua Edge Function a cada minuto sem custos.

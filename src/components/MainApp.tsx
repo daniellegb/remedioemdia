@@ -135,6 +135,11 @@ const MainApp: React.FC = () => {
         console.error('Erro ao sincronizar lembretes após mudança de configuração:', err)
       );
     }
+    if (user) {
+      pushService.ensureSubscriptionSynced(user.id).catch(err =>
+        console.warn('Erro ao revalidate/resync push subscription:', err)
+      );
+    }
   }, [user, meds, settings.preNotificationMinutes]);
 
   const fetchData = useCallback(async () => {
