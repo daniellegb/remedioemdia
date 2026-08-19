@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { DoseEvent, Medication } from '../../types';
 import { getNextDoseAt } from '../domain/medicationRules';
+import { parseDosageAmount } from '../domain/stock';
 
 export const mapDoseToCamelCase = (record: any): DoseEvent => ({
   id: record.id,
@@ -71,7 +72,8 @@ export const consumptionService = {
         .single();
 
       if (med) {
-        const currentStock = Math.max(0, (med.current_stock || 0) - 1);
+        const dosageAmount = parseDosageAmount(med.dosage);
+        const currentStock = Math.max(0, Math.round(((med.current_stock || 0) - dosageAmount) * 10000) / 10000);
         const nextDoseAt = getNextDoseAt(mapMedToCamelCase(med));
 
         await supabase

@@ -29,7 +29,7 @@ import { supabase } from '../lib/supabase';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
-import { getUpdatedStock } from '../domain/stock';
+import { getUpdatedStock, parseDosageAmount } from '../domain/stock';
 import { getNextDoseAt } from '../domain/medicationRules';
 import { pushService } from '../services/pushService';
 import { stripeClientService } from '../services/stripeClientService';
@@ -834,10 +834,11 @@ const MainApp: React.FC = () => {
         if (isPrn && newStatus === 'pending') {
           await consumptionService.deleteConsumptionRecord(user.id, currentDose.id);
           
-          // Atualiza estoque (devolve 1)
+          // Atualiza estoque (devolve a dosagem consumida)
           if (med) {
+            const dosageAmount = parseDosageAmount(med.dosage);
             const updatedMed = await medicationService.updateMedication(user.id, med.id, { 
-              currentStock: getUpdatedStock(med.currentStock, 'pending') 
+              currentStock: getUpdatedStock(med.currentStock, 'pending', dosageAmount) 
             });
             setMeds(prev => prev.map(m => m.id === updatedMed.id ? updatedMed : m));
           }
@@ -853,8 +854,9 @@ const MainApp: React.FC = () => {
 
         // Atualiza estoque baseado na mudança de status para meds regulares
         if (med) {
+          const dosageAmount = parseDosageAmount(med.dosage);
           const updatedMed = await medicationService.updateMedication(user.id, med.id, { 
-            currentStock: getUpdatedStock(med.currentStock, newStatus),
+            currentStock: getUpdatedStock(med.currentStock, newStatus, dosageAmount),
             // Recalcular próxima dose ao marcar como tomado
             next_dose_at: newStatus === 'taken' ? getNextDoseAt(med) : med.next_dose_at
           });
@@ -875,8 +877,9 @@ const MainApp: React.FC = () => {
         // Reduz o estoque ao marcar como tomado
         const med = meds.find(m => m.id === medicationId);
         if (med) {
+          const dosageAmount = parseDosageAmount(med.dosage);
           const updatedMed = await medicationService.updateMedication(user.id, med.id, { 
-            currentStock: getUpdatedStock(med.currentStock, 'taken'),
+            currentStock: getUpdatedStock(med.currentStock, 'taken', dosageAmount),
             next_dose_at: getNextDoseAt(med)
           });
           setMeds(prev => prev.map(m => m.id === updatedMed.id ? updatedMed : m));

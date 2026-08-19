@@ -289,10 +289,15 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
               <div className="flex items-center gap-2">
                 <input 
                   type="number" 
+                  step="any"
+                  min="0"
                   required 
                   className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold min-w-0" 
                   value={formData.currentStock} 
-                  onChange={e => setFormData({...formData, currentStock: parseInt(e.target.value) || 0})} 
+                  onChange={e => {
+                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                    setFormData({...formData, currentStock: isNaN(val) ? 0 : val});
+                  }} 
                 />
                 <span className="shrink-0 bg-slate-100 text-slate-500 text-[10px] font-black px-3 py-2 rounded-lg uppercase tracking-tight shadow-sm border border-slate-200">
                   {getUnitLabel(formData.unit)}
@@ -306,10 +311,15 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
               <div className="flex items-center gap-2">
                 <input 
                   type="number" 
+                  step="any"
+                  min="0"
                   required 
                   className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold min-w-0" 
                   value={formData.totalStock} 
-                  onChange={e => setFormData({...formData, totalStock: parseInt(e.target.value) || 0})} 
+                  onChange={e => {
+                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                    setFormData({...formData, totalStock: isNaN(val) ? 0 : val});
+                  }} 
                 />
                 <span className="shrink-0 bg-slate-100 text-slate-500 text-[10px] font-black px-3 py-2 rounded-lg uppercase tracking-tight shadow-sm border border-slate-200">
                   {getUnitLabel(formData.unit)}

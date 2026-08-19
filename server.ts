@@ -95,7 +95,9 @@ async function runSchemaMigration() {
       ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE,
       ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS keep_history BOOLEAN DEFAULT TRUE,
-      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;
+      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
+      ALTER COLUMN current_stock TYPE NUMERIC,
+      ALTER COLUMN total_stock TYPE NUMERIC;
     `;
 
     await sql`
