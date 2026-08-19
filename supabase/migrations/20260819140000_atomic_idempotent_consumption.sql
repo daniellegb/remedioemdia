@@ -19,7 +19,7 @@ ON public.consumption_records (user_id, medication_id, date, scheduled_time);
 CREATE OR REPLACE FUNCTION public.record_dose_consumption(
     p_user_id UUID,
     p_medication_id UUID,
-    p_date TEXT,
+    p_date DATE,
     p_scheduled_time TEXT,
     p_status TEXT,
     p_dosage_amount NUMERIC,
@@ -34,15 +34,12 @@ DECLARE
     v_updated_stock NUMERIC;
     v_updated_next_dose TIMESTAMP WITH TIME ZONE;
     v_valid_dose NUMERIC;
-    v_date_val DATE;
 BEGIN
     -- Validar a dosagem
     v_valid_dose := CASE 
         WHEN p_dosage_amount IS NULL OR p_dosage_amount <= 0 THEN 1 
         ELSE p_dosage_amount 
     END;
-
-    v_date_val := p_date::date;
 
     -- 1. Lock de linha no medicamento para proibir concorrência no estoque
     SELECT current_stock, next_dose_at INTO v_med_stock, v_updated_next_dose
@@ -59,7 +56,7 @@ BEGIN
     FROM public.consumption_records
     WHERE user_id = p_user_id 
       AND medication_id = p_medication_id 
-      AND date = v_date_val 
+      AND date = p_date 
       AND scheduled_time = p_scheduled_time
     FOR UPDATE;
 
@@ -130,7 +127,7 @@ BEGIN
 
     -- 3. Registro novo (Não existente) - Inserir consumo e abater estoque em uma ÚNICA transação
     INSERT INTO public.consumption_records (user_id, medication_id, date, scheduled_time, status)
-    VALUES (p_user_id, p_medication_id, v_date_val, p_scheduled_time, p_status)
+    VALUES (p_user_id, p_medication_id, p_date, p_scheduled_time, p_status)
     RETURNING id INTO v_existing_id;
 
     IF p_status = 'taken' THEN

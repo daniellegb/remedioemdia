@@ -317,7 +317,6 @@ async function runSchemaMigration() {
       WITH CHECK (true);
 
       DROP FUNCTION IF EXISTS public.record_dose_consumption(UUID, UUID, TEXT, TEXT, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE);
-      DROP FUNCTION IF EXISTS public.record_dose_consumption(UUID, UUID, TEXT, TEXT, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE);
       DROP FUNCTION IF EXISTS public.record_dose_consumption(UUID, UUID, DATE, TEXT, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE);
 
       CREATE OR REPLACE FUNCTION public.record_dose_consumption(
