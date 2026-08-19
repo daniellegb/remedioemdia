@@ -35,6 +35,20 @@ const mapMedToCamelCase = (med: any): Medication => ({
   next_dose_at: med.next_dose_at
 });
 
+export interface ConsumptionOperationResult {
+  dose: DoseEvent;
+  medicationId?: string;
+  currentStock?: number;
+  nextDoseAt?: string;
+}
+
+const getApiBaseUrl = () => {
+  if (typeof window !== 'undefined') {
+    return '';
+  }
+  return 'http://127.0.0.1:3000';
+};
+
 export const consumptionService = {
   async getConsumptionRecords(userId: string) {
     const { data, error } = await supabase
@@ -48,60 +62,185 @@ export const consumptionService = {
     return (data || []).map(mapDoseToCamelCase);
   },
 
-  async createConsumptionRecord(userId: string, data: Omit<DoseEvent, 'id'>) {
-    const { data: created, error } = await supabase
-      .from('consumption_records')
-      .insert([{ 
-        medication_id: data.medicationId,
-        date: data.date,
-        scheduled_time: data.scheduledTime,
-        status: data.status,
-        user_id: userId 
-      }])
-      .select()
-      .single();
+  /**
+   * Registra um evento de dose e debita atomicamente o estoque via PostgreSQL RPC
+   */
+  async createConsumptionRecord(
+    userId: string, 
+    data: Omit<DoseEvent, 'id'> & { dosageAmount?: number; nextDoseAt?: string | null }
+  ): Promise<ConsumptionOperationResult> {
+    const dosageAmount = data.dosageAmount !== undefined ? data.dosageAmount : 1;
 
-    if (error) throw error;
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/consumption/record`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          medicationId: data.medicationId,
+          date: data.date,
+          scheduledTime: data.scheduledTime,
+          status: data.status,
+          dosageAmount,
+          nextDoseAt: data.nextDoseAt || null
+        })
+      });
 
-    // Se a dose foi tomada, atualizar o estoque e a próxima dose do medicamento
-    if (data.status === 'taken') {
-      const { data: med } = await supabase
-        .from('medications')
-        .select('*')
-        .eq('id', data.medicationId)
-        .single();
-
-      if (med) {
-        const dosageAmount = parseDosageAmount(med.dosage);
-        const currentStock = Math.max(0, Math.round(((med.current_stock || 0) - dosageAmount) * 10000) / 10000);
-        const nextDoseAt = getNextDoseAt(mapMedToCamelCase(med));
-
-        await supabase
-          .from('medications')
-          .update({ 
-            current_stock: currentStock,
-            next_dose_at: nextDoseAt
-          })
-          .eq('id', med.id);
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const body = await res.json();
+          if (body?.record) {
+            return {
+              dose: mapDoseToCamelCase(body.record),
+              medicationId: body.medication_id,
+              currentStock: body.current_stock,
+              nextDoseAt: body.next_dose_at
+            };
+          }
+        }
+      } else {
+        const errText = await res.text();
+        console.error('[consumptionService] API returned error status', res.status, errText);
       }
+    } catch (apiErr) {
+      console.warn('[consumptionService] API route unavailable, using PostgreSQL RPC fallback:', apiErr);
     }
 
-    return mapDoseToCamelCase(created);
+    // Fallback de segurança atômico e idempotente diretamente via RPC no PostgreSQL
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('record_dose_consumption', {
+      p_user_id: userId,
+      p_medication_id: data.medicationId,
+      p_date: data.date,
+      p_scheduled_time: data.scheduledTime,
+      p_status: data.status,
+      p_dosage_amount: dosageAmount,
+      p_next_dose_at: data.nextDoseAt || null
+    });
+
+    if (rpcErr) {
+      console.error('[consumptionService] Erro na RPC record_dose_consumption no fallback:', rpcErr);
+      throw rpcErr;
+    }
+
+    return {
+      dose: mapDoseToCamelCase(rpcRes?.record),
+      medicationId: rpcRes?.medication_id || data.medicationId,
+      currentStock: rpcRes?.current_stock,
+      nextDoseAt: rpcRes?.next_dose_at
+    };
   },
 
-  async deleteConsumptionRecord(userId: string, id: string) {
-    const { error } = await supabase
-      .from('consumption_records')
-      .delete()
-      .eq('id', id)
-      .eq('user_id', userId);
+  /**
+   * Exclui um registro de consumo (ex: PRN revertido) e estorna atomicamente o estoque via PostgreSQL RPC
+   */
+  async deleteConsumptionRecord(userId: string, id: string, dosageAmount?: number) {
+    const validDose = dosageAmount !== undefined ? dosageAmount : 1;
 
-    if (error) throw error;
+    try {
+      const res = await fetch(`${getApiBaseUrl()}/api/consumption/delete`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId,
+          recordId: id,
+          dosageAmount: validDose
+        })
+      });
+
+      if (res.ok) {
+        const contentType = res.headers.get('content-type') || '';
+        if (contentType.includes('application/json')) {
+          const body = await res.json();
+          return {
+            success: body.success ?? true,
+            medicationId: body.medication_id,
+            currentStock: body.current_stock
+          };
+        }
+      }
+    } catch (apiErr) {
+      console.warn('[consumptionService] API delete route unavailable, using direct PostgreSQL RPC fallback:', apiErr);
+    }
+
+    // Fallback direto via PostgreSQL RPC
+    const { data: rpcRes, error: rpcErr } = await supabase.rpc('delete_dose_consumption', {
+      p_user_id: userId,
+      p_record_id: id,
+      p_dosage_amount: validDose
+    });
+
+    if (rpcErr) throw rpcErr;
+
+    return {
+      success: rpcRes?.success ?? true,
+      medicationId: rpcRes?.medication_id,
+      currentStock: rpcRes?.current_stock
+    };
   },
 
-  async updateConsumptionRecord(userId: string, id: string, data: Partial<DoseEvent>) {
+  /**
+   * Atualiza status do consumo e ajusta/estorna o estoque atomicamente via PostgreSQL RPC
+   */
+  async updateConsumptionRecord(
+    userId: string, 
+    id: string, 
+    data: Partial<DoseEvent> & { dosageAmount?: number; nextDoseAt?: string | null }
+  ): Promise<ConsumptionOperationResult> {
+    const validDose = data.dosageAmount !== undefined ? data.dosageAmount : 1;
+
+    if (data.status !== undefined) {
+      try {
+        const res = await fetch(`${getApiBaseUrl()}/api/consumption/toggle`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId,
+            recordId: id,
+            newStatus: data.status,
+            dosageAmount: validDose,
+            nextDoseAt: data.nextDoseAt || null
+          })
+        });
+
+        if (res.ok) {
+          const contentType = res.headers.get('content-type') || '';
+          if (contentType.includes('application/json')) {
+            const body = await res.json();
+            if (body?.record) {
+              return {
+                dose: mapDoseToCamelCase(body.record),
+                medicationId: body.medication_id,
+                currentStock: body.current_stock,
+                nextDoseAt: body.next_dose_at
+              };
+            }
+          }
+        }
+      } catch (apiErr) {
+        console.warn('[consumptionService] API toggle route unavailable, using direct PostgreSQL RPC fallback:', apiErr);
+      }
+
+      // Fallback direto via PostgreSQL RPC (transação com FOR UPDATE)
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('toggle_dose_consumption', {
+        p_user_id: userId,
+        p_record_id: id,
+        p_new_status: data.status,
+        p_dosage_amount: validDose,
+        p_next_dose_at: data.nextDoseAt || null
+      });
+
+      if (rpcErr) throw rpcErr;
+
+      return {
+        dose: mapDoseToCamelCase(rpcRes.record),
+        medicationId: rpcRes.medication_id,
+        currentStock: rpcRes.current_stock,
+        nextDoseAt: rpcRes.next_dose_at
+      };
+    }
+
     const updateData: any = {};
-    if (data.status !== undefined) updateData.status = data.status;
     if (data.date !== undefined) updateData.date = data.date;
     if (data.scheduledTime !== undefined) updateData.scheduled_time = data.scheduledTime;
     if (data.medicationId !== undefined) updateData.medication_id = data.medicationId;
@@ -115,6 +254,8 @@ export const consumptionService = {
       .single();
 
     if (error) throw error;
-    return mapDoseToCamelCase(updated);
+    return {
+      dose: mapDoseToCamelCase(updated)
+    };
   }
 };
