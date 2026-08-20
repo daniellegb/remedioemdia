@@ -16,6 +16,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS idx_consumption_records_idempotency
 ON public.consumption_records (user_id, medication_id, date, scheduled_time);
 
 -- 3. Atualizar/Criar a RPC record_dose_consumption com suporte a DATE e idempotência atômica
+-- Drop all existing overloads of record_dose_consumption unambiguously
+DROP FUNCTION IF EXISTS public.record_dose_consumption(UUID, UUID, DATE, TEXT, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE);
+DROP FUNCTION IF EXISTS public.record_dose_consumption(UUID, UUID, TEXT, TEXT, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE);
+
 CREATE OR REPLACE FUNCTION public.record_dose_consumption(
     p_user_id UUID,
     p_medication_id UUID,
