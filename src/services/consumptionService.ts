@@ -49,6 +49,19 @@ const getApiBaseUrl = () => {
   return 'http://127.0.0.1:3000';
 };
 
+const getAuthHeaders = async (): Promise<Record<string, string>> => {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  try {
+    const { data: { session } } = await supabase.auth.getSession();
+    if (session?.access_token) {
+      headers['Authorization'] = `Bearer ${session.access_token}`;
+    }
+  } catch (err) {
+    console.warn('[consumptionService] Erro ao obter token de sessão para os cabeçalhos:', err);
+  }
+  return headers;
+};
+
 export const consumptionService = {
   async getConsumptionRecords(userId: string) {
     const { data, error } = await supabase
@@ -72,9 +85,10 @@ export const consumptionService = {
     const dosageAmount = data.dosageAmount !== undefined ? data.dosageAmount : 1;
 
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch(`${getApiBaseUrl()}/api/consumption/record`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           userId,
           medicationId: data.medicationId,
@@ -138,9 +152,10 @@ export const consumptionService = {
     const validDose = dosageAmount !== undefined ? dosageAmount : 1;
 
     try {
+      const headers = await getAuthHeaders();
       const res = await fetch(`${getApiBaseUrl()}/api/consumption/delete`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           userId,
           recordId: id,
@@ -191,9 +206,10 @@ export const consumptionService = {
 
     if (data.status !== undefined) {
       try {
+        const headers = await getAuthHeaders();
         const res = await fetch(`${getApiBaseUrl()}/api/consumption/toggle`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers,
           body: JSON.stringify({
             userId,
             recordId: id,
