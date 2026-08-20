@@ -10,6 +10,7 @@ import checkoutHandler from './api/stripe/checkout.js';
 import portalHandler from './api/stripe/create-portal-session.js';
 import syncHandler from './api/stripe/sync-subscription.js';
 import webhookHandler from './api/stripe/webhook.js';
+import { atomicStockService } from './server/atomicStockService';
 
 // Helper functions to safely handle mismatched Supabase environment variables
 function getProjectRefFromKey(key: string): string | null {
@@ -71,7 +72,7 @@ if (viteRef && activeRef && viteRef !== activeRef) {
  * Runs PostgreSQL column migrations on startup to support account deletion tracking.
  */
 async function runSchemaMigration() {
-  const dbUrl = process.env.SUPABASE_DB_URL;
+  const dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
   if (!dbUrl) {
     console.warn('[Migration] SUPABASE_DB_URL is missing. Skipping direct schema checks.');
     return;
@@ -95,7 +96,9 @@ async function runSchemaMigration() {
       ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT TRUE,
       ADD COLUMN IF NOT EXISTS deleted BOOLEAN DEFAULT FALSE,
       ADD COLUMN IF NOT EXISTS keep_history BOOLEAN DEFAULT TRUE,
-      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE;
+      ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMP WITH TIME ZONE,
+      ALTER COLUMN current_stock TYPE NUMERIC,
+      ALTER COLUMN total_stock TYPE NUMERIC;
     `;
 
     await sql`
@@ -299,6 +302,314 @@ async function runSchemaMigration() {
     `;
 
     console.log('[Migration] Colunas de exclusão e tabela de sessões verificadas/criadas com sucesso no banco de dados!');
+
+    console.log('[Migration] Criando/atualizando funções RPC atômicas para estoque e consumo...');
+    await sql`
+      -- Garantir políticas de RLS completas para consumption_records
+      DROP POLICY IF EXISTS "Users can manage own consumption" ON public.consumption_records;
+      DROP POLICY IF EXISTS "Allow all for authenticated and service_role" ON public.consumption_records;
+      DROP POLICY IF EXISTS "Users and service can manage consumption" ON public.consumption_records;
+      
+      CREATE POLICY "Users and service can manage consumption" 
+      ON public.consumption_records FOR ALL 
+      TO authenticated, anon, service_role
+      USING (true)
+      WITH CHECK (true);
+
+      -- Drop all existing overloads of record_dose_consumption unambiguously
+      DROP FUNCTION IF EXISTS public.record_dose_consumption(UUID, UUID, DATE, TEXT, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE);
+      DROP FUNCTION IF EXISTS public.record_dose_consumption(UUID, UUID, TEXT, TEXT, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE);
+
+      CREATE OR REPLACE FUNCTION public.record_dose_consumption(
+          p_user_id UUID,
+          p_medication_id UUID,
+          p_date DATE,
+          p_scheduled_time TEXT,
+          p_status TEXT,
+          p_dosage_amount NUMERIC,
+          p_next_dose_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
+      )
+      RETURNS JSONB AS $$
+      DECLARE
+          v_record JSONB;
+          v_existing_id UUID;
+          v_existing_status TEXT;
+          v_med_stock NUMERIC;
+          v_updated_stock NUMERIC;
+          v_updated_next_dose TIMESTAMP WITH TIME ZONE;
+          v_valid_dose NUMERIC;
+      BEGIN
+          v_valid_dose := CASE 
+              WHEN p_dosage_amount IS NULL OR p_dosage_amount <= 0 THEN 1 
+              ELSE p_dosage_amount 
+          END;
+
+          -- 1. Lock de linha no medicamento para proibir concorrência no estoque (FOR UPDATE)
+          SELECT current_stock, next_dose_at INTO v_med_stock, v_updated_next_dose
+          FROM public.medications
+          WHERE id = p_medication_id AND user_id = p_user_id
+          FOR UPDATE;
+
+          IF NOT FOUND THEN
+              RAISE EXCEPTION 'Medicamento não encontrado ou não pertence ao usuário' USING ERRCODE = 'P0002';
+          END IF;
+
+          -- 2. Verificar se a dose já foi registrada (Idempotência)
+          SELECT id, status INTO v_existing_id, v_existing_status
+          FROM public.consumption_records
+          WHERE user_id = p_user_id 
+            AND medication_id = p_medication_id 
+            AND date = p_date 
+            AND scheduled_time = p_scheduled_time
+          FOR UPDATE;
+
+          IF v_existing_id IS NOT NULL THEN
+              -- Registro já existe no banco
+              IF v_existing_status = 'taken' THEN
+                  -- Já tomada anteriormente: Retornar idempotente sem novo débito no estoque
+                  SELECT to_jsonb(r) INTO v_record FROM (
+                      SELECT id, user_id, medication_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, scheduled_time, status, created_at
+                      FROM public.consumption_records
+                      WHERE id = v_existing_id
+                  ) r;
+
+                  RETURN jsonb_build_object(
+                      'record', v_record,
+                      'medication_id', p_medication_id,
+                      'current_stock', v_med_stock,
+                      'next_dose_at', v_updated_next_dose,
+                      'idempotent', true
+                  );
+              ELSIF p_status = 'taken' THEN
+                  -- Mudar de pending/missed para taken na mesma transação
+                  UPDATE public.consumption_records
+                  SET status = 'taken'
+                  WHERE id = v_existing_id;
+
+                  UPDATE public.medications
+                  SET 
+                      current_stock = GREATEST(0, ROUND((COALESCE(current_stock, 0) - v_valid_dose)::numeric, 4)),
+                      next_dose_at = COALESCE(p_next_dose_at, next_dose_at)
+                  WHERE id = p_medication_id AND user_id = p_user_id
+                  RETURNING current_stock, next_dose_at INTO v_updated_stock, v_updated_next_dose;
+
+                  SELECT to_jsonb(r) INTO v_record FROM (
+                      SELECT id, user_id, medication_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, scheduled_time, status, created_at
+                      FROM public.consumption_records
+                      WHERE id = v_existing_id
+                  ) r;
+
+                  RETURN jsonb_build_object(
+                      'record', v_record,
+                      'medication_id', p_medication_id,
+                      'current_stock', v_updated_stock,
+                      'next_dose_at', v_updated_next_dose,
+                      'idempotent', false
+                  );
+              ELSE
+                  -- Atualização simples de status para não-taken
+                  UPDATE public.consumption_records
+                  SET status = p_status
+                  WHERE id = v_existing_id;
+
+                  SELECT to_jsonb(r) INTO v_record FROM (
+                      SELECT id, user_id, medication_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, scheduled_time, status, created_at
+                      FROM public.consumption_records
+                      WHERE id = v_existing_id
+                  ) r;
+
+                  RETURN jsonb_build_object(
+                      'record', v_record,
+                      'medication_id', p_medication_id,
+                      'current_stock', v_med_stock,
+                      'next_dose_at', v_updated_next_dose,
+                      'idempotent', true
+                  );
+              END IF;
+          END IF;
+
+          -- 3. Inserir registro novo usando p_date (tipo DATE)
+          INSERT INTO public.consumption_records (user_id, medication_id, date, scheduled_time, status)
+          VALUES (p_user_id, p_medication_id, p_date, p_scheduled_time, p_status)
+          RETURNING id INTO v_existing_id;
+
+          IF p_status = 'taken' THEN
+              UPDATE public.medications
+              SET 
+                  current_stock = GREATEST(0, ROUND((COALESCE(current_stock, 0) - v_valid_dose)::numeric, 4)),
+                  next_dose_at = COALESCE(p_next_dose_at, next_dose_at)
+              WHERE id = p_medication_id AND user_id = p_user_id
+              RETURNING current_stock, next_dose_at INTO v_updated_stock, v_updated_next_dose;
+          ELSE
+              v_updated_stock := v_med_stock;
+          END IF;
+
+          SELECT to_jsonb(r) INTO v_record FROM (
+              SELECT id, user_id, medication_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, scheduled_time, status, created_at
+              FROM public.consumption_records
+              WHERE id = v_existing_id
+          ) r;
+
+          RETURN jsonb_build_object(
+              'record', v_record,
+              'medication_id', p_medication_id,
+              'current_stock', v_updated_stock,
+              'next_dose_at', v_updated_next_dose,
+              'idempotent', false
+          );
+      END;
+      $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+      DROP FUNCTION IF EXISTS public.toggle_dose_consumption(UUID, UUID, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE);
+      CREATE OR REPLACE FUNCTION public.toggle_dose_consumption(
+          p_user_id UUID,
+          p_record_id UUID,
+          p_new_status TEXT,
+          p_dosage_amount NUMERIC,
+          p_next_dose_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
+      )
+      RETURNS JSONB AS $$
+      DECLARE
+          v_record JSONB;
+          v_old_status TEXT;
+          v_med_id UUID;
+          v_updated_stock NUMERIC;
+          v_updated_next_dose TIMESTAMP WITH TIME ZONE;
+          v_valid_dose NUMERIC;
+      BEGIN
+          v_valid_dose := CASE 
+              WHEN p_dosage_amount IS NULL OR p_dosage_amount <= 0 THEN 1 
+              ELSE p_dosage_amount 
+          END;
+
+          SELECT status, medication_id INTO v_old_status, v_med_id
+          FROM public.consumption_records
+          WHERE id = p_record_id AND user_id = p_user_id
+          FOR UPDATE;
+
+          IF NOT FOUND THEN
+              RAISE EXCEPTION 'Registro de consumo não encontrado' USING ERRCODE = 'P0002';
+          END IF;
+
+          UPDATE public.consumption_records
+          SET status = p_new_status
+          WHERE id = p_record_id AND user_id = p_user_id;
+
+          IF v_old_status = 'taken' AND p_new_status != 'taken' THEN
+              UPDATE public.medications
+              SET current_stock = GREATEST(0, ROUND((COALESCE(current_stock, 0) + v_valid_dose)::numeric, 4))
+              WHERE id = v_med_id AND user_id = p_user_id
+              RETURNING current_stock, next_dose_at INTO v_updated_stock, v_updated_next_dose;
+          ELSIF v_old_status != 'taken' AND p_new_status = 'taken' THEN
+              UPDATE public.medications
+              SET 
+                  current_stock = GREATEST(0, ROUND((COALESCE(current_stock, 0) - v_valid_dose)::numeric, 4)),
+                  next_dose_at = COALESCE(p_next_dose_at, next_dose_at)
+              WHERE id = v_med_id AND user_id = p_user_id
+              RETURNING current_stock, next_dose_at INTO v_updated_stock, v_updated_next_dose;
+          ELSE
+              SELECT current_stock, next_dose_at INTO v_updated_stock, v_updated_next_dose
+              FROM public.medications
+              WHERE id = v_med_id AND user_id = p_user_id;
+          END IF;
+
+          SELECT to_jsonb(r) INTO v_record FROM (
+              SELECT id, user_id, medication_id, date, scheduled_time, status, created_at
+              FROM public.consumption_records
+              WHERE id = p_record_id
+          ) r;
+
+          RETURN jsonb_build_object(
+              'record', v_record,
+              'medication_id', v_med_id,
+              'current_stock', v_updated_stock,
+              'next_dose_at', v_updated_next_dose
+          );
+      END;
+      $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+      DROP FUNCTION IF EXISTS public.delete_dose_consumption(UUID, UUID, NUMERIC);
+      CREATE OR REPLACE FUNCTION public.delete_dose_consumption(
+          p_user_id UUID,
+          p_record_id UUID,
+          p_dosage_amount NUMERIC
+      )
+      RETURNS JSONB AS $$
+      DECLARE
+          v_old_status TEXT;
+          v_med_id UUID;
+          v_updated_stock NUMERIC;
+          v_valid_dose NUMERIC;
+      BEGIN
+          v_valid_dose := CASE 
+              WHEN p_dosage_amount IS NULL OR p_dosage_amount <= 0 THEN 1 
+              ELSE p_dosage_amount 
+          END;
+
+          SELECT status, medication_id INTO v_old_status, v_med_id
+          FROM public.consumption_records
+          WHERE id = p_record_id AND user_id = p_user_id
+          FOR UPDATE;
+
+          IF FOUND THEN
+              DELETE FROM public.consumption_records
+              WHERE id = p_record_id AND user_id = p_user_id;
+
+              IF v_old_status = 'taken' THEN
+                  UPDATE public.medications
+                  SET current_stock = GREATEST(0, ROUND((COALESCE(current_stock, 0) + v_valid_dose)::numeric, 4))
+                  WHERE id = v_med_id AND user_id = p_user_id
+                  RETURNING current_stock INTO v_updated_stock;
+              ELSE
+                  SELECT current_stock INTO v_updated_stock
+                  FROM public.medications
+                  WHERE id = v_med_id AND user_id = p_user_id;
+              END IF;
+
+              RETURN jsonb_build_object(
+                  'success', true,
+                  'medication_id', v_med_id,
+                  'current_stock', v_updated_stock
+              );
+          END IF;
+
+          RETURN jsonb_build_object('success', false);
+      END;
+      $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+      DROP FUNCTION IF EXISTS public.adjust_medication_stock(UUID, UUID, NUMERIC, TIMESTAMP WITH TIME ZONE);
+      CREATE OR REPLACE FUNCTION public.adjust_medication_stock(
+          p_user_id UUID,
+          p_medication_id UUID,
+          p_delta NUMERIC,
+          p_next_dose_at TIMESTAMP WITH TIME ZONE DEFAULT NULL
+      )
+      RETURNS JSONB AS $$
+      DECLARE
+          v_updated_stock NUMERIC;
+          v_updated_next_dose TIMESTAMP WITH TIME ZONE;
+      BEGIN
+          UPDATE public.medications
+          SET 
+              current_stock = GREATEST(0, ROUND((COALESCE(current_stock, 0) + p_delta)::numeric, 4)),
+              next_dose_at = COALESCE(p_next_dose_at, next_dose_at)
+          WHERE id = p_medication_id AND user_id = p_user_id
+          RETURNING current_stock, next_dose_at INTO v_updated_stock, v_updated_next_dose;
+
+          RETURN jsonb_build_object(
+              'medication_id', p_medication_id,
+              'current_stock', v_updated_stock,
+              'next_dose_at', v_updated_next_dose
+          );
+      END;
+      $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+
+      GRANT EXECUTE ON FUNCTION public.record_dose_consumption TO authenticated, service_role, anon;
+      GRANT EXECUTE ON FUNCTION public.toggle_dose_consumption TO authenticated, service_role, anon;
+      GRANT EXECUTE ON FUNCTION public.delete_dose_consumption TO authenticated, service_role, anon;
+      GRANT EXECUTE ON FUNCTION public.adjust_medication_stock TO authenticated, service_role, anon;
+    `;
+    console.log('[Migration] Funções RPC atômicas criadas e permissões concedidas com sucesso!');
     
     // Force Supabase API cache (PostgREST) to reload and pick up the new columns immediately
     try {
@@ -419,6 +730,73 @@ async function createServer() {
   app.post('/api/stripe/create-portal-session', (req, res) => portalHandler(req as any, res as any));
   app.post('/api/stripe/sync-subscription', (req, res) => syncHandler(req as any, res as any));
   app.post('/api/stripe/webhook', (req, res) => webhookHandler(req as any, res as any));
+
+  // 2. Atomic Stock and Consumption Management API Endpoints
+  app.post('/api/consumption/record', async (req, res): Promise<any> => {
+    try {
+      const { userId, medicationId, date, scheduledTime, status, dosageAmount, nextDoseAt } = req.body;
+      if (!userId || !medicationId || !date || !scheduledTime) {
+        return res.status(400).json({ error: 'Parâmetros obrigatórios ausentes.' });
+      }
+
+      const result = await atomicStockService.recordConsumption({
+        userId,
+        medicationId,
+        date,
+        scheduledTime,
+        status: status || 'taken',
+        dosageAmount: Number(dosageAmount) || 1,
+        nextDoseAt: nextDoseAt || null
+      });
+
+      return res.status(200).json(result);
+    } catch (err: any) {
+      console.error('[API Consumption Record] Erro:', err?.message || err);
+      return res.status(500).json({ error: err?.message || 'Erro ao registrar consumo' });
+    }
+  });
+
+  app.post('/api/consumption/toggle', async (req, res): Promise<any> => {
+    try {
+      const { userId, recordId, newStatus, dosageAmount, nextDoseAt } = req.body;
+      if (!userId || !recordId || !newStatus) {
+        return res.status(400).json({ error: 'Parâmetros obrigatórios ausentes.' });
+      }
+
+      const result = await atomicStockService.toggleConsumption({
+        userId,
+        recordId,
+        newStatus,
+        dosageAmount: Number(dosageAmount) || 1,
+        nextDoseAt: nextDoseAt || null
+      });
+
+      return res.status(200).json(result);
+    } catch (err: any) {
+      console.error('[API Consumption Toggle] Erro:', err?.message || err);
+      return res.status(500).json({ error: err?.message || 'Erro ao alternar status do consumo' });
+    }
+  });
+
+  app.post('/api/consumption/delete', async (req, res): Promise<any> => {
+    try {
+      const { userId, recordId, dosageAmount } = req.body;
+      if (!userId || !recordId) {
+        return res.status(400).json({ error: 'Parâmetros obrigatórios ausentes.' });
+      }
+
+      const result = await atomicStockService.deleteConsumption({
+        userId,
+        recordId,
+        dosageAmount: Number(dosageAmount) || 1
+      });
+
+      return res.status(200).json(result);
+    } catch (err: any) {
+      console.error('[API Consumption Delete] Erro:', err?.message || err);
+      return res.status(500).json({ error: err?.message || 'Erro ao excluir consumo' });
+    }
+  });
 
 
 

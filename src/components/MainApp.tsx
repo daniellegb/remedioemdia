@@ -29,7 +29,7 @@ import { supabase } from '../lib/supabase';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 
-import { getUpdatedStock } from '../domain/stock';
+import { getUpdatedStock, parseDosageAmount } from '../domain/stock';
 import { getNextDoseAt } from '../domain/medicationRules';
 import { pushService } from '../services/pushService';
 import { stripeClientService } from '../services/stripeClientService';
@@ -827,62 +827,64 @@ const MainApp: React.FC = () => {
         const currentDose = doses[existingIndex];
         const med = meds.find(m => m.id === currentDose.medicationId);
         const isPrn = med?.usageCategory === 'prn';
+        const dosageAmount = med ? parseDosageAmount(med.dosage) : 1;
         
         const newStatus = currentDose.status === 'taken' ? 'pending' : 'taken';
         
-        // Se for PRN e estivermos desmarcando (voltando para pending), deletamos o registro
+        // Se for PRN e estivermos desmarcando (voltando para pending), deletamos o registro com estorno atômico
         if (isPrn && newStatus === 'pending') {
-          await consumptionService.deleteConsumptionRecord(user.id, currentDose.id);
+          const deleteResult = await consumptionService.deleteConsumptionRecord(user.id, currentDose.id, dosageAmount);
           
-          // Atualiza estoque (devolve 1)
-          if (med) {
-            const updatedMed = await medicationService.updateMedication(user.id, med.id, { 
-              currentStock: getUpdatedStock(med.currentStock, 'pending') 
-            });
-            setMeds(prev => prev.map(m => m.id === updatedMed.id ? updatedMed : m));
+          if (deleteResult && deleteResult.currentStock !== undefined) {
+            setMeds(prev => prev.map(m => m.id === currentDose.medicationId ? { ...m, currentStock: deleteResult.currentStock! } : m));
           }
           
           setDoses(prev => prev.filter((_, i) => i !== existingIndex));
           return;
         }
 
-        // Atualiza status no banco
-        const updatedDose = await consumptionService.updateConsumptionRecord(user.id, currentDose.id, { 
-          status: newStatus 
+        // Atualiza status e estoque atomicamente no banco em uma única transação RPC
+        const nextDose = newStatus === 'taken' && med ? getNextDoseAt(med) : (med?.next_dose_at || null);
+        const updateResult = await consumptionService.updateConsumptionRecord(user.id, currentDose.id, { 
+          status: newStatus,
+          dosageAmount,
+          nextDoseAt: nextDose
         });
 
-        // Atualiza estoque baseado na mudança de status para meds regulares
-        if (med) {
-          const updatedMed = await medicationService.updateMedication(user.id, med.id, { 
-            currentStock: getUpdatedStock(med.currentStock, newStatus),
-            // Recalcular próxima dose ao marcar como tomado
-            next_dose_at: newStatus === 'taken' ? getNextDoseAt(med) : med.next_dose_at
-          });
-          setMeds(currentMeds => currentMeds.map(m => m.id === updatedMed.id ? updatedMed : m));
+        if (updateResult && updateResult.currentStock !== undefined) {
+          setMeds(prev => prev.map(m => m.id === currentDose.medicationId ? { 
+            ...m, 
+            currentStock: updateResult.currentStock!,
+            next_dose_at: updateResult.nextDoseAt ?? m.next_dose_at 
+          } : m));
         }
 
-        setDoses(prev => prev.map(d => d.id === updatedDose.id ? updatedDose : d));
+        setDoses(prev => prev.map(d => d.id === updateResult.dose.id ? updateResult.dose : d));
         return;
       } else if (medicationId && time) {
-        // Criação de novo evento de dose
-        const createdDose = await consumptionService.createConsumptionRecord(user.id, {
+        // Criação de novo evento de dose com abatimento atômico no PostgreSQL
+        const med = meds.find(m => m.id === medicationId);
+        const dosageAmount = med ? parseDosageAmount(med.dosage) : 1;
+        const nextDose = med ? getNextDoseAt(med) : null;
+
+        const createResult = await consumptionService.createConsumptionRecord(user.id, {
           medicationId,
           date: targetDate,
           scheduledTime: time,
-          status: 'taken'
+          status: 'taken',
+          dosageAmount,
+          nextDoseAt: nextDose
         });
 
-        // Reduz o estoque ao marcar como tomado
-        const med = meds.find(m => m.id === medicationId);
-        if (med) {
-          const updatedMed = await medicationService.updateMedication(user.id, med.id, { 
-            currentStock: getUpdatedStock(med.currentStock, 'taken'),
-            next_dose_at: getNextDoseAt(med)
-          });
-          setMeds(prev => prev.map(m => m.id === updatedMed.id ? updatedMed : m));
+        if (createResult && createResult.currentStock !== undefined) {
+          setMeds(prev => prev.map(m => m.id === medicationId ? { 
+            ...m, 
+            currentStock: createResult.currentStock!,
+            next_dose_at: createResult.nextDoseAt ?? m.next_dose_at 
+          } : m));
         }
 
-        setDoses(prev => [...prev, createdDose]);
+        setDoses(prev => [...prev, createResult.dose]);
       }
     } catch (error) {
       console.error('Erro ao alternar dose:', error);

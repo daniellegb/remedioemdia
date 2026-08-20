@@ -247,8 +247,28 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
           </div>
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
-              <label className="text-sm font-bold text-slate-500 uppercase tracking-wider">Dosagem</label>
-              <input required className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ex: 1 (comprimido)" value={formData.dosage} onChange={e => setFormData({...formData, dosage: e.target.value})} />
+              <label htmlFor="medication-dosage" className="text-sm font-bold text-slate-500 uppercase tracking-wider">Dosagem</label>
+              <input 
+                id="medication-dosage"
+                type="text" 
+                inputMode="decimal" 
+                required 
+                className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none font-bold" 
+                placeholder="Ex: 1 ou 0.5" 
+                value={formData.dosage} 
+                onChange={e => {
+                  let cleaned = e.target.value.replace(/[^0-9.,]/g, '');
+                  const firstSep = cleaned.match(/[.,]/);
+                  if (firstSep && firstSep.index !== undefined) {
+                    const sep = firstSep[0];
+                    const idx = firstSep.index;
+                    const intPart = cleaned.substring(0, idx).replace(/[.,]/g, '');
+                    const decPart = cleaned.substring(idx + 1).replace(/[.,]/g, '');
+                    cleaned = `${intPart}${sep}${decPart}`;
+                  }
+                  setFormData({ ...formData, dosage: cleaned });
+                }} 
+              />
             </div>
             <div className="space-y-2">
               <label className="text-sm font-bold text-slate-500 uppercase tracking-wider">Unidade</label>
@@ -269,10 +289,15 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
               <div className="flex items-center gap-2">
                 <input 
                   type="number" 
+                  step="any"
+                  min="0"
                   required 
                   className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold min-w-0" 
                   value={formData.currentStock} 
-                  onChange={e => setFormData({...formData, currentStock: parseInt(e.target.value) || 0})} 
+                  onChange={e => {
+                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                    setFormData({...formData, currentStock: isNaN(val) ? 0 : val});
+                  }} 
                 />
                 <span className="shrink-0 bg-slate-100 text-slate-500 text-[10px] font-black px-3 py-2 rounded-lg uppercase tracking-tight shadow-sm border border-slate-200">
                   {getUnitLabel(formData.unit)}
@@ -286,10 +311,15 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
               <div className="flex items-center gap-2">
                 <input 
                   type="number" 
+                  step="any"
+                  min="0"
                   required 
                   className="flex-1 bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none text-sm font-bold min-w-0" 
                   value={formData.totalStock} 
-                  onChange={e => setFormData({...formData, totalStock: parseInt(e.target.value) || 0})} 
+                  onChange={e => {
+                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                    setFormData({...formData, totalStock: isNaN(val) ? 0 : val});
+                  }} 
                 />
                 <span className="shrink-0 bg-slate-100 text-slate-500 text-[10px] font-black px-3 py-2 rounded-lg uppercase tracking-tight shadow-sm border border-slate-200">
                   {getUnitLabel(formData.unit)}
