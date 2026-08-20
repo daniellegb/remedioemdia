@@ -187,6 +187,8 @@ const MainApp: React.FC = () => {
   useEffect(() => {
     if (!user) return;
 
+    let isMounted = true;
+
     const channel = supabase
       .channel('db-changes')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'medications', filter: `user_id=eq.${user.id}` }, (payload) => {
@@ -246,12 +248,18 @@ const MainApp: React.FC = () => {
           }
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (!isMounted) return;
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          fetchData();
+        }
+      });
 
     return () => {
+      isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, fetchData]);
 
   useEffect(() => {
     fetchData();
