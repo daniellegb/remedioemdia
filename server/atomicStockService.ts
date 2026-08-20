@@ -1,8 +1,40 @@
 import { createClient } from '@supabase/supabase-js';
 
-const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
+function getProjectRefFromKey(key: string): string | null {
+  try {
+    const parts = key.split('.');
+    if (parts.length === 3) {
+      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
+      return payload.ref || null;
+    }
+  } catch (e) {}
+  return null;
+}
+
+function getProjectRefFromUrl(url: string): string | null {
+  try {
+    const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
+    return match ? match[1] : null;
+  } catch (e) {}
+  return null;
+}
+
 const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-const supabaseAdmin = createClient(supabaseUrl, serviceKey);
+
+function getMatchingSupabaseUrl(): string {
+  const serviceKeyRef = getProjectRefFromKey(serviceKey);
+  const dbUrl = process.env.SUPABASE_DB_URL || '';
+  const viteUrl = process.env.VITE_SUPABASE_URL || '';
+  
+  if (serviceKeyRef) {
+    if (getProjectRefFromUrl(dbUrl) === serviceKeyRef) return dbUrl;
+    if (getProjectRefFromUrl(viteUrl) === serviceKeyRef) return viteUrl;
+  }
+  return dbUrl || viteUrl;
+}
+
+const supabaseUrl = getMatchingSupabaseUrl() || 'https://placeholder.supabase.co';
+const supabaseAdmin = createClient(supabaseUrl, serviceKey || 'placeholder_key');
 
 /**
  * Fila local de execução em memória por medicamento.

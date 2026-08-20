@@ -10,6 +10,12 @@ import checkoutHandler from './api/stripe/checkout.js';
 import portalHandler from './api/stripe/create-portal-session.js';
 import syncHandler from './api/stripe/sync-subscription.js';
 import webhookHandler from './api/stripe/webhook.js';
+
+// Import Consumption server handlers
+import recordConsumptionHandler from './api/consumption/record.js';
+import toggleConsumptionHandler from './api/consumption/toggle.js';
+import deleteConsumptionHandler from './api/consumption/delete.js';
+
 import { atomicStockService } from './server/atomicStockService';
 
 // Helper functions to safely handle mismatched Supabase environment variables
@@ -814,128 +820,9 @@ async function createServer() {
   app.post('/api/stripe/webhook', (req, res) => webhookHandler(req as any, res as any));
 
   // 2. Atomic Stock and Consumption Management API Endpoints
-  app.post('/api/consumption/record', async (req, res): Promise<any> => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Nenhum token de autorização fornecido.' });
-      }
-
-      const token = authHeader.split(' ')[1];
-      const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-      if (authError || !user) {
-        return res.status(401).json({ error: 'Sessão inválida ou expirada. Por favor, faça login novamente.' });
-      }
-
-      const authenticatedUserId = user.id;
-      const { userId, medicationId, date, scheduledTime, status, dosageAmount, nextDoseAt } = req.body;
-
-      if (userId && userId !== authenticatedUserId) {
-        return res.status(403).json({ error: 'Acesso negado: o userId fornecido não corresponde ao usuário autenticado.' });
-      }
-
-      const targetUserId = authenticatedUserId;
-
-      if (!medicationId || !date || !scheduledTime) {
-        return res.status(400).json({ error: 'Parâmetros obrigatórios ausentes.' });
-      }
-
-      const result = await atomicStockService.recordConsumption({
-        userId: targetUserId,
-        medicationId,
-        date,
-        scheduledTime,
-        status: status || 'taken',
-        dosageAmount: Number(dosageAmount) || 1,
-        nextDoseAt: nextDoseAt || null
-      });
-
-      return res.status(200).json(result);
-    } catch (err: any) {
-      console.error('[API Consumption Record] Erro:', err?.message || err);
-      return res.status(500).json({ error: err?.message || 'Erro ao registrar consumo' });
-    }
-  });
-
-  app.post('/api/consumption/toggle', async (req, res): Promise<any> => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Nenhum token de autorização fornecido.' });
-      }
-
-      const token = authHeader.split(' ')[1];
-      const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-      if (authError || !user) {
-        return res.status(401).json({ error: 'Sessão inválida ou expirada. Por favor, faça login novamente.' });
-      }
-
-      const authenticatedUserId = user.id;
-      const { userId, recordId, newStatus, dosageAmount, nextDoseAt } = req.body;
-
-      if (userId && userId !== authenticatedUserId) {
-        return res.status(403).json({ error: 'Acesso negado: o userId fornecido não corresponde ao usuário autenticado.' });
-      }
-
-      const targetUserId = authenticatedUserId;
-
-      if (!recordId || !newStatus) {
-        return res.status(400).json({ error: 'Parâmetros obrigatórios ausentes.' });
-      }
-
-      const result = await atomicStockService.toggleConsumption({
-        userId: targetUserId,
-        recordId,
-        newStatus,
-        dosageAmount: Number(dosageAmount) || 1,
-        nextDoseAt: nextDoseAt || null
-      });
-
-      return res.status(200).json(result);
-    } catch (err: any) {
-      console.error('[API Consumption Toggle] Erro:', err?.message || err);
-      return res.status(500).json({ error: err?.message || 'Erro ao alternar status do consumo' });
-    }
-  });
-
-  app.post('/api/consumption/delete', async (req, res): Promise<any> => {
-    try {
-      const authHeader = req.headers.authorization;
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
-        return res.status(401).json({ error: 'Nenhum token de autorização fornecido.' });
-      }
-
-      const token = authHeader.split(' ')[1];
-      const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token);
-      if (authError || !user) {
-        return res.status(401).json({ error: 'Sessão inválida ou expirada. Por favor, faça login novamente.' });
-      }
-
-      const authenticatedUserId = user.id;
-      const { userId, recordId, dosageAmount } = req.body;
-
-      if (userId && userId !== authenticatedUserId) {
-        return res.status(403).json({ error: 'Acesso negado: o userId fornecido não corresponde ao usuário autenticado.' });
-      }
-
-      const targetUserId = authenticatedUserId;
-
-      if (!recordId) {
-        return res.status(400).json({ error: 'Parâmetros obrigatórios ausentes.' });
-      }
-
-      const result = await atomicStockService.deleteConsumption({
-        userId: targetUserId,
-        recordId,
-        dosageAmount: Number(dosageAmount) || 1
-      });
-
-      return res.status(200).json(result);
-    } catch (err: any) {
-      console.error('[API Consumption Delete] Erro:', err?.message || err);
-      return res.status(500).json({ error: err?.message || 'Erro ao excluir consumo' });
-    }
-  });
+  app.post('/api/consumption/record', (req, res) => recordConsumptionHandler(req as any, res as any));
+  app.post('/api/consumption/toggle', (req, res) => toggleConsumptionHandler(req as any, res as any));
+  app.post('/api/consumption/delete', (req, res) => deleteConsumptionHandler(req as any, res as any));
 
 
 
