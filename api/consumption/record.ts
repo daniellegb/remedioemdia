@@ -27,6 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return res.status(200).json(result);
   } catch (err: any) {
     console.error('[API Consumption Record] Erro:', err?.message || err);
-    return res.status(500).json({ error: err?.message || 'Erro ao registrar consumo' });
+    const isValidationError = err?.message?.includes('Horário') || err?.message?.includes('inválido') || err?.message?.includes('obrigatório');
+    return res.status(isValidationError ? 400 : 500).json({ error: err?.message || 'Erro ao registrar consumo' });
   }
 }

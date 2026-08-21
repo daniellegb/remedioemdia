@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Medication } from '../../types';
 import { getNextDoseAt } from '../domain/medicationRules';
+import { validateStringLength, validateStockNumber, validateTimeFormat } from '../domain/validation';
 
 export const mapMedToCamelCase = (med: any): Medication => ({
   id: med.id,
@@ -57,7 +58,28 @@ export const medicationService = {
 
   async createMedication(userId: string, data: Omit<Medication, 'id'>) {
     try {
-      const nextDoseAt = getNextDoseAt(data as Medication);
+      const validName = validateStringLength(data.name, 'Nome do medicamento', 100, true)!;
+      const validNotes = validateStringLength(data.notes, 'Observações', 500, false);
+      const validDosage = validateStringLength(data.dosage, 'Dosagem', 50, false) || '';
+      const validUnit = validateStringLength(data.unit, 'Unidade', 50, false) || '';
+      const validCurrentStock = validateStockNumber(data.currentStock, 'Estoque atual');
+      const validTotalStock = validateStockNumber(data.totalStock, 'Estoque total');
+      const validTimes = Array.isArray(data.times)
+        ? data.times.map(t => validateTimeFormat(t, 'Horário de medicação'))
+        : data.times;
+
+      const medToCalculate = {
+        ...data,
+        name: validName,
+        dosage: validDosage,
+        unit: validUnit as any,
+        times: validTimes,
+        currentStock: validCurrentStock,
+        totalStock: validTotalStock,
+        notes: validNotes || undefined
+      } as Medication;
+
+      const nextDoseAt = getNextDoseAt(medToCalculate);
       
       // Sanitização para evitar erros de tipo no Supabase (colunas INTEGER vs strings '1x')
       const dosesPerDayInt = data.dosesPerDay ? parseInt(data.dosesPerDay) : 1;
@@ -65,23 +87,23 @@ export const medicationService = {
       const { data: created, error } = await supabase
         .from('medications')
         .insert([{ 
-          name: data.name,
-          dosage: data.dosage,
-          unit: data.unit,
+          name: validName,
+          dosage: validDosage,
+          unit: validUnit,
           usage_category: data.usageCategory,
           doses_per_day: isNaN(dosesPerDayInt) ? null : dosesPerDayInt,
           interval_days: data.intervalDays,
-          times: data.times,
+          times: validTimes,
           interval_type: data.intervalType,
           contraceptive_type: data.contraceptiveType,
           start_date: nullIfEmpty(data.startDate),
           end_date: nullIfEmpty(data.endDate),
           duration_days: data.durationDays,
           max_doses_per_day: data.maxDosesPerDay,
-          total_stock: data.totalStock,
-          current_stock: data.currentStock,
+          total_stock: validTotalStock,
+          current_stock: validCurrentStock,
           expiry_date: nullIfEmpty(data.expiryDate),
-          notes: data.notes,
+          notes: validNotes,
           color: data.color,
           frequency: data.frequency || 1,
           user_id: userId,
@@ -105,26 +127,34 @@ export const medicationService = {
   async updateMedication(userId: string, id: string, data: Partial<Medication>) {
     try {
       const updateData: any = {};
-      if (data.name !== undefined) updateData.name = data.name;
-      if (data.dosage !== undefined) updateData.dosage = data.dosage;
-      if (data.unit !== undefined) updateData.unit = data.unit;
+      if (data.name !== undefined) updateData.name = validateStringLength(data.name, 'Nome do medicamento', 100, true);
+      if (data.dosage !== undefined) updateData.dosage = validateStringLength(data.dosage, 'Dosagem', 50, false) || '';
+      if (data.unit !== undefined) updateData.unit = validateStringLength(data.unit, 'Unidade', 50, false) || '';
       if (data.usageCategory !== undefined) updateData.usage_category = data.usageCategory;
       if (data.dosesPerDay !== undefined) {
         const dosesPerDayInt = parseInt(data.dosesPerDay);
         updateData.doses_per_day = isNaN(dosesPerDayInt) ? null : dosesPerDayInt;
       }
       if (data.intervalDays !== undefined) updateData.interval_days = data.intervalDays;
-      if (data.times !== undefined) updateData.times = data.times;
+      if (data.times !== undefined) {
+        updateData.times = Array.isArray(data.times)
+          ? data.times.map(t => validateTimeFormat(t, 'Horário de medicação'))
+          : data.times;
+      }
       if (data.intervalType !== undefined) updateData.interval_type = data.intervalType;
       if (data.contraceptiveType !== undefined) updateData.contraceptive_type = data.contraceptiveType;
       if (data.startDate !== undefined) updateData.start_date = nullIfEmpty(data.startDate);
       if (data.endDate !== undefined) updateData.end_date = nullIfEmpty(data.endDate);
       if (data.durationDays !== undefined) updateData.duration_days = data.durationDays;
       if (data.maxDosesPerDay !== undefined) updateData.max_doses_per_day = data.maxDosesPerDay;
-      if (data.totalStock !== undefined) updateData.total_stock = data.totalStock;
-      if (data.currentStock !== undefined) updateData.current_stock = data.currentStock;
+      if (data.totalStock !== undefined) updateData.total_stock = validateStockNumber(data.totalStock, 'Estoque total');
+      if (data.currentStock !== undefined) updateData.current_stock = validateStockNumber(data.currentStock, 'Estoque atual');
       if (data.expiryDate !== undefined) updateData.expiry_date = nullIfEmpty(data.expiryDate);
-      if (data.notes !== undefined) updateData.notes = data.notes;
+      if (data.notes !== undefined) updateData.notes = validateStringLength(data.notes, 'Observações', 500, false);
+      if (data.color !== undefined) updateData.color = data.color;
+      if (data.frequency !== undefined) updateData.frequency = data.frequency;
+      if (data.active !== undefined) updateData.active = data.active;
+      if (data.deleted !== undefined) updateData.deleted = data.deleted;
       if (data.color !== undefined) updateData.color = data.color;
       if (data.frequency !== undefined) updateData.frequency = data.frequency;
       if (data.active !== undefined) updateData.active = data.active;

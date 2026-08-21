@@ -2,6 +2,7 @@ import { supabase } from '../lib/supabase';
 import { DoseEvent, Medication } from '../../types';
 import { getNextDoseAt } from '../domain/medicationRules';
 import { parseDosageAmount } from '../domain/stock';
+import { validateTimeFormat } from '../domain/validation';
 
 export const mapDoseToCamelCase = (record: any): DoseEvent => ({
   id: record.id,
@@ -82,6 +83,7 @@ export const consumptionService = {
     userId: string, 
     data: Omit<DoseEvent, 'id'> & { dosageAmount?: number; nextDoseAt?: string | null }
   ): Promise<ConsumptionOperationResult> {
+    const validTime = validateTimeFormat(data.scheduledTime, 'Horário agendado');
     const dosageAmount = data.dosageAmount !== undefined ? data.dosageAmount : 1;
 
     try {
@@ -93,7 +95,7 @@ export const consumptionService = {
           userId,
           medicationId: data.medicationId,
           date: data.date,
-          scheduledTime: data.scheduledTime,
+          scheduledTime: validTime,
           status: data.status,
           dosageAmount,
           nextDoseAt: data.nextDoseAt || null
@@ -126,7 +128,7 @@ export const consumptionService = {
       p_user_id: userId,
       p_medication_id: data.medicationId,
       p_date: data.date,
-      p_scheduled_time: data.scheduledTime,
+      p_scheduled_time: validTime,
       p_status: data.status,
       p_dosage_amount: dosageAmount,
       p_next_dose_at: data.nextDoseAt || null
@@ -258,7 +260,7 @@ export const consumptionService = {
 
     const updateData: any = {};
     if (data.date !== undefined) updateData.date = data.date;
-    if (data.scheduledTime !== undefined) updateData.scheduled_time = data.scheduledTime;
+    if (data.scheduledTime !== undefined) updateData.scheduled_time = validateTimeFormat(data.scheduledTime, 'Horário agendado');
     if (data.medicationId !== undefined) updateData.medication_id = data.medicationId;
 
     const { data: updated, error } = await supabase

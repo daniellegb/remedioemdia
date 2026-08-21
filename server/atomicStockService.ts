@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { validateTimeFormat } from '../src/domain/validation';
 
 function getProjectRefFromKey(key: string): string | null {
   try {
@@ -88,6 +89,7 @@ export const atomicStockService = {
     nextDoseAt?: string | null;
   }) {
     const { userId, medicationId, date, scheduledTime, status, dosageAmount, nextDoseAt } = params;
+    const validTime = validateTimeFormat(scheduledTime, 'Horário agendado');
     const validDose = (!dosageAmount || dosageAmount <= 0) ? 1 : dosageAmount;
 
     return await lockManager.acquire(medicationId, async () => {
@@ -97,7 +99,7 @@ export const atomicStockService = {
           p_user_id: userId,
           p_medication_id: medicationId,
           p_date: date,
-          p_scheduled_time: scheduledTime,
+          p_scheduled_time: validTime,
           p_status: status,
           p_dosage_amount: validDose,
           p_next_dose_at: nextDoseAt || null
