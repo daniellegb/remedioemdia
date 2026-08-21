@@ -1,5 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
-import { validateTimeFormat } from '../src/domain/validation';
+import { validateTimeFormat } from '../src/domain/validation.js';
 
 function getProjectRefFromKey(key: string): string | null {
   try {
