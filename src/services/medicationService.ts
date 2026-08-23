@@ -209,13 +209,6 @@ export const medicationService = {
           console.error(`[Repository] [deleteMedication] Erro no update do soft delete:`, error);
           throw error;
         }
-
-        // Inativar também os lembretes automáticos na tabela medication_reminders
-        await supabase
-          .from('medication_reminders')
-          .update({ active: false })
-          .eq('medication_id', id)
-          .eq('user_id', userId);
       } else {
         const { error } = await supabase
           .from('medications')
