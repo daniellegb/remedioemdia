@@ -97,3 +97,43 @@ export const formatUnit = (unit?: string, qty: number = 1): string => {
       return unit;
   }
 };
+
+export interface ConfiguredReminderItem {
+  medicationName: string;
+  time: string;
+  active: boolean;
+}
+
+/**
+ * Constrói a lista de lembretes configurados diretamente a partir dos medicamentos do usuário (medications.times),
+ * sem depender de tabelas intermediárias de lembretes ou de cálculos de agenda para datas específicas.
+ */
+export const buildConfiguredRemindersFromMedications = (
+  medications?: any[] | null
+): ConfiguredReminderItem[] => {
+  if (!medications || !Array.isArray(medications) || medications.length === 0) {
+    return [];
+  }
+
+  const reminders: ConfiguredReminderItem[] = [];
+
+  medications.forEach(med => {
+    // Medicamentos deletados (soft-deleted) não geram lembretes na lista ativa do usuário
+    if (!med || med.deleted) return;
+
+    const times = Array.isArray(med.times) ? [...med.times].sort() : [];
+    const isActive = med.active !== false;
+
+    times.forEach(time => {
+      if (typeof time === 'string' && time.trim() !== '') {
+        reminders.push({
+          medicationName: med.name || 'Medicamento relacionado',
+          time: time.trim().substring(0, 5),
+          active: isActive
+        });
+      }
+    });
+  });
+
+  return reminders;
+};
