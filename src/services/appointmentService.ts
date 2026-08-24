@@ -1,6 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Appointment } from '../../types';
 import { notificationService } from './notificationService';
+import { validateTimeFormat, validateStringLength } from '../domain/validation';
 
 export const mapAppToCamelCase = (app: any): Appointment => ({
   id: app.id,
@@ -36,16 +37,23 @@ export const appointmentService = {
   },
 
   async createAppointment(userId: string, data: Omit<Appointment, 'id'>) {
+    const validTime = validateTimeFormat(data.time, 'Horário do compromisso');
+    const validType = validateStringLength(data.type, 'Tipo de compromisso', 50, true)!;
+    const validDoctor = validateStringLength(data.doctor, 'Médico', 100, false) || '';
+    const validSpecialty = validateStringLength(data.specialty, 'Especialidade', 100, false) || '';
+    const validLocation = validateStringLength(data.location, 'Local', 200, false) || '';
+    const validNotes = validateStringLength(data.notes, 'Observações', 500, false);
+
     const { data: created, error } = await supabase
       .from('appointments')
       .insert([{ 
-        type: data.type,
-        doctor: data.doctor,
-        specialty: data.specialty,
+        type: validType,
+        doctor: validDoctor,
+        specialty: validSpecialty,
         date: nullIfEmpty(data.date),
-        time: data.time,
-        location: data.location,
-        notes: data.notes,
+        time: validTime,
+        location: validLocation,
+        notes: validNotes,
         user_id: userId,
         active: data.active !== false
       }])
@@ -70,8 +78,15 @@ export const appointmentService = {
   },
 
   async updateAppointment(userId: string, id: string, data: Partial<Appointment>) {
-    const updateData: any = { ...data };
+    const updateData: any = {};
+    if (data.type !== undefined) updateData.type = validateStringLength(data.type, 'Tipo de compromisso', 50, true);
+    if (data.doctor !== undefined) updateData.doctor = validateStringLength(data.doctor, 'Médico', 100, false) || '';
+    if (data.specialty !== undefined) updateData.specialty = validateStringLength(data.specialty, 'Especialidade', 100, false) || '';
+    if (data.location !== undefined) updateData.location = validateStringLength(data.location, 'Local', 200, false) || '';
+    if (data.notes !== undefined) updateData.notes = validateStringLength(data.notes, 'Observações', 500, false);
+    if (data.time !== undefined) updateData.time = validateTimeFormat(data.time, 'Horário do compromisso');
     if (data.date !== undefined) updateData.date = nullIfEmpty(data.date);
+    if (data.active !== undefined) updateData.active = data.active;
 
     const { data: updated, error } = await supabase
       .from('appointments')

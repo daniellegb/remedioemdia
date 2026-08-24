@@ -4,7 +4,8 @@ import { ChevronLeft, ChevronRight, Calendar as CalendarIcon, LayoutGrid, List, 
 import { Appointment, Medication, DoseEvent } from '../types';
 import { isOutOfStockOnDate } from '../src/domain/stock';
 import { isPastDate, isFutureDate, isTodayDate, getCalendarDisplayMode } from '../src/domain/calendarRules';
-import { isMedicationExpired, hasStock, calculatePeriodDoses, isContraceptivePauseDay } from '../src/domain/medicationRules';
+import { isMedicationExpired, hasStock } from '../src/domain/medicationRules';
+import { getMedicationScheduledTimesForDate } from '../src/domain/medicationSchedule';
 import ConfirmationModal from './ConfirmationModal';
 
 type CalendarViewMode = 'monthly' | 'weekly';
@@ -106,47 +107,12 @@ const Calendar: React.FC<Props> = React.memo(({ appointments, meds, doses, onTog
         return doses.some(d => d.medicationId === med.id && d.date === dateStr);
       }
 
-      const startDate = med.startDate ? new Date(med.startDate + 'T00:00:00') : null;
-      const endDate = med.endDate ? new Date(med.endDate + 'T23:59:59') : null;
-
-      if (!startDate) return true;
-
-      const startAtMidnight = new Date(startDate);
-      startAtMidnight.setHours(0,0,0,0);
-
-      const dateAtMidnight = new Date(date);
-      dateAtMidnight.setHours(0,0,0,0);
-
-      if (dateAtMidnight < startAtMidnight) return false;
-      
-      if (med.usageCategory !== 'period' && endDate) {
-        const endAtMidnight = new Date(endDate);
-        endAtMidnight.setHours(0,0,0,0);
-        if (dateAtMidnight > endAtMidnight) return false;
+      // Se houver histórico de dose registrada nesta data, exibe
+      if (doses.some(d => d.medicationId === med.id && d.date === dateStr)) {
+        return true;
       }
 
-      // Se for por período, verificamos se a data está na lista de doses calculadas
-      if (med.usageCategory === 'period') {
-        const sortedTimes = [...(med.times || [])].sort();
-        const periodDoses = calculatePeriodDoses(
-          med.startDate || '',
-          (med.times || [])[0] || '',
-          sortedTimes,
-          (med.durationDays || 0) * sortedTimes.length
-        );
-        return periodDoses.some(d => d.date === dateStr);
-      }
-
-      const diffTime = dateAtMidnight.getTime() - startAtMidnight.getTime();
-      const diffDays = Math.round(diffTime / (1000 * 3600 * 24));
-      const interval = med.intervalDays || 1;
-      
-      // Regra de Pausa para Anticoncepcionais
-      if (med.usageCategory === 'contraceptive' && isContraceptivePauseDay(med, date)) {
-        return false;
-      }
-      
-      return diffDays % interval === 0;
+      return getMedicationScheduledTimesForDate(med, date).length > 0;
     }).map(med => {
       // Determinar o indicador visual baseado na regra
       let indicator: { type: 'status' | 'consumption', color: string, icon?: any, label?: string } = { type: 'status', color: 'bg-slate-400' };
@@ -154,18 +120,11 @@ const Calendar: React.FC<Props> = React.memo(({ appointments, meds, doses, onTog
       // Para PRN, os horários exibidos são os horários das doses registradas
       let displayTimes = med.usageCategory === 'prn'
         ? doses.filter(d => d.medicationId === med.id && d.date === dateStr).map(d => d.scheduledTime).sort()
-        : (med.times || []);
+        : getMedicationScheduledTimesForDate(med, date);
 
-      // Se for por período, filtramos os horários específicos para esta data
-      if (med.usageCategory === 'period') {
-        const sortedTimes = [...(med.times || [])].sort();
-        const periodDoses = calculatePeriodDoses(
-          med.startDate || '',
-          (med.times || [])[0] || '',
-          sortedTimes,
-          (med.durationDays || 0) * sortedTimes.length
-        );
-        displayTimes = periodDoses.filter(d => d.date === dateStr).map(d => d.time);
+      // Se não tiver horários agendados pela regra padrão mas houver dose registrada no dia
+      if (displayTimes.length === 0 && doses.some(d => d.medicationId === med.id && d.date === dateStr)) {
+        displayTimes = doses.filter(d => d.medicationId === med.id && d.date === dateStr).map(d => d.scheduledTime).sort();
       }
 
       const medDoses = displayTimes.map(time => {

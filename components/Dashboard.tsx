@@ -2,7 +2,8 @@ import React, { useMemo, useState } from 'react';
 import { Medication, DoseEvent, Appointment, AppSettings, UsageCategory, ViewType } from '../types';
 import { CheckCircle2, Circle, Calendar as CalendarIcon, ChevronRight, Clock as ClockIcon, AlertTriangle, XCircle, AlertCircle, Pill, AlertOctagon, TestTubeDiagonal, MapPin, FileText, Map, Navigation, ChevronDown, ChevronUp, Stethoscope, Trash2, Pencil } from 'lucide-react';
 import { calculateDaysOfStockLeft } from '../src/domain/stock';
-import { isMedicationExpired, getDaysUntilExpiry, calculatePeriodDoses, isContraceptivePauseDay } from '../src/domain/medicationRules';
+import { isMedicationExpired, getDaysUntilExpiry } from '../src/domain/medicationRules';
+import { getScheduledDosesForDate } from '../src/domain/medicationSchedule';
 import { greetingService } from '../src/domain/greetings/greetingService';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from 'recharts';
 import { useAuth } from '../src/hooks/useAuth';
@@ -100,100 +101,27 @@ const Dashboard: React.FC<Props> = React.memo(({ meds, doses, appointments, sett
 
   // Gera a agenda de hoje baseada nas configurações dos medicamentos e define status lógico (pendente vs atrasado)
   const todaySchedule = useMemo(() => {
-    const schedule: Array<{
-      id: string;
-      med: Medication;
-      time: string;
-      status: 'pending' | 'taken' | 'missed';
-    }> = [];
+    const todayStr = today.toLocaleDateString('en-CA');
+    const scheduledDoses = getScheduledDosesForDate(meds, today);
 
-    meds.forEach(med => {
-      if (med.deleted) return; // Se excluído, não gera eventos
-      if (med.active === false) return; // Inativo não gera eventos na agenda de hoje
-      if (med.usageCategory === 'prn') return; // PRN não aparece na agenda fixa
+    const schedule = scheduledDoses.map((doseItem, index) => {
+      const existingDose = doses.find(
+        d => d.medicationId === doseItem.medicationId && d.scheduledTime === doseItem.time && d.date === todayStr
+      );
 
-      const startDate = med.startDate ? new Date(med.startDate + 'T00:00:00') : today;
-      const endDate = med.endDate ? new Date(med.endDate + 'T23:59:59') : null;
-
-      // Verifica se o medicamento está ativo hoje
-      if (today < startDate) return;
-
-      // Regra de Pausa para Anticoncepcionais
-      if (med.usageCategory === 'contraceptive' && isContraceptivePauseDay(med, today)) {
-        return;
-      }
-      
-      // Para medicamentos "por período", não usamos a data final fixa, 
-      // pois as doses podem ser deslocadas para dias extras.
-      if (med.usageCategory !== 'period' && endDate && today > endDate) return;
-
-      // Lógica de intervalo de dias
-      if (med.usageCategory === 'continuous' || med.usageCategory === 'intervals') {
-        const diffTime = today.getTime() - startDate.getTime();
-        const diffDays = Math.floor(diffTime / (1000 * 3600 * 24));
-        const interval = med.intervalDays || 1;
-        if (diffDays % interval !== 0) return;
+      let finalStatus: 'pending' | 'taken' | 'missed' = 'pending';
+      if (existingDose?.status === 'taken') {
+        finalStatus = 'taken';
+      } else if (doseItem.time < currentTimeStr) {
+        finalStatus = 'missed';
       }
 
-      const todayStr = today.toLocaleDateString('en-CA');
-
-      // Se for por período, usamos a lógica determinística de contagem de doses
-      if (med.usageCategory === 'period') {
-        const sortedTimes = [...(med.times || [])].sort();
-        const periodDoses = calculatePeriodDoses(
-          med.startDate || '',
-          (med.times || [])[0] || '',
-          sortedTimes,
-          (med.durationDays || 0) * sortedTimes.length
-        );
-        
-        const todayDoses = periodDoses.filter(d => d.date === todayStr);
-        
-        todayDoses.forEach((dose, index) => {
-          const existingDose = doses.find(d => d.medicationId === med.id && d.scheduledTime === dose.time && d.date === todayStr);
-          
-          let finalStatus: 'pending' | 'taken' | 'missed' = 'pending';
-          if (existingDose?.status === 'taken') {
-            finalStatus = 'taken';
-          } else if (dose.time < currentTimeStr) {
-            finalStatus = 'missed';
-          }
-          
-          schedule.push({
-            id: existingDose?.id || `virtual-${med.id}-${dose.time}-${index}`,
-            med,
-            time: dose.time,
-            status: finalStatus
-          });
-        });
-        return;
-      }
-
-      // Adiciona cada horário configurado à agenda (para outros tipos)
-      (med.times || []).forEach((time, index) => {
-        // Busca se já existe um registro de dose tomada/atrasada para este med e horário hoje
-        const existingDose = doses.find(d => d.medicationId === med.id && d.scheduledTime === time && d.date === todayStr);
-        
-        let finalStatus: 'pending' | 'taken' | 'missed' = 'pending';
-        
-        if (existingDose?.status === 'taken') {
-          finalStatus = 'taken';
-        } else {
-          // Se não foi tomado, verifica se já passou do horário
-          if (time < currentTimeStr) {
-            finalStatus = 'missed';
-          } else {
-            finalStatus = 'pending';
-          }
-        }
-        
-        schedule.push({
-          id: existingDose?.id || `virtual-${med.id}-${time}-${index}`,
-          med,
-          time,
-          status: finalStatus
-        });
-      });
+      return {
+        id: existingDose?.id || `virtual-${doseItem.medicationId}-${doseItem.time}-${index}`,
+        med: doseItem.medication,
+        time: doseItem.time,
+        status: finalStatus
+      };
     });
 
     return schedule.sort((a, b) => a.time.localeCompare(b.time));

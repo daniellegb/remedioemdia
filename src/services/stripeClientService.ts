@@ -1,3 +1,4 @@
+import { supabase } from '../lib/supabase';
 import { Profile } from '../../types';
 
 export const stripeClientService = {
@@ -6,11 +7,19 @@ export const stripeClientService = {
    */
   async createCheckoutSession(profile: Profile): Promise<string> {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('/api/stripe/checkout', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ profile }),
       });
 
@@ -32,11 +41,19 @@ export const stripeClientService = {
    */
   async createPortalSession(profile: Profile, returnUrl: string): Promise<string> {
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('/api/stripe/create-portal-session', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ profile, returnUrl }),
       });
 
@@ -61,11 +78,19 @@ export const stripeClientService = {
     const timeoutId = setTimeout(() => controller.abort(), 6000); // Timeout de 6 segundos para segurança
 
     try {
+      const { data: { session } } = await supabase.auth.getSession();
+      const token = session?.access_token;
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+      }
+
       const response = await fetch('/api/stripe/sync-subscription', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
+        headers,
         body: JSON.stringify({ userId }),
         signal: controller.signal,
       });
@@ -89,3 +114,4 @@ export const stripeClientService = {
     }
   }
 };
+

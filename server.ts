@@ -10,6 +10,12 @@ import checkoutHandler from './api/stripe/checkout.js';
 import portalHandler from './api/stripe/create-portal-session.js';
 import syncHandler from './api/stripe/sync-subscription.js';
 import webhookHandler from './api/stripe/webhook.js';
+
+// Import Consumption server handlers
+import recordConsumptionHandler from './api/consumption/record.js';
+import toggleConsumptionHandler from './api/consumption/toggle.js';
+import deleteConsumptionHandler from './api/consumption/delete.js';
+
 import { atomicStockService } from './server/atomicStockService';
 
 // Helper functions to safely handle mismatched Supabase environment variables
@@ -73,8 +79,8 @@ if (viteRef && activeRef && viteRef !== activeRef) {
  */
 async function runSchemaMigration() {
   const dbUrl = process.env.SUPABASE_DB_URL || process.env.DATABASE_URL;
-  if (!dbUrl) {
-    console.warn('[Migration] SUPABASE_DB_URL is missing. Skipping direct schema checks.');
+  if (!dbUrl || dbUrl.startsWith('http://') || dbUrl.startsWith('https://')) {
+    console.warn('[Migration] SUPABASE_DB_URL ausente ou não é uma URL postgres:// válida. Ppulando migração direta no PostgreSQL.');
     return;
   }
   
@@ -338,20 +344,35 @@ async function runSchemaMigration() {
           v_updated_stock NUMERIC;
           v_updated_next_dose TIMESTAMP WITH TIME ZONE;
           v_valid_dose NUMERIC;
+          v_med_user_id UUID;
       BEGIN
+          -- 0. Autorização do solicitante (Identity Alignment)
+          IF auth.role() = 'anon' THEN
+              RAISE EXCEPTION 'Acesso não autorizado: perfil anônimo' USING ERRCODE = '42501';
+          END IF;
+
+          IF auth.role() = 'authenticated' AND (auth.uid() IS NULL OR auth.uid() != p_user_id) THEN
+              RAISE EXCEPTION 'Acesso negado: ID de usuário desalinhado com a sessão autenticada' USING ERRCODE = '42501';
+          END IF;
+
+          -- Validar a dosagem
           v_valid_dose := CASE 
               WHEN p_dosage_amount IS NULL OR p_dosage_amount <= 0 THEN 1 
               ELSE p_dosage_amount 
           END;
 
-          -- 1. Lock de linha no medicamento para proibir concorrência no estoque (FOR UPDATE)
-          SELECT current_stock, next_dose_at INTO v_med_stock, v_updated_next_dose
+          -- 1. Lock de linha no medicamento e verificação de propriedade do recurso
+          SELECT current_stock, next_dose_at, user_id INTO v_med_stock, v_updated_next_dose, v_med_user_id
           FROM public.medications
-          WHERE id = p_medication_id AND user_id = p_user_id
+          WHERE id = p_medication_id
           FOR UPDATE;
 
           IF NOT FOUND THEN
-              RAISE EXCEPTION 'Medicamento não encontrado ou não pertence ao usuário' USING ERRCODE = 'P0002';
+              RAISE EXCEPTION 'Medicamento não encontrado' USING ERRCODE = 'P0002';
+          END IF;
+
+          IF v_med_user_id != p_user_id THEN
+              RAISE EXCEPTION 'Medicamento não pertence ao usuário especificado' USING ERRCODE = '42501';
           END IF;
 
           -- 2. Verificar se a dose já foi registrada (Idempotência)
@@ -428,7 +449,7 @@ async function runSchemaMigration() {
               END IF;
           END IF;
 
-          -- 3. Inserir registro novo usando p_date (tipo DATE)
+          -- 3. Registro novo (Não existente) - Inserir consumo e abater estoque em uma ÚNICA transação
           INSERT INTO public.consumption_records (user_id, medication_id, date, scheduled_time, status)
           VALUES (p_user_id, p_medication_id, p_date, p_scheduled_time, p_status)
           RETURNING id INTO v_existing_id;
@@ -473,28 +494,60 @@ async function runSchemaMigration() {
           v_record JSONB;
           v_old_status TEXT;
           v_med_id UUID;
+          v_rec_user_id UUID;
+          v_med_user_id UUID;
           v_updated_stock NUMERIC;
           v_updated_next_dose TIMESTAMP WITH TIME ZONE;
           v_valid_dose NUMERIC;
       BEGIN
+          -- 0. Autorização do solicitante (Identity Alignment)
+          IF auth.role() = 'anon' THEN
+              RAISE EXCEPTION 'Acesso não autorizado: perfil anônimo' USING ERRCODE = '42501';
+          END IF;
+
+          IF auth.role() = 'authenticated' AND (auth.uid() IS NULL OR auth.uid() != p_user_id) THEN
+              RAISE EXCEPTION 'Acesso negado: ID de usuário desalinhado com a sessão autenticada' USING ERRCODE = '42501';
+          END IF;
+
           v_valid_dose := CASE 
               WHEN p_dosage_amount IS NULL OR p_dosage_amount <= 0 THEN 1 
               ELSE p_dosage_amount 
           END;
 
-          SELECT status, medication_id INTO v_old_status, v_med_id
+          -- 1. Obter registro de consumo e verificar propriedade do recurso
+          SELECT status, medication_id, user_id INTO v_old_status, v_med_id, v_rec_user_id
           FROM public.consumption_records
-          WHERE id = p_record_id AND user_id = p_user_id
+          WHERE id = p_record_id
           FOR UPDATE;
 
           IF NOT FOUND THEN
               RAISE EXCEPTION 'Registro de consumo não encontrado' USING ERRCODE = 'P0002';
           END IF;
 
+          IF v_rec_user_id != p_user_id THEN
+              RAISE EXCEPTION 'Registro de consumo não pertence ao usuário especificado' USING ERRCODE = '42501';
+          END IF;
+
+          -- 2. Verificar propriedade do medicamento associado
+          SELECT user_id INTO v_med_user_id
+          FROM public.medications
+          WHERE id = v_med_id
+          FOR UPDATE;
+
+          IF NOT FOUND THEN
+              RAISE EXCEPTION 'Medicamento associado não encontrado' USING ERRCODE = 'P0002';
+          END IF;
+
+          IF v_med_user_id != p_user_id THEN
+              RAISE EXCEPTION 'Medicamento associado não pertence ao usuário especificado' USING ERRCODE = '42501';
+          END IF;
+
+          -- 3. Atualizar o registro de consumo
           UPDATE public.consumption_records
           SET status = p_new_status
           WHERE id = p_record_id AND user_id = p_user_id;
 
+          -- 4. Ajustar estoque atomicamente no PostgreSQL
           IF v_old_status = 'taken' AND p_new_status != 'taken' THEN
               UPDATE public.medications
               SET current_stock = GREATEST(0, ROUND((COALESCE(current_stock, 0) + v_valid_dose)::numeric, 4))
@@ -514,7 +567,7 @@ async function runSchemaMigration() {
           END IF;
 
           SELECT to_jsonb(r) INTO v_record FROM (
-              SELECT id, user_id, medication_id, date, scheduled_time, status, created_at
+              SELECT id, user_id, medication_id, TO_CHAR(date, 'YYYY-MM-DD') AS date, scheduled_time, status, created_at
               FROM public.consumption_records
               WHERE id = p_record_id
           ) r;
@@ -538,42 +591,73 @@ async function runSchemaMigration() {
       DECLARE
           v_old_status TEXT;
           v_med_id UUID;
+          v_rec_user_id UUID;
+          v_med_user_id UUID;
           v_updated_stock NUMERIC;
           v_valid_dose NUMERIC;
       BEGIN
+          -- 0. Autorização do solicitante (Identity Alignment)
+          IF auth.role() = 'anon' THEN
+              RAISE EXCEPTION 'Acesso não autorizado: perfil anônimo' USING ERRCODE = '42501';
+          END IF;
+
+          IF auth.role() = 'authenticated' AND (auth.uid() IS NULL OR auth.uid() != p_user_id) THEN
+              RAISE EXCEPTION 'Acesso negado: ID de usuário desalinhado com a sessão autenticada' USING ERRCODE = '42501';
+          END IF;
+
           v_valid_dose := CASE 
               WHEN p_dosage_amount IS NULL OR p_dosage_amount <= 0 THEN 1 
               ELSE p_dosage_amount 
           END;
 
-          SELECT status, medication_id INTO v_old_status, v_med_id
+          -- 1. Obter registro de consumo e verificar propriedade do recurso
+          SELECT status, medication_id, user_id INTO v_old_status, v_med_id, v_rec_user_id
           FROM public.consumption_records
-          WHERE id = p_record_id AND user_id = p_user_id
+          WHERE id = p_record_id
           FOR UPDATE;
 
-          IF FOUND THEN
-              DELETE FROM public.consumption_records
-              WHERE id = p_record_id AND user_id = p_user_id;
-
-              IF v_old_status = 'taken' THEN
-                  UPDATE public.medications
-                  SET current_stock = GREATEST(0, ROUND((COALESCE(current_stock, 0) + v_valid_dose)::numeric, 4))
-                  WHERE id = v_med_id AND user_id = p_user_id
-                  RETURNING current_stock INTO v_updated_stock;
-              ELSE
-                  SELECT current_stock INTO v_updated_stock
-                  FROM public.medications
-                  WHERE id = v_med_id AND user_id = p_user_id;
-              END IF;
-
-              RETURN jsonb_build_object(
-                  'success', true,
-                  'medication_id', v_med_id,
-                  'current_stock', v_updated_stock
-              );
+          IF NOT FOUND THEN
+              RAISE EXCEPTION 'Registro de consumo não encontrado' USING ERRCODE = 'P0002';
           END IF;
 
-          RETURN jsonb_build_object('success', false);
+          IF v_rec_user_id != p_user_id THEN
+              RAISE EXCEPTION 'Registro de consumo não pertence ao usuário especificado' USING ERRCODE = '42501';
+          END IF;
+
+          -- 2. Verificar propriedade do medicamento associado
+          SELECT user_id INTO v_med_user_id
+          FROM public.medications
+          WHERE id = v_med_id
+          FOR UPDATE;
+
+          IF NOT FOUND THEN
+              RAISE EXCEPTION 'Medicamento associado não encontrado' USING ERRCODE = 'P0002';
+          END IF;
+
+          IF v_med_user_id != p_user_id THEN
+              RAISE EXCEPTION 'Medicamento associado não pertence ao usuário especificado' USING ERRCODE = '42501';
+          END IF;
+
+          -- 3. Deletar registro e estornar estoque se 'taken'
+          DELETE FROM public.consumption_records
+          WHERE id = p_record_id AND user_id = p_user_id;
+
+          IF v_old_status = 'taken' THEN
+              UPDATE public.medications
+              SET current_stock = GREATEST(0, ROUND((COALESCE(current_stock, 0) + v_valid_dose)::numeric, 4))
+              WHERE id = v_med_id AND user_id = p_user_id
+              RETURNING current_stock INTO v_updated_stock;
+          ELSE
+              SELECT current_stock INTO v_updated_stock
+              FROM public.medications
+              WHERE id = v_med_id AND user_id = p_user_id;
+          END IF;
+
+          RETURN jsonb_build_object(
+              'success', true,
+              'medication_id', v_med_id,
+              'current_stock', v_updated_stock
+          );
       END;
       $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
@@ -604,9 +688,13 @@ async function runSchemaMigration() {
       END;
       $$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
 
-      GRANT EXECUTE ON FUNCTION public.record_dose_consumption TO authenticated, service_role, anon;
-      GRANT EXECUTE ON FUNCTION public.toggle_dose_consumption TO authenticated, service_role, anon;
-      GRANT EXECUTE ON FUNCTION public.delete_dose_consumption TO authenticated, service_role, anon;
+      REVOKE EXECUTE ON FUNCTION public.record_dose_consumption(UUID, UUID, DATE, TEXT, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE) FROM PUBLIC, anon;
+      REVOKE EXECUTE ON FUNCTION public.toggle_dose_consumption(UUID, UUID, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE) FROM PUBLIC, anon;
+      REVOKE EXECUTE ON FUNCTION public.delete_dose_consumption(UUID, UUID, NUMERIC) FROM PUBLIC, anon;
+
+      GRANT EXECUTE ON FUNCTION public.record_dose_consumption(UUID, UUID, DATE, TEXT, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE) TO authenticated, service_role;
+      GRANT EXECUTE ON FUNCTION public.toggle_dose_consumption(UUID, UUID, TEXT, NUMERIC, TIMESTAMP WITH TIME ZONE) TO authenticated, service_role;
+      GRANT EXECUTE ON FUNCTION public.delete_dose_consumption(UUID, UUID, NUMERIC) TO authenticated, service_role;
       GRANT EXECUTE ON FUNCTION public.adjust_medication_stock TO authenticated, service_role, anon;
     `;
     console.log('[Migration] Funções RPC atômicas criadas e permissões concedidas com sucesso!');
@@ -732,71 +820,9 @@ async function createServer() {
   app.post('/api/stripe/webhook', (req, res) => webhookHandler(req as any, res as any));
 
   // 2. Atomic Stock and Consumption Management API Endpoints
-  app.post('/api/consumption/record', async (req, res): Promise<any> => {
-    try {
-      const { userId, medicationId, date, scheduledTime, status, dosageAmount, nextDoseAt } = req.body;
-      if (!userId || !medicationId || !date || !scheduledTime) {
-        return res.status(400).json({ error: 'Parâmetros obrigatórios ausentes.' });
-      }
-
-      const result = await atomicStockService.recordConsumption({
-        userId,
-        medicationId,
-        date,
-        scheduledTime,
-        status: status || 'taken',
-        dosageAmount: Number(dosageAmount) || 1,
-        nextDoseAt: nextDoseAt || null
-      });
-
-      return res.status(200).json(result);
-    } catch (err: any) {
-      console.error('[API Consumption Record] Erro:', err?.message || err);
-      return res.status(500).json({ error: err?.message || 'Erro ao registrar consumo' });
-    }
-  });
-
-  app.post('/api/consumption/toggle', async (req, res): Promise<any> => {
-    try {
-      const { userId, recordId, newStatus, dosageAmount, nextDoseAt } = req.body;
-      if (!userId || !recordId || !newStatus) {
-        return res.status(400).json({ error: 'Parâmetros obrigatórios ausentes.' });
-      }
-
-      const result = await atomicStockService.toggleConsumption({
-        userId,
-        recordId,
-        newStatus,
-        dosageAmount: Number(dosageAmount) || 1,
-        nextDoseAt: nextDoseAt || null
-      });
-
-      return res.status(200).json(result);
-    } catch (err: any) {
-      console.error('[API Consumption Toggle] Erro:', err?.message || err);
-      return res.status(500).json({ error: err?.message || 'Erro ao alternar status do consumo' });
-    }
-  });
-
-  app.post('/api/consumption/delete', async (req, res): Promise<any> => {
-    try {
-      const { userId, recordId, dosageAmount } = req.body;
-      if (!userId || !recordId) {
-        return res.status(400).json({ error: 'Parâmetros obrigatórios ausentes.' });
-      }
-
-      const result = await atomicStockService.deleteConsumption({
-        userId,
-        recordId,
-        dosageAmount: Number(dosageAmount) || 1
-      });
-
-      return res.status(200).json(result);
-    } catch (err: any) {
-      console.error('[API Consumption Delete] Erro:', err?.message || err);
-      return res.status(500).json({ error: err?.message || 'Erro ao excluir consumo' });
-    }
-  });
+  app.post('/api/consumption/record', (req, res) => recordConsumptionHandler(req as any, res as any));
+  app.post('/api/consumption/toggle', (req, res) => toggleConsumptionHandler(req as any, res as any));
+  app.post('/api/consumption/delete', (req, res) => deleteConsumptionHandler(req as any, res as any));
 
 
 

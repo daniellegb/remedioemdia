@@ -62,7 +62,7 @@ if (!supabaseUrl || !supabaseServiceKey || supabaseUrl === 'https://placeholder.
   console.error('[StripeServerService] Missing environment variables: SUPABASE_DB_URL/VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
 }
 
-const supabaseAdmin = createClient(
+export const supabaseAdmin = createClient(
   supabaseUrl,
   supabaseServiceKey || 'placeholder_key'
 );
@@ -86,16 +86,30 @@ function getStripe() {
 // --- SERVICE ---
 export const stripeServerService = {
   /**
-   * Cria uma sessão de checkout no Stripe.
+   * Cria uma sessão de checkout no Stripe garantindo a identidade do usuário autenticado.
    */
-  async createCheckoutSession(profile: Profile): Promise<string> {
+  async createCheckoutSession(userIdOrProfile: string | Profile, userEmailOverride?: string): Promise<string> {
     const stripe = getStripe();
-    let stripeCustomerId = profile.stripe_customer_id;
+
+    let userId: string;
+    let providedEmail: string | undefined;
+
+    if (typeof userIdOrProfile === 'string') {
+      userId = userIdOrProfile;
+      providedEmail = userEmailOverride;
+    } else {
+      userId = userIdOrProfile.id;
+      providedEmail = userIdOrProfile.email;
+    }
+
+    if (!userId) {
+      throw new Error('ID de usuário é obrigatório para iniciar o checkout.');
+    }
 
     // Fetch authenticated user from Supabase Auth to get the real email address
     let user: any = null;
     try {
-      const { data, error: userError } = await supabaseAdmin.auth.admin.getUserById(profile.id);
+      const { data, error: userError } = await supabaseAdmin.auth.admin.getUserById(userId);
       if (userError) {
         console.error('[StripeServerService] Error fetching user from auth:', userError.message);
       } else {
@@ -105,11 +119,22 @@ export const stripeServerService = {
       console.error('[StripeServerService] Exception fetching user from auth:', e.message);
     }
 
+    const realEmail = user?.email || providedEmail;
+
+    // Buscar perfil no Supabase pelo userId autenticado
+    const { data: dbProfile } = await supabaseAdmin
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .maybeSingle();
+
+    let stripeCustomerId = dbProfile?.stripe_customer_id;
+
     // Temporary debug logs
     console.log('[StripeServerService] Checkout session user validation:', {
-      userId: user?.id,
+      userId: user?.id || userId,
       userEmail: user?.email,
-      profileEmail: profile?.email,
+      realEmail,
     });
 
     // Validate if existing stripe_customer_id still exists in Stripe
@@ -134,20 +159,20 @@ export const stripeServerService = {
 
     // 1. Se não existir stripe_customer_id (ou foi resetado por não existir mais no Stripe), criar no Stripe e salvar no Supabase
     if (!stripeCustomerId) {
-      console.log(`[StripeServerService] Creating new Stripe customer for user ${profile.id}`);
+      console.log(`[StripeServerService] Creating new Stripe customer for user ${userId} (${realEmail})`);
       const customer = await stripe.customers.create({
-        email: user?.email || profile.email || undefined,
+        email: realEmail || undefined,
         metadata: {
-          userId: profile.id,
+          userId: userId,
         },
       });
       stripeCustomerId = customer.id;
 
-      // Salvar no Supabase usando Admin
+      // Salvar no Supabase usando Admin para o perfil autenticado
       const { error: updateError } = await supabaseAdmin
         .from('profiles')
-        .update({ stripe_customer_id: stripeCustomerId })
-        .eq('id', profile.id);
+        .update({ stripe_customer_id: stripeCustomerId, updated_at: new Date().toISOString() })
+        .eq('id', userId);
 
       if (updateError) {
         console.error('[StripeServerService] Erro ao salvar stripe_customer_id no Supabase:', updateError.message);
@@ -156,9 +181,9 @@ export const stripeServerService = {
     }
 
     // 2. Criar checkout session
-    const priceId = process.env.STRIPE_PRICE_ID;
-    if (!priceId) {
-      throw new Error('STRIPE_PRICE_ID environment variable is required');
+    let priceId = process.env.STRIPE_PRICE_ID || 'price_1TXRkOK6dW3wcsxW6lCAXqHR';
+    if (!priceId || priceId === 'price_1TRZZ5K6dW3wcsxWccq9X1Gc') {
+      priceId = 'price_1TXRkOK6dW3wcsxW6lCAXqHR';
     }
 
     const appUrl = process.env.APP_URL || 'https://remedioemdia.vercel.app';
@@ -176,11 +201,11 @@ export const stripeServerService = {
       success_url: `${appUrl}/subscription/success`,
       cancel_url: `${appUrl}/subscription/cancel`,
       metadata: {
-        userId: profile.id,
+        userId: userId,
       },
       subscription_data: {
         metadata: {
-          userId: profile.id,
+          userId: userId,
         },
       },
     });

@@ -8,7 +8,8 @@ import {
   formatBrazilianDate,
   formatDateDDMMYYYY,
   getUsageCategoryLabel,
-  formatUnit
+  formatUnit,
+  buildConfiguredRemindersFromMedications
 } from './reportUtils';
 import { applyHeadersAndFooters, drawInstitutionalFooter } from './pdfHeaderFooter';
 import { getMedicationDosesForPeriod } from './doseCalculator';
@@ -436,15 +437,13 @@ export const reportService = {
     }
 
     // 1. Fetch user data in parallel
-    const [medications, appointments, { data: reminders, error: remindersError }, { data: preferences, error: preferencesError }, { data: consumptionRecords, error: consumptionError }] = await Promise.all([
+    const [medications, appointments, { data: preferences, error: preferencesError }, { data: consumptionRecords, error: consumptionError }] = await Promise.all([
       medicationService.getMedications(user.id).catch(() => []),
       appointmentService.getAppointments(user.id).catch(() => []),
-      supabase.from('medication_reminders').select('*').eq('user_id', user.id),
       supabase.from('user_preferences').select('*').eq('user_id', user.id).maybeSingle(),
       supabase.from('consumption_records').select('*').eq('user_id', user.id).order('date', { ascending: false })
     ]);
 
-    if (remindersError) console.error('[reportService] Error fetching reminders:', remindersError.message);
     if (preferencesError) console.error('[reportService] Error fetching preferences:', preferencesError.message);
     if (consumptionError) console.error('[reportService] Error fetching consumption records:', consumptionError);
 
@@ -622,10 +621,12 @@ export const reportService = {
     // --- LEMBRETES ---
     addSectionHeader("4. Lembretes Configurados");
 
-    if (reminders && reminders.length > 0) {
-      reminders.forEach((rem, idx) => {
-        const medName = rem.medication_name || 'Medicamento relacionado';
-        const time = rem.reminder_time ? rem.reminder_time.substring(0, 5) : 'Não definido';
+    const configuredReminders = buildConfiguredRemindersFromMedications(medications);
+
+    if (configuredReminders.length > 0) {
+      configuredReminders.forEach((rem, idx) => {
+        const medName = rem.medicationName || 'Medicamento relacionado';
+        const time = rem.time || 'Não definido';
         const status = rem.active ? 'Ativo' : 'Inativo';
         addText(`• Lembrete #${idx + 1}: ${medName} - Horário: ${time} - Status de disparo: ${status}`, 18, { fontSize: 9.5 });
       });

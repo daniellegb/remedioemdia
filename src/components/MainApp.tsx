@@ -130,17 +130,12 @@ const MainApp: React.FC = () => {
   const lastSyncedSettings = React.useRef<string>(JSON.stringify(settings));
 
   useEffect(() => {
-    if (user && meds.length > 0) {
-      pushService.syncMedicationReminders(user.id, meds, settings.preNotificationMinutes).catch(err => 
-        console.error('Erro ao sincronizar lembretes após mudança de configuração:', err)
-      );
-    }
     if (user) {
       pushService.ensureSubscriptionSynced(user.id).catch(err =>
         console.warn('Erro ao revalidate/resync push subscription:', err)
       );
     }
-  }, [user, meds, settings.preNotificationMinutes]);
+  }, [user]);
 
   const fetchData = useCallback(async () => {
     if (!user) return;
@@ -186,6 +181,8 @@ const MainApp: React.FC = () => {
 
   useEffect(() => {
     if (!user) return;
+
+    let isMounted = true;
 
     const channel = supabase
       .channel('db-changes')
@@ -246,12 +243,18 @@ const MainApp: React.FC = () => {
           }
         }
       })
-      .subscribe();
+      .subscribe((status) => {
+        if (!isMounted) return;
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT' || status === 'CLOSED') {
+          fetchData();
+        }
+      });
 
     return () => {
+      isMounted = false;
       supabase.removeChannel(channel);
     };
-  }, [user]);
+  }, [user, fetchData]);
 
   useEffect(() => {
     fetchData();
@@ -488,7 +491,6 @@ const MainApp: React.FC = () => {
           return updated ? updated : a;
         });
       });
-      await pushService.syncMedicationReminders(user.id, selectedMeds);
 
       await refreshProfile();
     } catch (err) {
@@ -619,7 +621,6 @@ const MainApp: React.FC = () => {
         const updated = await medicationService.updateMedication(user.id, newMed.id, newMed);
         const newMeds = meds.map(m => m.id === updated.id ? updated : m);
         setMeds(newMeds);
-        await pushService.syncMedicationReminders(user.id, newMeds);
       } else {
         const activeMedsCount = meds.filter(m => m.active !== false && m.deleted !== true).length;
         if (!isPremium && activeMedsCount >= FREE_PLAN_LIMITS.medications) {
@@ -630,7 +631,6 @@ const MainApp: React.FC = () => {
         const created = await medicationService.createMedication(user.id, finalMed);
         const newMeds = [created, ...meds];
         setMeds(newMeds);
-        await pushService.syncMedicationReminders(user.id, newMeds);
       }
       setEditingMedication(null);
       setView('meds');
@@ -675,7 +675,6 @@ const MainApp: React.FC = () => {
         const updated = await medicationService.updateMedication(user.id, id, { ...med, active: true, deleted: false });
         const newMeds = meds.map(m => m.id === updated.id ? updated : m);
         setMeds(newMeds);
-        await pushService.syncMedicationReminders(user.id, newMeds);
       }
     } catch (error) {
       console.error('Erro ao reativar medicamento:', error);
@@ -732,9 +731,6 @@ const MainApp: React.FC = () => {
           setMeds([]);
           setDoses([]);
           setAppointments([]);
-          
-          // Sincronizar lembretes (limpar fila de push)
-          await pushService.syncMedicationReminders(user.id, []);
           
           alert('Dados excluídos com sucesso.');
         } catch (error) {
@@ -1092,14 +1088,6 @@ const MainApp: React.FC = () => {
                 setMeds(prev => prev.filter(m => m.id !== id));
                 setDoses(prev => prev.filter(d => d.medicationId !== id));
               }
-              
-              // Sincronizar lembretes atualizados
-              const updatedMeds = meds.map(m => m.id === id ? { ...m, deleted: true, active: false } : m);
-              const activeMedsOnly = keepHistory 
-                ? updatedMeds.filter(m => m.deleted !== true)
-                : meds.filter(m => m.id !== id);
-              await pushService.syncMedicationReminders(user.id, activeMedsOnly);
-              
             } else {
               await appointmentService.deleteAppointment(user.id, id, keepHistory);
               
