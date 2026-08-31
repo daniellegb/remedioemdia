@@ -29,7 +29,7 @@ function getProjectRefFromUrl(url: string): string | null {
 }
 
 // Initialize Supabase Admin client with dynamic project matching
-const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY || '';
 
 function getMatchingSupabaseUrl(): string {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';

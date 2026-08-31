@@ -24,7 +24,7 @@ function getProjectRefFromUrl(url: string): string | null {
 }
 
 // --- SUPABASE ADMIN ---
-const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY || '';
 
 function getMatchingSupabaseUrl(): string {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
@@ -37,7 +37,7 @@ function getMatchingSupabaseUrl(): string {
 const supabaseUrl = getMatchingSupabaseUrl();
 
 if (!supabaseServiceKey) {
-  console.error('[StripeServerService] Missing environment variables: SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY');
+  console.error('[StripeServerService] Missing environment variable: SUPABASE_SECRET_KEY');
 }
 
 export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);

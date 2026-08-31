@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 import { validateTimeFormat } from '../src/domain/validation.js';
 
-const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const serviceKey = process.env.SUPABASE_SECRET_KEY || '';
 
 function getMatchingSupabaseUrl(): string {
   const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
