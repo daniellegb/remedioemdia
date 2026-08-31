@@ -13,20 +13,6 @@ interface Profile {
   [key: string]: any;
 }
 
-// Helper functions to safely handle mismatched Supabase environment variables
-function getProjectRefFromKey(key: string): string | null {
-  try {
-    const parts = key.split('.');
-    if (parts.length === 3) {
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-      return payload.ref || null;
-    }
-  } catch (e) {
-    // Ignore decoding errors
-  }
-  return null;
-}
-
 function getProjectRefFromUrl(url: string): string | null {
   try {
     const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
@@ -38,34 +24,23 @@ function getProjectRefFromUrl(url: string): string | null {
 }
 
 // --- SUPABASE ADMIN ---
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 function getMatchingSupabaseUrl(): string {
-  const serviceKeyRef = getProjectRefFromKey(supabaseServiceKey);
-  const dbUrl = process.env.SUPABASE_DB_URL || '';
-  const viteUrl = process.env.VITE_SUPABASE_URL || '';
-  
-  if (serviceKeyRef) {
-    if (getProjectRefFromUrl(dbUrl) === serviceKeyRef) {
-      return dbUrl;
-    }
-    if (getProjectRefFromUrl(viteUrl) === serviceKeyRef) {
-      return viteUrl;
-    }
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+    return url;
   }
-  return dbUrl || viteUrl;
+  throw new Error('[Supabase Config Error] URL HTTP/HTTPS do Supabase não configurada. Defina SUPABASE_URL ou VITE_SUPABASE_URL.');
 }
 
-const supabaseUrl = getMatchingSupabaseUrl() || 'https://placeholder.supabase.co';
+const supabaseUrl = getMatchingSupabaseUrl();
 
-if (!supabaseUrl || !supabaseServiceKey || supabaseUrl === 'https://placeholder.supabase.co') {
-  console.error('[StripeServerService] Missing environment variables: SUPABASE_DB_URL/VITE_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY');
+if (!supabaseServiceKey) {
+  console.error('[StripeServerService] Missing environment variables: SUPABASE_SECRET_KEY or SUPABASE_SERVICE_ROLE_KEY');
 }
 
-export const supabaseAdmin = createClient(
-  supabaseUrl,
-  supabaseServiceKey || 'placeholder_key'
-);
+export const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 // --- STRIPE ---
 let stripeClient: Stripe | null = null;

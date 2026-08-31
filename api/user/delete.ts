@@ -1,51 +1,18 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-// Helper functions to safely handle mismatched Supabase environment variables
-function getProjectRefFromKey(key: string): string | null {
-  try {
-    const parts = key.split('.');
-    if (parts.length === 3) {
-      const payload = JSON.parse(Buffer.from(parts[1], 'base64').toString('utf8'));
-      return payload.ref || null;
-    }
-  } catch (e) {
-    // Ignore decoding errors
-  }
-  return null;
-}
-
-function getProjectRefFromUrl(url: string): string | null {
-  try {
-    const match = url.match(/https:\/\/([^.]+)\.supabase\.co/);
-    return match ? match[1] : null;
-  } catch (e) {
-    // Ignore parsing errors
-  }
-  return null;
-}
-
-// Initialize Supabase Admin client with dynamic project matching
-const supabaseServiceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const supabaseServiceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 function getMatchingSupabaseUrl(): string {
-  const serviceKeyRef = getProjectRefFromKey(supabaseServiceKey);
-  const dbUrl = process.env.SUPABASE_DB_URL || '';
-  const viteUrl = process.env.VITE_SUPABASE_URL || '';
-  
-  if (serviceKeyRef) {
-    if (getProjectRefFromUrl(dbUrl) === serviceKeyRef) {
-      return dbUrl;
-    }
-    if (getProjectRefFromUrl(viteUrl) === serviceKeyRef) {
-      return viteUrl;
-    }
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  if (url && (url.startsWith('http://') || url.startsWith('https://'))) {
+    return url;
   }
-  return dbUrl || viteUrl;
+  throw new Error('[Supabase Config Error] URL HTTP/HTTPS do Supabase não configurada. Defina SUPABASE_URL ou VITE_SUPABASE_URL.');
 }
 
-const supabaseUrl = getMatchingSupabaseUrl() || 'https://placeholder.supabase.co';
-const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey || 'placeholder_key');
+const supabaseUrl = getMatchingSupabaseUrl();
+const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey);
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   console.log(`[${new Date().toISOString()}] Delete request: ${req.method} ${req.url}`);

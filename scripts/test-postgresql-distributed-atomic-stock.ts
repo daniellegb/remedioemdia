@@ -2,7 +2,7 @@ import { createClient } from '@supabase/supabase-js';
 import { consumptionService } from '../src/services/consumptionService';
 
 const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const serviceKey = process.env.SUPABASE_SECRET_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 if (!supabaseUrl || !serviceKey) {
   console.error('Credenciais do Supabase ausentes.');
