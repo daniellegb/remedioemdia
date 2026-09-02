@@ -475,7 +475,8 @@ serve(async (req) => {
 
   try {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SECRET_KEY') || Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+    const secretKeys = JSON.parse(Deno.env.get('SUPABASE_SECRET_KEYS')!)
+    const supabaseServiceKey = secretKeys['default']
     const vapidPublicKey = Deno.env.get('VAPID_PUBLIC_KEY')
     const vapidPrivateKey = Deno.env.get('VAPID_PRIVATE_KEY')
     const vapidSubject = Deno.env.get('VAPID_SUBJECT') || 'mailto:example@yourdomain.com'

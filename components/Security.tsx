@@ -207,9 +207,9 @@ const Security: React.FC<Props> = ({ setView }) => {
         throw new Error('Sessão ativa não encontrada. Por favor, faça login novamente.');
       }
 
-      // Grab Supabase URL and Anon Key from environment
+      // Grab Supabase URL and Publishable Key from environment
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+      const supabaseKey = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY;
       
       if (!supabaseUrl || !supabaseKey) {
         throw new Error('Configurações do Supabase não encontradas.');
