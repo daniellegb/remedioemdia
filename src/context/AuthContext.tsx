@@ -21,6 +21,8 @@ interface AuthContextType {
   signIn: (email: string, password: string) => Promise<any>;
   signUp: (email: string, password: string) => Promise<any>;
   signInWithGoogle: () => Promise<any>;
+  resetPasswordForEmail: (email: string, captchaToken?: string) => Promise<any>;
+  updatePassword: (newPassword: string) => Promise<any>;
   isConfigured: boolean;
   refreshProfile: () => Promise<void>;
   isAdmin: boolean;
@@ -376,6 +378,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     return data;
   };
 
+  const resetPasswordForEmail = async (email: string, captchaToken?: string) => {
+    const { data, error } = await authService.resetPasswordForEmail(email, captchaToken);
+    if (error) throw error;
+    return data;
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { data, error } = await authService.updatePassword(newPassword);
+    if (error) throw error;
+    return data;
+  };
+
   const signOut = async () => {
     if (!isConfigured) return;
 
@@ -423,6 +437,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     signIn,
     signUp,
     signInWithGoogle,
+    resetPasswordForEmail,
+    updatePassword,
     isConfigured,
     refreshProfile,
     isAdmin,

@@ -64,5 +64,18 @@ export const authService = {
         },
       }
     });
+  },
+
+  async resetPasswordForEmail(email: string, captchaToken?: string) {
+    return await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+      captchaToken
+    });
+  },
+
+  async updatePassword(newPassword: string) {
+    return await supabase.auth.updateUser({
+      password: newPassword
+    });
   }
 };

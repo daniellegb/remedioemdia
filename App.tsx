@@ -3,6 +3,7 @@ import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'r
 import { AuthProvider } from './src/context/AuthContext';
 import PrivateRoute from './src/components/PrivateRoute';
 import Login from './src/pages/Login';
+import ResetPassword from './src/pages/ResetPassword';
 import MainApp from './src/components/MainApp';
 import Onboarding from './src/components/Onboarding';
 import { useAuth } from './src/hooks/useAuth';
@@ -28,6 +29,7 @@ const AppRoutes: React.FC = () => {
     <Routes>
       {/* Public Routes */}
       <Route path="/login" element={<Login />} />
+      <Route path="/reset-password" element={<ResetPassword />} />
 
       {/* Private Routes */}
       <Route element={<PrivateRoute />}>
