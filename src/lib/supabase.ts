@@ -14,7 +14,7 @@ const getEnv = (key: string) => {
 };
 
 const URL = clean(getEnv('VITE_SUPABASE_URL'));
-const KEY = clean(getEnv('VITE_SUPABASE_ANON_KEY'));
+const KEY = clean(getEnv('VITE_SUPABASE_PUBLISHABLE_KEY'));
 
 class InMemoryLock {
   private locks = new Map<string, Promise<any>>();

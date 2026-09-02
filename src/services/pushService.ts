@@ -91,7 +91,7 @@ export const pushService = {
       
       // Verificação básica de configuração
       if (!supabaseUrl || supabaseUrl === 'your-supabase-url') {
-        throw new Error('Supabase não configurado. Configure as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_ANON_KEY.');
+        throw new Error('Supabase não configurado. Configure as variáveis de ambiente VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY.');
       }
 
       const { data, error } = await supabase.functions.invoke('send-notifications', {

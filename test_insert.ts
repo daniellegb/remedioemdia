@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
 const url = process.env.VITE_SUPABASE_URL || '';
-const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+const serviceKey = process.env.SUPABASE_SECRET_KEY || '';
 const anonKey = process.env.VITE_SUPABASE_ANON_KEY || '';
 
 if (!url) {

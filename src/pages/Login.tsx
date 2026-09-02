@@ -218,7 +218,7 @@ const Login: React.FC = () => {
               <p className="text-amber-800 text-sm font-bold">Configuração Pendente</p>
               <p className="text-amber-700 text-xs mt-1">
                 As variáveis de ambiente do Supabase não foram encontradas. 
-                Configure <b>VITE_SUPABASE_URL</b> e <b>VITE_SUPABASE_ANON_KEY</b> no painel do AI Studio.
+                Configure <b>VITE_SUPABASE_URL</b> e <b>VITE_SUPABASE_PUBLISHABLE_KEY</b> no painel do AI Studio.
               </p>
             </div>
           </div>

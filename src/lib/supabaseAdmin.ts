@@ -13,7 +13,7 @@ const getEnv = (key: string) => {
 };
 
 const URL = clean(getEnv('VITE_SUPABASE_URL'));
-const SERVICE_KEY = clean(getEnv('SUPABASE_SERVICE_ROLE_KEY')) || clean(getEnv('VITE_SUPABASE_ANON_KEY'));
+const SERVICE_KEY = clean(getEnv('SUPABASE_SECRET_KEY'));
 
 export const supabaseAdmin: SupabaseClient = createClient(
   URL || 'https://placeholder.supabase.co',

@@ -32,9 +32,8 @@ const Subscription: React.FC<Props> = ({ setView }) => {
     });
   }, []);
 
-  // Flag temporária para controle da disponibilidade de assinaturas
-  // Alterar para true quando for conveniente reativar a área de vendas de assinaturas Premium
-  const IS_SUBSCRIPTION_ENABLED = false;
+  // Flag de controle da disponibilidade de assinaturas
+  const IS_SUBSCRIPTION_ENABLED = true;
 
   const plan = profile?.plan || 'free';
   const status = profile?.subscription_status || 'expired';

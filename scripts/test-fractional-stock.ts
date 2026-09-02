@@ -232,7 +232,7 @@ async function runAllTests() {
   console.log('▶ Testando Seção 6 e 7: Persistência no Banco e Integração com Supabase...');
 
   const supabaseUrl = process.env.VITE_SUPABASE_URL || '';
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
+  const serviceKey = process.env.SUPABASE_SECRET_KEY || '';
 
   if (supabaseUrl && serviceKey) {
     const supabase = createClient(supabaseUrl, serviceKey);
