@@ -325,7 +325,7 @@ const Login: React.FC = () => {
                 isSignUp ? 'text-blue-600 font-black' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Cadastrar
+              Cadastre-se grátis
               {isSignUp && (
                 <motion.div
                   layoutId="activeTabIndicator"
@@ -479,7 +479,7 @@ const Login: React.FC = () => {
                 transition={{ duration: 0.15 }}
                 className="flex items-center justify-center gap-2 w-full"
               >
-                {loading ? <Loader2 className="animate-spin" size={24} /> : (isForgotPass ? 'Enviar e-mail' : (isSignUp ? 'Cadastrar' : 'Entrar'))}
+                {loading ? <Loader2 className="animate-spin" size={24} /> : (isForgotPass ? 'Enviar e-mail' : (isSignUp ? 'Cadastre-se grátis' : 'Entrar'))}
               </motion.span>
             </AnimatePresence>
           </button>
