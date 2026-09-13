@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { Pill, Mail, Lock, Loader2, AlertTriangle, Activity, Wifi, WifiOff, Bug, ShieldCheck, CheckCircle, ArrowLeft } from 'lucide-react';
+import { Pill, Mail, Lock, Loader2, AlertTriangle, Activity, Wifi, WifiOff, Bug, ShieldCheck, CheckCircle, ArrowLeft, Eye, EyeOff, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { testSupabaseConnection } from '../lib/supabase';
 
@@ -9,6 +9,9 @@ const Login: React.FC = () => {
   // Estados locais controlados
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [legalAccepted, setLegalAccepted] = useState(false);
   const [turnstileToken, setTurnstileToken] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -19,6 +22,14 @@ const Login: React.FC = () => {
   const [connStatus, setConnStatus] = useState<{ loading: boolean; ok?: boolean; message?: string }>({ loading: false });
   const [showDebugInfo, setShowDebugInfo] = useState(false);
   const [logoError, setLogoError] = useState(false);
+
+  // Regras de validação da senha
+  const hasMinLength = password.length >= 8;
+  const hasUppercase = /[A-Z]/.test(password);
+  const hasLowercase = /[a-z]/.test(password);
+  const hasNumber = /[0-9]/.test(password);
+  const passwordsMatch = password === confirmPassword && password !== '';
+  const isPasswordValid = hasMinLength && hasUppercase && hasLowercase && hasNumber && passwordsMatch;
 
   const turnstileWidgetRef = useRef<HTMLDivElement>(null);
   const widgetIdRef = useRef<string | null>(null);
@@ -208,6 +219,27 @@ const Login: React.FC = () => {
 
   // Implementar função handleRegister
   const handleRegister = async () => {
+    if (!hasMinLength) {
+      setError('A senha precisa ter pelo menos 8 caracteres.');
+      return;
+    }
+    if (!hasUppercase) {
+      setError('A senha precisa ter pelo menos 1 letra maiúscula.');
+      return;
+    }
+    if (!hasLowercase) {
+      setError('A senha precisa ter pelo menos 1 letra minúscula.');
+      return;
+    }
+    if (!hasNumber) {
+      setError('A senha precisa ter pelo menos 1 número.');
+      return;
+    }
+    if (!passwordsMatch) {
+      setError('As senhas não coincidem.');
+      return;
+    }
+
     if (!legalAccepted) {
       setError('É necessário aceitar os Termos de Uso e a Política de Privacidade para criar uma conta.');
       return;
@@ -226,6 +258,8 @@ const Login: React.FC = () => {
       await signUp(email, password, acceptanceTimestamp, turnstileToken);
       setError('Cadastro realizado com sucesso! Verifique seu e-mail para confirmar a conta.');
       setIsSignUp(false);
+      setPassword('');
+      setConfirmPassword('');
     } catch (err: any) {
       console.error('Register error:', err);
       setError(err.message || 'Erro ao realizar cadastro.');
@@ -299,6 +333,7 @@ const Login: React.FC = () => {
                 setIsSignUp(false);
                 setError(null);
                 setSuccessMessage(null);
+                setConfirmPassword('');
               }}
               className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors relative z-10 ${
                 !isSignUp ? 'text-blue-600 font-black' : 'text-slate-500 hover:text-slate-800'
@@ -319,12 +354,13 @@ const Login: React.FC = () => {
                 setIsSignUp(true);
                 setError(null);
                 setSuccessMessage(null);
+                setConfirmPassword('');
               }}
               className={`flex-1 py-3 text-sm font-bold rounded-xl transition-colors relative z-10 ${
                 isSignUp ? 'text-blue-600 font-black' : 'text-slate-500 hover:text-slate-800'
               }`}
             >
-              Cadastrar
+              Cadastre-se grátis!
               {isSignUp && (
                 <motion.div
                   layoutId="activeTabIndicator"
@@ -357,37 +393,122 @@ const Login: React.FC = () => {
           </div>
 
           {!isForgotPass && (
-            <div className="space-y-2">
-              <div className="flex items-center justify-between">
+            <div className="space-y-4">
+              {/* Senha Input */}
+              <div className="space-y-2">
                 <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Senha</label>
-                {!isSignUp && (
+                <div className="relative">
+                  <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    id="password"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
+                    placeholder="••••••••"
+                    required={!isForgotPass}
+                    disabled={!isConfigured || loading}
+                  />
                   <button
                     type="button"
-                    onClick={() => {
-                      setIsForgotPass(true);
-                      setError(null);
-                      setSuccessMessage(null);
-                    }}
-                    className="text-xs font-bold text-blue-600 hover:underline"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors p-1"
+                    tabIndex={-1}
+                    title={showPassword ? 'Ocultar senha' : 'Exibir senha'}
+                    aria-label={showPassword ? 'Ocultar senha' : 'Exibir senha'}
                   >
-                    Esqueci minha senha
+                    {showPassword ? <EyeOff size={20} /> : <Eye size={20} />}
                   </button>
+                </div>
+                {!isSignUp && (
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsForgotPass(true);
+                        setError(null);
+                        setSuccessMessage(null);
+                      }}
+                      className="text-xs font-bold text-blue-600 hover:underline"
+                    >
+                      Esqueci minha senha
+                    </button>
+                  </div>
                 )}
               </div>
-              <div className="relative">
-                <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
-                {/* Inputs CONTROLADOS */}
-                <input
-                  type="password"
-                  id="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
-                  placeholder="••••••••"
-                  required={!isForgotPass}
-                  disabled={!isConfigured || loading}
-                />
-              </div>
+
+              {/* Confirmar Senha Input (Apenas no Cadastro) */}
+              {isSignUp && (
+                <div className="space-y-2">
+                  <label className="text-xs font-black uppercase tracking-widest text-slate-400 ml-1">Confirmar Senha</label>
+                  <div className="relative">
+                    <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" size={20} />
+                    <input
+                      type={showConfirmPassword ? 'text' : 'password'}
+                      id="confirmPassword"
+                      value={confirmPassword}
+                      onChange={(e) => setConfirmPassword(e.target.value)}
+                      className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-12 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm"
+                      placeholder="••••••••"
+                      required={isSignUp}
+                      disabled={!isConfigured || loading}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 focus:outline-none transition-colors p-1"
+                      tabIndex={-1}
+                      title={showConfirmPassword ? 'Ocultar senha' : 'Exibir senha'}
+                      aria-label={showConfirmPassword ? 'Ocultar senha' : 'Exibir senha'}
+                    >
+                      {showConfirmPassword ? <EyeOff size={20} /> : <Eye size={20} />}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Requisitos da senha Checklist (Apenas no Cadastro) */}
+              {isSignUp && (
+                <div className="bg-slate-50 rounded-2xl p-4 md:p-5 space-y-3 border border-slate-100">
+                  <h4 className="text-xs font-bold text-slate-400 uppercase tracking-wider">Requisitos da senha</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-x-4 gap-y-2.5 text-xs text-slate-600">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-0.5 rounded-full ${hasMinLength ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
+                        <Check size={12} strokeWidth={3} />
+                      </div>
+                      <span className={hasMinLength ? 'text-slate-800 font-medium' : 'text-slate-400'}>Mínimo de 8 caracteres</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className={`p-0.5 rounded-full ${hasUppercase ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
+                        <Check size={12} strokeWidth={3} />
+                      </div>
+                      <span className={hasUppercase ? 'text-slate-800 font-medium' : 'text-slate-400'}>Pelo menos 1 letra maiúscula</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className={`p-0.5 rounded-full ${hasLowercase ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
+                        <Check size={12} strokeWidth={3} />
+                      </div>
+                      <span className={hasLowercase ? 'text-slate-800 font-medium' : 'text-slate-400'}>Pelo menos 1 letra minúscula</span>
+                    </div>
+
+                    <div className="flex items-center gap-2">
+                      <div className={`p-0.5 rounded-full ${hasNumber ? 'bg-emerald-100 text-emerald-600' : 'bg-slate-200 text-slate-400'} transition-all`}>
+                        <Check size={12} strokeWidth={3} />
+                      </div>
+                      <span className={hasNumber ? 'text-slate-800 font-medium' : 'text-slate-400'}>Pelo menos 1 número</span>
+                    </div>
+
+                    <div className="flex items-center gap-2 md:col-span-2 pt-1 border-t border-slate-100 mt-1">
+                      <div className={`p-0.5 rounded-full ${passwordsMatch ? 'bg-emerald-100 text-emerald-600' : (confirmPassword && !passwordsMatch ? 'bg-red-100 text-red-600' : 'bg-slate-200 text-slate-400')} transition-all`}>
+                        {confirmPassword && !passwordsMatch ? <X size={12} strokeWidth={3} /> : <Check size={12} strokeWidth={3} />}
+                      </div>
+                      <span className={passwordsMatch ? 'text-slate-800 font-medium' : (confirmPassword && !passwordsMatch ? 'text-red-600 font-medium' : 'text-slate-400')}>As senhas coincidem</span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -519,6 +640,7 @@ const Login: React.FC = () => {
                 setIsSignUp(!isSignUp);
                 setError(null);
                 setSuccessMessage(null);
+                setConfirmPassword('');
               }}
               className="text-slate-500 font-bold hover:text-blue-600 transition-colors inline-block w-full text-center"
               disabled={loading || !isConfigured}

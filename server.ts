@@ -788,14 +788,16 @@ async function createServer() {
     next();
   });
 
-  // Support JSON request parser
+  // 1. Stripe Webhook (MUST be before express.json() parser so micro.buffer(req) can read the raw stream)
+  app.post('/api/stripe/webhook', (req, res) => webhookHandler(req as any, res as any));
+
+  // Support JSON request parser for other endpoints
   app.use(express.json());
 
-  // 1. Stripe Endpoints
+  // Other Stripe Endpoints
   app.post('/api/stripe/checkout', (req, res) => checkoutHandler(req as any, res as any));
   app.post('/api/stripe/create-portal-session', (req, res) => portalHandler(req as any, res as any));
   app.post('/api/stripe/sync-subscription', (req, res) => syncHandler(req as any, res as any));
-  app.post('/api/stripe/webhook', (req, res) => webhookHandler(req as any, res as any));
 
   // 2. Atomic Stock and Consumption Management API Endpoints
   app.post('/api/consumption/record', (req, res) => recordConsumptionHandler(req as any, res as any));
