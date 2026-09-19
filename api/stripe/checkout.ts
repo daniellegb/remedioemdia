@@ -11,6 +11,16 @@ async function verifyTurnstileToken(token: string): Promise<boolean> {
       body: new URLSearchParams({ secret, response: token }),
     });
     const data: any = await response.json();
+    if (!data.success) {
+      console.error(
+        '[Turnstile] Rejeitado pela Cloudflare. Error codes:',
+        data['error-codes'],
+        'hostname:',
+        data.hostname,
+        'action:',
+        data.action
+      );
+    }
     return !!data.success;
   } catch (err) {
     console.error('[Turnstile] Erro ao validar token:', err);
