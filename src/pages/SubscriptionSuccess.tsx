@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Pill, CheckCircle2, ArrowRight, Sparkles } from 'lucide-react';
+import { Pill, CheckCircle2, ArrowRight, Sparkles, Mail } from 'lucide-react';
 import { motion } from 'motion/react';
 
 const SubscriptionSuccess: React.FC = () => {
@@ -45,17 +45,20 @@ const SubscriptionSuccess: React.FC = () => {
         </div>
 
         {/* Mensagem principal */}
-        <div className="space-y-4 mb-8">
+        <div className="space-y-4 mb-8 text-center">
           <h2 className="text-2xl font-black text-slate-900 tracking-tight">
             Seja bem-vindo ao Remédio em Dia!
           </h2>
-          <p className="text-slate-700 text-base leading-relaxed font-semibold">
-            Se você é novo por aqui, acesse seu e-mail para definir sua senha de acesso. Se você já é usuário, é só entrar e aproveitar!
+          <p className="text-slate-800 text-base leading-relaxed font-bold">
+            Se você é novo por aqui, acesse seu e-mail para definir sua senha de acesso. Atenção: esse passo é necessário para ativar sua conta!
           </p>
-          <div className="p-3.5 bg-amber-50/80 border border-amber-200/60 rounded-2xl text-amber-900 text-sm font-bold flex items-center justify-center gap-2">
-            <span>🎉</span>
-            <span>Agora você é Premium! Aproveite todos os recursos do Remédio em Dia.</span>
+          <div className="p-3.5 bg-amber-50/80 border border-amber-200/70 rounded-2xl text-amber-900 text-xs sm:text-sm font-medium italic flex items-start gap-2.5 text-left">
+            <Mail size={18} className="text-amber-600 shrink-0 mt-0.5" />
+            <span>Não encontrou o e-mail na caixa de entrada? Verifique também a caixa de spam ou lixo eletrônico.</span>
           </div>
+          <p className="text-slate-800 text-base font-bold pt-1">
+            Se você já é usuário, é só entrar e aproveitar!
+          </p>
         </div>
 
         {/* Botão de acionamento para Login */}
