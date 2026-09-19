@@ -5,6 +5,7 @@ import PrivateRoute from './src/components/PrivateRoute';
 import Login from './src/pages/Login';
 import ResetPassword from './src/pages/ResetPassword';
 import Subscribe from './src/pages/Subscribe';
+import SubscriptionSuccess from './src/pages/SubscriptionSuccess';
 import MainApp from './src/components/MainApp';
 import Onboarding from './src/components/Onboarding';
 import { useAuth } from './src/hooks/useAuth';
@@ -32,6 +33,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/subscribe" element={<Subscribe />} />
+      <Route path="/subscription/success" element={<SubscriptionSuccess />} />
 
       {/* Private Routes */}
       <Route element={<PrivateRoute />}>
