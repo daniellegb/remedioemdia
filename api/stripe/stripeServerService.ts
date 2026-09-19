@@ -340,27 +340,28 @@ export const stripeServerService = {
                   userId = existingAuthUser.id;
                   console.log(`[${timestamp}] [StripeServerService] Guest email belongs to existing Auth user ID: ${userId}`);
                 } else {
-                  // 2. Criar novo usuário no Supabase Auth com email_confirm: true e legal_acceptance_at nos metadados
-                  const userMetadata: Record<string, any> = {};
-                  if (legalAcceptanceAt) {
-                    userMetadata.legal_acceptance_at = legalAcceptanceAt;
-                  }
+                  // 2. Convidar novo usuário no Supabase Auth via inviteUserByEmail
+                  const defaultUrl = (process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production')
+                    ? 'https://app.remedioemdia.com'
+                    : 'https://dev.remedioemdia.com';
+                  const appUrl = process.env.APP_URL || defaultUrl;
 
-                  console.log(`[${timestamp}] [StripeServerService] Creating new Supabase Auth user for guest: ${guestEmail}`);
-                  const { data: newUserData, error: createError } = await supabaseAdmin.auth.admin.createUser({
-                    email: guestEmail,
-                    email_confirm: true,
-                    user_metadata: userMetadata,
+                  console.log(`[${timestamp}] [StripeServerService] Inviting new Supabase Auth user for guest: ${guestEmail}`);
+                  const { data: inviteData, error: inviteError } = await supabaseAdmin.auth.admin.inviteUserByEmail(guestEmail, {
+                    redirectTo: `${appUrl}/reset-password`,
+                    data: {
+                      legal_acceptance_at: session.metadata?.legal_acceptance_at
+                    }
                   });
 
-                  if (createError) {
-                    console.error(`[${timestamp}] [StripeServerService] Failed to create Supabase user for guest ${guestEmail}:`, createError.message);
-                    throw new Error(`Falha ao criar usuário Supabase para o guest ${guestEmail}: ${createError.message}`);
+                  if (inviteError) {
+                    console.error(`[${timestamp}] [StripeServerService] Failed to invite Supabase user for guest ${guestEmail}:`, inviteError.message);
+                    throw new Error(`Falha ao convidar usuário Supabase para o guest ${guestEmail}: ${inviteError.message}`);
                   }
 
-                  if (newUserData?.user?.id) {
-                    userId = newUserData.user.id;
-                    console.log(`[${timestamp}] [StripeServerService] Successfully created Supabase user ID: ${userId} for guest ${guestEmail}`);
+                  if (inviteData?.user?.id) {
+                    userId = inviteData.user.id;
+                    console.log(`[${timestamp}] [StripeServerService] Successfully invited Supabase user ID: ${userId} for guest ${guestEmail}`);
                   }
                 }
               }
