@@ -161,7 +161,10 @@ export const stripeServerService = {
       priceId = 'price_1TXRkOK6dW3wcsxW6lCAXqHR';
     }
 
-    const appUrl = process.env.APP_URL || 'https://remedioemdia.vercel.app';
+    const defaultUrl = (process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production')
+      ? 'https://app.remedioemdia.com'
+      : 'https://dev.remedioemdia.com';
+    const appUrl = process.env.APP_URL || defaultUrl;
 
     const session = await stripe.checkout.sessions.create({
       customer: stripeCustomerId,
@@ -203,7 +206,10 @@ export const stripeServerService = {
       priceId = 'price_1TXRkOK6dW3wcsxW6lCAXqHR';
     }
 
-    const appUrl = process.env.APP_URL || 'https://remedioemdia.vercel.app';
+    const defaultUrl = (process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production')
+      ? 'https://app.remedioemdia.com'
+      : 'https://dev.remedioemdia.com';
+    const appUrl = process.env.APP_URL || defaultUrl;
 
     const session = await stripe.checkout.sessions.create({
       customer_email: guestEmail,
@@ -290,11 +296,13 @@ export const stripeServerService = {
         case 'checkout.session.completed': {
           const session = event.data.object as any;
           userId = session.metadata?.userId || null;
+          const isGuest = session.metadata?.is_guest === 'true';
+          const legalAcceptanceAt = session.metadata?.legal_acceptance_at;
           stripeCustomerId = session.customer as string;
           stripeSubscriptionId = session.subscription as string;
           stripeSessionId = session.id;
 
-          console.log(`[${timestamp}] [StripeServerService] Processing Checkout Completed for User: ${userId}`);
+          console.log(`[${timestamp}] [StripeServerService] Processing Checkout Completed (User: ${userId}, Guest: ${isGuest})`);
           
           let endsAt: string | null = null;
           let sub: any = null;
@@ -305,6 +313,59 @@ export const stripeServerService = {
               console.log(`[${timestamp}] [StripeServerService] Found current period end from webhook checkout retrieve: ${endsAt}`);
             } catch (err) {
               console.error('[StripeServerService] Error retrieving subscription during checkout fallback:', err);
+            }
+          }
+
+          // TRATAMENTO PARA GUEST: Se não há userId mas is_guest === 'true', criar/localizar usuário no Supabase
+          if (!userId && isGuest) {
+            const guestEmail = (session.customer_details?.email || session.customer_email || '').trim().toLowerCase();
+            if (guestEmail) {
+              console.log(`[${timestamp}] [StripeServerService] Processing Guest Checkout for email: ${guestEmail}`);
+
+              // 1. Verificar se o usuário já existe no Supabase (perfis ou auth)
+              const { data: existingProfile } = await supabaseAdmin
+                .from('profiles')
+                .select('id')
+                .ilike('email', guestEmail)
+                .maybeSingle();
+
+              if (existingProfile?.id) {
+                userId = existingProfile.id;
+                console.log(`[${timestamp}] [StripeServerService] Guest email belongs to existing profile ID: ${userId}`);
+              } else {
+                const { data: { users: authUsers } } = await supabaseAdmin.auth.admin.listUsers();
+                const existingAuthUser = (authUsers as any[])?.find((u: any) => u.email?.toLowerCase() === guestEmail);
+
+                if (existingAuthUser?.id) {
+                  userId = existingAuthUser.id;
+                  console.log(`[${timestamp}] [StripeServerService] Guest email belongs to existing Auth user ID: ${userId}`);
+                } else {
+                  // 2. Criar novo usuário no Supabase Auth com email_confirm: true e legal_acceptance_at nos metadados
+                  const userMetadata: Record<string, any> = {};
+                  if (legalAcceptanceAt) {
+                    userMetadata.legal_acceptance_at = legalAcceptanceAt;
+                  }
+
+                  console.log(`[${timestamp}] [StripeServerService] Creating new Supabase Auth user for guest: ${guestEmail}`);
+                  const { data: newUserData, error: createError } = await supabaseAdmin.auth.admin.createUser({
+                    email: guestEmail,
+                    email_confirm: true,
+                    user_metadata: userMetadata,
+                  });
+
+                  if (createError) {
+                    console.error(`[${timestamp}] [StripeServerService] Failed to create Supabase user for guest ${guestEmail}:`, createError.message);
+                    throw new Error(`Falha ao criar usuário Supabase para o guest ${guestEmail}: ${createError.message}`);
+                  }
+
+                  if (newUserData?.user?.id) {
+                    userId = newUserData.user.id;
+                    console.log(`[${timestamp}] [StripeServerService] Successfully created Supabase user ID: ${userId} for guest ${guestEmail}`);
+                  }
+                }
+              }
+            } else {
+              console.warn(`[${timestamp}] [StripeServerService] Guest checkout session ${stripeSessionId} has no email address`);
             }
           }
 
@@ -1104,7 +1165,22 @@ export const stripeServerService = {
     }
 
     if (!data || data.length === 0) {
-      console.warn(`[StripeServerService] SUPABASE UPDATE WARNING: No profile found to update with ID ${userId}. Please check if profiles.id matches auth.users.id.`);
+      console.warn(`[StripeServerService] SUPABASE UPDATE WARNING: No profile found to update with ID ${userId}. Attempting upsert for profile.`);
+      const { data: upsertData, error: upsertError } = await supabaseAdmin
+        .from('profiles')
+        .upsert({
+          id: userId,
+          ...updates,
+          updated_at: new Date().toISOString(),
+        }, { onConflict: 'id' })
+        .select();
+
+      if (upsertError) {
+        console.error(`[StripeServerService] SUPABASE UPSERT FAIL for profile ${userId}: ${upsertError.message}`);
+      } else {
+        console.log(`[StripeServerService] SUPABASE UPSERT SUCCESS for profile ${userId}`);
+      }
+      return upsertData;
     } else {
       console.log(`[StripeServerService] SUPABASE UPDATE SUCCESS for profile ${userId}. Records updated: ${data.length}`);
     }
