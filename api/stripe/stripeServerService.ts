@@ -193,6 +193,50 @@ export const stripeServerService = {
   },
 
   /**
+   * Cria uma sessão de checkout no Stripe para um novo visitante (guest).
+   */
+  async createGuestCheckoutSession(guestEmail: string, legalAcceptanceAt: string): Promise<string> {
+    const stripe = getStripe();
+
+    let priceId = process.env.STRIPE_PRICE_ID || 'price_1TXRkOK6dW3wcsxW6lCAXqHR';
+    if (!priceId || priceId === 'price_1TRZZ5K6dW3wcsxWccq9X1Gc') {
+      priceId = 'price_1TXRkOK6dW3wcsxW6lCAXqHR';
+    }
+
+    const appUrl = process.env.APP_URL || 'https://remedioemdia.vercel.app';
+
+    const session = await stripe.checkout.sessions.create({
+      customer_email: guestEmail,
+      mode: 'subscription',
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price: priceId,
+          quantity: 1,
+        },
+      ],
+      success_url: `${appUrl}/subscription/success`,
+      cancel_url: `${appUrl}/subscription/cancel`,
+      metadata: {
+        is_guest: 'true',
+        legal_acceptance_at: legalAcceptanceAt,
+      },
+      subscription_data: {
+        metadata: {
+          is_guest: 'true',
+          legal_acceptance_at: legalAcceptanceAt,
+        },
+      },
+    });
+
+    if (!session.url) {
+      throw new Error('Falha ao gerar URL da sessão de checkout.');
+    }
+
+    return session.url;
+  },
+
+  /**
    * Processa webhooks do Stripe.
    * Fluxo: Stripe -> Vercel Endpoint (Raw Body) -> handleWebhook (Signature Validation) -> Supabase (Persistence)
    */

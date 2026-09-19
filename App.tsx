@@ -4,6 +4,7 @@ import { AuthProvider } from './src/context/AuthContext';
 import PrivateRoute from './src/components/PrivateRoute';
 import Login from './src/pages/Login';
 import ResetPassword from './src/pages/ResetPassword';
+import Subscribe from './src/pages/Subscribe';
 import MainApp from './src/components/MainApp';
 import Onboarding from './src/components/Onboarding';
 import { useAuth } from './src/hooks/useAuth';
@@ -30,6 +31,7 @@ const AppRoutes: React.FC = () => {
       {/* Public Routes */}
       <Route path="/login" element={<Login />} />
       <Route path="/reset-password" element={<ResetPassword />} />
+      <Route path="/subscribe" element={<Subscribe />} />
 
       {/* Private Routes */}
       <Route element={<PrivateRoute />}>
