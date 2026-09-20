@@ -378,6 +378,7 @@ export const stripeServerService = {
               stripe_subscription_id: stripeSubscriptionId,
               subscription_ends_at: endsAt,
               trial_ends_at: null,
+              legal_acceptance_at: legalAcceptanceAt,
             });
 
             // HISTÓRICO: Criar registro ao criar assinatura
