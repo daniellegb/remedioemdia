@@ -83,7 +83,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         if (isUserPremium) {
           console.warn(`[Checkout] Bloqueado: Usuário autenticado ${authenticatedUserId} já é Premium.`);
           return res.status(400).json({
-            error: 'Você já é Premium! Você pode acessar dados de sua assinatura dentro do app em Ajustes -> Assinatura'
+            error: 'Você já é Premium! Você pode acessar dados de sua assinatura dentro do app em Ajustes -> Minha Assinatura'
           });
         }
       }
@@ -138,7 +138,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (existingProfile || existingAuthUser) {
       console.warn(`[Checkout Guest] E-mail já cadastrado bloqueado: ${normalizedEmail}`);
       return res.status(400).json({
-        error: 'Você já é um usuário cadastrado! Por favor, faça login e torne-se Premium acessando Ajustes / Minha Assinatura!'
+        error: 'Você já é um usuário cadastrado! Faça login para continuar. Você também pode assinar dentro do app indo em Ajustes -> Minha Assinatura'
       });
     }
 

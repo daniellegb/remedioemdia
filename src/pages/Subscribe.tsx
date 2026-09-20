@@ -164,7 +164,7 @@ const Subscribe: React.FC = () => {
   const handleStartCheckout = async () => {
     if (!profile && !user) return;
     if (isPremium) {
-      setError('Você já é Premium! Você pode acessar dados de sua assinatura dentro do app em Ajustes -> Assinatura');
+      setError('Você já é Premium! Você pode acessar dados de sua assinatura dentro do app em Ajustes -> Minha Assinatura');
       return;
     }
     setCheckoutLoading(true);
@@ -269,7 +269,7 @@ const Subscribe: React.FC = () => {
                 <div className="p-4 bg-amber-50/90 border border-amber-200/80 rounded-2xl flex items-start gap-3 text-amber-900 shadow-xs">
                   <Crown size={22} className="text-amber-500 fill-amber-400 shrink-0 mt-0.5" />
                   <p className="text-sm font-bold leading-relaxed">
-                    Você já é Premium! Você pode acessar dados de sua assinatura dentro do app em Ajustes -&gt; Assinatura
+                    Você já é Premium! Você pode acessar dados de sua assinatura dentro do app em Ajustes -&gt; Minha Assinatura
                   </p>
                 </div>
 
