@@ -14,11 +14,6 @@ const SubscriptionSuccess: React.FC = () => {
         transition={{ duration: 0.4 }}
         className="max-w-md w-full bg-white rounded-3xl shadow-xl border border-slate-100 p-8 text-center flex flex-col items-center"
       >
-        {/* Badge de sucesso */}
-        <div className="mb-6 flex items-center justify-center w-16 h-16 bg-emerald-50 text-emerald-600 rounded-full border border-emerald-100 shadow-sm">
-          <CheckCircle2 size={36} />
-        </div>
-
         {/* Logo da marca */}
         <div className="mb-6 flex flex-col items-center">
           {!logoError ? (
@@ -38,10 +33,11 @@ const SubscriptionSuccess: React.FC = () => {
           )}
         </div>
 
-        {/* Tag Premium */}
-        <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 text-xs font-bold mb-6">
-          <Sparkles size={14} className="text-amber-500" />
+        {/* Tag de confirmação da assinatura */}
+        <div className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-full bg-amber-50 text-amber-900 border border-amber-200 text-xs font-bold mb-6 shadow-xs">
+          <Sparkles size={14} className="text-amber-600 shrink-0" />
           <span>Assinatura Confirmada</span>
+          <CheckCircle2 size={16} className="text-amber-600 shrink-0" />
         </div>
 
         {/* Mensagem principal */}
