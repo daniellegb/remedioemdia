@@ -41,6 +41,7 @@ const Subscribe: React.FC = () => {
     isAuthenticated, 
     loading: authLoading, 
     isConfigured,
+    isPremium,
     signOut
   } = useAuth();
 
@@ -162,6 +163,10 @@ const Subscribe: React.FC = () => {
   // Função para iniciar o Stripe Checkout de Assinatura Premium
   const handleStartCheckout = async () => {
     if (!profile && !user) return;
+    if (isPremium) {
+      setError('Você já é Premium! Você pode acessar dados de sua assinatura dentro do app em Ajustes -> Assinatura');
+      return;
+    }
     setCheckoutLoading(true);
     setError(null);
 
@@ -258,78 +263,100 @@ const Subscribe: React.FC = () => {
               </button>
             </div>
 
-            {/* Card do Plano Premium */}
-            <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-3xl p-6 space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Sparkles size={20} className="text-amber-500" />
-                  <span className="text-sm font-black text-slate-800 uppercase tracking-wider">
-                    Remédio em Dia Premium
-                  </span>
+            {isPremium ? (
+              /* SE O USUÁRIO JÁ FOR PREMIUM */
+              <div className="space-y-5 animate-in fade-in duration-300">
+                <div className="p-4 bg-amber-50/90 border border-amber-200/80 rounded-2xl flex items-start gap-3 text-amber-900 shadow-xs">
+                  <Crown size={22} className="text-amber-500 fill-amber-400 shrink-0 mt-0.5" />
+                  <p className="text-sm font-bold leading-relaxed">
+                    Você já é Premium! Você pode acessar dados de sua assinatura dentro do app em Ajustes -&gt; Assinatura
+                  </p>
                 </div>
-                <span className="px-2.5 py-1 bg-amber-500 text-white text-[10px] font-black uppercase rounded-full tracking-wider">
-                  PRO
-                </span>
-              </div>
 
-              <div className="border-t border-blue-100/80 pt-3">
-                <div className="flex items-baseline gap-1">
-                  <span className="text-3xl font-black text-slate-900">R$ 14,90</span>
-                  <span className="text-sm text-slate-500 font-bold">/mês</span>
+                <Link
+                  to="/dashboard"
+                  className="w-full bg-blue-600 hover:bg-blue-700 active:scale-[0.98] text-white py-4 rounded-2xl font-black text-base shadow-lg shadow-blue-200 transition-all flex items-center justify-center gap-2 min-h-[56px]"
+                >
+                  <span>Ir para o Aplicativo</span>
+                </Link>
+              </div>
+            ) : (
+              /* SE O USUÁRIO FOR FREE */
+              <>
+                {/* Card do Plano Premium */}
+                <div className="bg-gradient-to-br from-blue-50 to-indigo-50 border border-blue-100 rounded-3xl p-6 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <Sparkles size={20} className="text-amber-500" />
+                      <span className="text-sm font-black text-slate-800 uppercase tracking-wider">
+                        Remédio em Dia Premium
+                      </span>
+                    </div>
+                    <span className="px-2.5 py-1 bg-amber-500 text-white text-[10px] font-black uppercase rounded-full tracking-wider">
+                      PRO
+                    </span>
+                  </div>
+
+                  <div className="border-t border-blue-100/80 pt-3">
+                    <div className="flex items-baseline gap-1">
+                      <span className="text-3xl font-black text-slate-900">R$ 14,90</span>
+                      <span className="text-sm text-slate-500 font-bold">/mês</span>
+                    </div>
+                    <p className="text-xs text-blue-700 font-semibold mt-1">
+                      🚀 Preço promocional de lançamento!
+                    </p>
+                  </div>
+
+                  <ul className="space-y-2 pt-1 text-xs text-slate-700 font-medium">
+                    <li className="flex items-center gap-2">
+                      <Check size={14} className="text-emerald-600 shrink-0" />
+                      <span>Cadastro ilimitado de medicamentos</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check size={14} className="text-emerald-600 shrink-0" />
+                      <span>Cadastro ilimitado de compromissos médicos</span>
+                    </li>
+                    <li className="flex items-center gap-2">
+                      <Check size={14} className="text-emerald-600 shrink-0" />
+                      <span>Gestão completa de estoque e avisos</span>
+                    </li>
+                  </ul>
                 </div>
-                <p className="text-xs text-blue-700 font-semibold mt-1">
-                  🚀 Preço promocional de lançamento!
-                </p>
-              </div>
 
-              <ul className="space-y-2 pt-1 text-xs text-slate-700 font-medium">
-                <li className="flex items-center gap-2">
-                  <Check size={14} className="text-emerald-600 shrink-0" />
-                  <span>Cadastro ilimitado de medicamentos</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={14} className="text-emerald-600 shrink-0" />
-                  <span>Cadastro ilimitado de compromissos médicos</span>
-                </li>
-                <li className="flex items-center gap-2">
-                  <Check size={14} className="text-emerald-600 shrink-0" />
-                  <span>Gestão completa de estoque e avisos</span>
-                </li>
-              </ul>
-            </div>
+                {/* Mensagem de erro se o checkout falhar */}
+                {error && (
+                  <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-medium flex gap-2 items-start">
+                    <ShieldAlert className="text-red-500 shrink-0 mt-0.5" size={18} />
+                    <span>{error}</span>
+                  </div>
+                )}
 
-            {/* Mensagem de erro se o checkout falhar */}
-            {error && (
-              <div className="p-4 bg-red-50 border border-red-100 rounded-2xl text-red-600 text-sm font-medium flex gap-2 items-start">
-                <ShieldAlert className="text-red-500 shrink-0 mt-0.5" size={18} />
-                <span>{error}</span>
-              </div>
+                {/* Botão Principal de Assinatura Stripe */}
+                <button
+                  type="button"
+                  onClick={handleStartCheckout}
+                  disabled={checkoutLoading}
+                  className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg shadow-blue-200 hover:from-blue-700 hover:to-indigo-700 transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2.5 min-h-[60px] cursor-pointer"
+                >
+                  {checkoutLoading ? (
+                    <>
+                      <Loader2 className="animate-spin" size={22} />
+                      <span>Iniciando Checkout...</span>
+                    </>
+                  ) : (
+                    <>
+                      <CreditCard size={22} />
+                      <span>Assinar Premium</span>
+                    </>
+                  )}
+                </button>
+
+                <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 font-medium text-center">
+                  <ShieldCheck size={14} className="text-emerald-500 shrink-0" />
+                  <span>Processamento de assinatura seguro garantido pelo Stripe</span>
+                </div>
+              </>
             )}
-
-            {/* Botão Principal de Assinatura Stripe */}
-            <button
-              type="button"
-              onClick={handleStartCheckout}
-              disabled={checkoutLoading}
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 text-white py-4 rounded-2xl font-black text-lg shadow-lg shadow-blue-200 hover:from-blue-700 hover:to-indigo-700 transition-all active:scale-[0.98] disabled:opacity-70 disabled:active:scale-100 flex items-center justify-center gap-2.5 min-h-[60px] cursor-pointer"
-            >
-              {checkoutLoading ? (
-                <>
-                  <Loader2 className="animate-spin" size={22} />
-                  <span>Iniciando Checkout...</span>
-                </>
-              ) : (
-                <>
-                  <CreditCard size={22} />
-                  <span>Assinar Premium</span>
-                </>
-              )}
-            </button>
-
-            <div className="flex items-center justify-center gap-1.5 text-[11px] text-slate-400 font-medium text-center">
-              <ShieldCheck size={14} className="text-emerald-500 shrink-0" />
-              <span>Processamento de assinatura seguro garantido pelo Stripe</span>
-            </div>
           </div>
         ) : (
           /* FORMULÁRIO DE CADASTRO PARA NOVOS USUÁRIOS */

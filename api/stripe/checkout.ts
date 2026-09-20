@@ -64,6 +64,30 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     try {
+      // Verificar no banco se o usuário autenticado já é Premium antes de iniciar o checkout
+      const { data: userProfile } = await supabaseAdmin
+        .from('profiles')
+        .select('plan, subscription_status, subscription_ends_at, lifetime_access')
+        .eq('id', authenticatedUserId)
+        .maybeSingle();
+
+      if (userProfile) {
+        const now = new Date();
+        const isUserPremium =
+          userProfile.plan === 'premium' ||
+          userProfile.plan === 'lifetime_access' ||
+          userProfile.lifetime_access === true ||
+          (userProfile.plan === 'premium' && userProfile.subscription_status === 'active') ||
+          (userProfile.plan === 'premium' && userProfile.subscription_status === 'canceled' && userProfile.subscription_ends_at && new Date(userProfile.subscription_ends_at) > now);
+
+        if (isUserPremium) {
+          console.warn(`[Checkout] Bloqueado: Usuário autenticado ${authenticatedUserId} já é Premium.`);
+          return res.status(400).json({
+            error: 'Você já é Premium! Você pode acessar dados de sua assinatura dentro do app em Ajustes -> Assinatura'
+          });
+        }
+      }
+
       // Iniciar a sessão de checkout utilizando exclusivamente os dados autenticados
       const sessionUrl = await stripeServerService.createCheckoutSession(authenticatedUserId, authenticatedUserEmail);
       console.log(`[Checkout] Sessão criada com sucesso para o usuário autenticado ${authenticatedUserId}`);
