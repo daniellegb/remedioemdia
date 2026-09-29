@@ -5,6 +5,7 @@ import PrivateRoute from './src/components/PrivateRoute';
 import Login from './src/pages/Login';
 import ResetPassword from './src/pages/ResetPassword';
 import Subscribe from './src/pages/Subscribe';
+import SubscriptionSuccess from './src/pages/SubscriptionSuccess';
 import MainApp from './src/components/MainApp';
 import Onboarding from './src/components/Onboarding';
 import { useAuth } from './src/hooks/useAuth';
@@ -19,9 +20,6 @@ const AppRoutes: React.FC = () => {
     if (skipMedication) {
       navigate('/dashboard');
     } else {
-      // Se quiser cadastrar o primeiro remédio, podemos passar um state ou algo assim
-      // Por enquanto, vamos apenas para o dashboard e abrir o modal lá se possível
-      // Ou apenas ir para o dashboard.
       navigate('/dashboard', { state: { openAddMed: true } });
     }
   };
@@ -32,6 +30,7 @@ const AppRoutes: React.FC = () => {
       <Route path="/login" element={<Login />} />
       <Route path="/reset-password" element={<ResetPassword />} />
       <Route path="/subscribe" element={<Subscribe />} />
+      <Route path="/subscription/success" element={<SubscriptionSuccess />} />
 
       {/* Private Routes */}
       <Route element={<PrivateRoute />}>

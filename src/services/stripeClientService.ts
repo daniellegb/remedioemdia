@@ -37,6 +37,32 @@ export const stripeClientService = {
   },
 
   /**
+   * Solicita a criação de uma sessão de checkout para um novo visitante (guest).
+   */
+  async createGuestCheckoutSession(email: string, legalAccepted: boolean, turnstileToken: string): Promise<string> {
+    try {
+      const response = await fetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, legalAccepted, turnstileToken }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Erro ao criar sessão de checkout');
+      }
+
+      return data.url;
+    } catch (error: any) {
+      console.error('Stripe guest checkout error:', error);
+      throw error;
+    }
+  },
+
+  /**
    * Solicita de forma segura a criação de uma sessão no Portal do Cliente Stripe.
    */
   async createPortalSession(profile: Profile, returnUrl: string): Promise<string> {
