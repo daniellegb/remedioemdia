@@ -90,9 +90,10 @@ export function getMedicationScheduledTimesForDate(
   if (med.usageCategory === 'period') {
     const sortedTimes = [...med.times].sort();
     const totalDoses = (med.durationDays || 0) * sortedTimes.length;
+    const initialStartTime = (med.times && med.times[0]) || sortedTimes[0] || '';
     const periodDoses = calculatePeriodDoses(
       med.startDate || '',
-      sortedTimes[0] || '',
+      initialStartTime,
       sortedTimes,
       totalDoses
     );
