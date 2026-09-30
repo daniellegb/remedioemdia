@@ -133,14 +133,25 @@ export const isContraceptivePauseDay = (med: Medication, referenceDate: Date): b
     return false;
   }
 
-  const start = new Date(med.startDate + 'T00:00:00');
-  const current = new Date(referenceDate);
-  current.setHours(0, 0, 0, 0);
+  const [sY, sM, sD] = med.startDate.split('T')[0].split('-').map(Number);
+  const startUtc = Date.UTC(sY, sM - 1, sD);
 
-  if (current < start) return false;
+  let rY: number, rM: number, rD: number;
+  if (typeof (referenceDate as any) === 'string') {
+    [rY, rM, rD] = (referenceDate as any as string).split('T')[0].split('-').map(Number);
+  } else if (referenceDate && typeof referenceDate.getFullYear === 'function') {
+    rY = referenceDate.getFullYear();
+    rM = referenceDate.getMonth() + 1;
+    rD = referenceDate.getDate();
+  } else {
+    return false;
+  }
 
-  const diffTime = current.getTime() - start.getTime();
-  const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24));
+  const refUtc = Date.UTC(rY, rM - 1, rD);
+
+  if (refUtc < startUtc) return false;
+
+  const diffDays = Math.round((refUtc - startUtc) / (1000 * 60 * 60 * 24));
 
   let activeDays = 28;
   let pauseDays = 0;
