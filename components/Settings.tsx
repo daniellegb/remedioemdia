@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { User, Bell, LogOut, ChevronRight, Database, Trash2, AlertTriangle, CalendarClock, ShieldAlert, RefreshCw, Smile, Smartphone, Send, Bug, Sparkles, Lock, HelpCircle } from 'lucide-react';
+import { User, Bell, LogOut, ChevronRight, Database, Trash2, AlertTriangle, CalendarClock, ShieldAlert, RefreshCw, Smile, Smartphone, Send, Sparkles, Lock, HelpCircle } from 'lucide-react';
 import { UserAvatar } from '../src/components/UserAvatar';
 import { AppSettings, ViewType } from '../types';
 import { useAuth } from '../src/hooks/useAuth';
@@ -21,7 +21,6 @@ const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData, se
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [localSubscribed, setLocalSubscribed] = useState(false);
   const [isPushLoading, setIsPushLoading] = useState(false);
-  const [showDebug, setShowDebug] = useState(false);
 
   useEffect(() => {
     // Check if THIS device is already subscribed
@@ -328,83 +327,6 @@ const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData, se
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                {showDebug && (
-                  <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-2">
-                    <button 
-                      onClick={async () => {
-                        setIsPushLoading(true);
-                        try {
-                          const debug = await pushService.checkVapidMatch();
-                          console.log("[VAPID Check]", debug);
-                          
-                          if (!debug) {
-                            alert("Erro desconhecido ao verificar chaves.");
-                            return;
-                          }
-
-                          if (debug.error === 'unreachable') {
-                            alert("⚠️ Erro de Conexão: Não foi possível alcançar a Edge Function.\n\nIsso geralmente significa que a função 'send-notifications' não foi implantada no seu projeto Supabase ou o URL está incorreto.");
-                            return;
-                          }
-
-                          if (debug.vapidMatch) {
-                            alert("✅ Chaves VAPID sincronizadas! O navegador e o servidor estão usando a mesma chave.");
-                          } else {
-                            alert(`❌ Inconsistência detectada!\nServidor: ${debug?.server?.vapidPreview}\nCliente: ${debug?.client?.vapidPreview}\n\nVerifique suas variáveis de ambiente no Supabase e no Vercel/.env`);
-                          }
-                        } catch (error: any) {
-                          alert(`Erro ao verificar chaves: ${error.message || "Erro desconhecido"}`);
-                        } finally {
-                          setIsPushLoading(false);
-                        }
-                      }}
-                      className="p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
-                      title="Verificar Configuração"
-                    >
-                      <RefreshCw size={18} className={isPushLoading ? 'animate-spin' : ''} />
-                    </button>
-                    <button 
-                      onClick={handleActivateLocalPush}
-                      disabled={isPushLoading}
-                      className={`p-2 rounded-xl transition-colors text-[10px] font-bold ${localSubscribed ? 'bg-slate-100 text-slate-500 hover:bg-slate-200' : 'bg-blue-50 text-blue-600 hover:bg-blue-100'}`}
-                      title={localSubscribed ? "Atualizar registro deste dispositivo" : "Ativar neste dispositivo"}
-                    >
-                      {isPushLoading ? '...' : localSubscribed ? 'REATIVAR' : 'ATIVAR'}
-                    </button>
-                    {localSubscribed && (
-                      <button 
-                        onClick={async () => {
-                          if (!user) return;
-                          setIsPushLoading(true);
-                          try {
-                            const result = await pushService.sendTestNotification(user.id);
-                            console.log("[Push Test Result]", result);
-                            
-                            if (result.totalFound === 0) {
-                              alert("Atenção: Nenhuma assinatura de notificação encontrada para este navegador. Tente desativar e ativar as notificações novamente.");
-                            } else if (result.errorCount > 0) {
-                              const errorDetails = result.details?.filter((d: any) => d.status === 'failed').map((d: any) => d.error).join(', ');
-                              alert(`Enviado com problemas: ${result.successCount} sucesso, ${result.errorCount} falha(s).\n\nErros: ${errorDetails || "Verifique se o navegador está bloqueando as notificações."}`);
-                            } else {
-                              alert(`Notificação de teste enviada com sucesso para ${result.successCount} dispositivo(s)! Verifique seu dispositivo.`);
-                            }
-                          } catch (error: any) {
-                            console.error("Erro ao enviar teste:", error);
-                            alert(`Erro ao enviar notificação de teste: ${error.message || "Erro desconhecido"}`);
-                          } finally {
-                            setIsPushLoading(false);
-                          }
-                        }}
-                        disabled={isPushLoading}
-                        className="p-2 bg-slate-100 text-slate-600 rounded-xl hover:bg-slate-200 transition-colors"
-                        title="Testar Notificação"
-                      >
-                        <Send size={18} />
-                      </button>
-                    )}
-                  </div>
-                )}
-                
                 <button 
                   onClick={handleTogglePush}
                   disabled={isPushLoading}
@@ -452,15 +374,6 @@ const Settings: React.FC<Props> = ({ settings, onUpdateSettings, onClearData, se
           Versão 1.3.1 (Status Inteligente)<br/>
           Remédio em Dia - Gestão de Saúde Simplificada
         </p>
-
-        <button
-          type="button"
-          onClick={() => setShowDebug(!showDebug)}
-          className={`p-2 transition-colors rounded-xl ${showDebug ? 'text-blue-600 bg-blue-50' : 'text-slate-200 hover:text-slate-400'}`}
-          title="Debug Mode"
-        >
-          <Bug size={14} />
-        </button>
       </div>
 
       <ConfirmationModal

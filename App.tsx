@@ -20,9 +20,6 @@ const AppRoutes: React.FC = () => {
     if (skipMedication) {
       navigate('/dashboard');
     } else {
-      // Se quiser cadastrar o primeiro remédio, podemos passar um state ou algo assim
-      // Por enquanto, vamos apenas para o dashboard e abrir o modal lá se possível
-      // Ou apenas ir para o dashboard.
       navigate('/dashboard', { state: { openAddMed: true } });
     }
   };
