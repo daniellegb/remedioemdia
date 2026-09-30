@@ -6,6 +6,7 @@ import {
   formatDateToYYYYMMDD,
   parseDateToMidnight
 } from './medicationSchedule';
+import { isContraceptivePauseDay } from './medicationRules';
 
 function assert(condition: boolean, message: string) {
   if (!condition) {
@@ -305,5 +306,153 @@ assert(formatDateToYYYYMMDD(dateFimDoDia) === '2026-08-23', 'Date 23:59 deve res
 assert(formatDateToYYYYMMDD(dateInicioDoDia) === '2026-08-23', 'Date 00:01 deve resolver para 2026-08-23');
 assert(getScheduledDosesForDate([medContinuo], dateFimDoDia).length === 2, 'Agenda funciona com Date às 23:59');
 assert(getScheduledDosesForDate([medContinuo], dateInicioDoDia).length === 2, 'Agenda funciona com Date às 00:01');
+
+// 16. Testes específicos de regressão e fuso horário de anticoncepcionais
+console.log('16. Testando regressão e cálculo calendárico de anticoncepcionais (21/7, 24/4, fuso e virada de ano)...');
+const medAnti217: Medication = {
+  id: 'med-anti-217',
+  name: 'Anticoncepcional 21+7 Teste',
+  dosage: '1 comprimido',
+  unit: 'comprimido',
+  frequency: 1,
+  usageCategory: 'contraceptive',
+  contraceptiveType: '21_7',
+  times: ['08:00'],
+  startDate: '2026-09-01',
+  totalStock: 63,
+  currentStock: 63,
+  color: 'pink',
+  active: true
+};
+
+assert(isMedicationScheduledOnDate(medAnti217, '2026-09-01'), '01/09: Dia 1 ativo');
+assert(isMedicationScheduledOnDate(medAnti217, '2026-09-21'), '21/09: Dia 21 ativo');
+assert(!isMedicationScheduledOnDate(medAnti217, '2026-09-22'), '22/09: Dia 22 PAUSA (1º dia de pausa)');
+assert(!isMedicationScheduledOnDate(medAnti217, '2026-09-28'), '28/09: Dia 28 PAUSA (7º dia de pausa)');
+assert(isMedicationScheduledOnDate(medAnti217, '2026-09-29'), '29/09: Dia 29 NOVO CICLO (Dia 1)');
+assert(isMedicationScheduledOnDate(medAnti217, '2026-09-30'), '30/09: Dia 30 do ciclo 2');
+
+// Múltiplos ciclos (Ciclo 2: 29/09 a 26/10)
+assert(isMedicationScheduledOnDate(medAnti217, '2026-10-19'), '19/10: Ciclo 2, Dia 21 ativo');
+assert(!isMedicationScheduledOnDate(medAnti217, '2026-10-20'), '20/10: Ciclo 2, Dia 22 PAUSA');
+
+// Teste 24+4
+const medAnti244: Medication = {
+  id: 'med-anti-244',
+  name: 'Anticoncepcional 24+4 Teste',
+  dosage: '1 comprimido',
+  unit: 'comprimido',
+  frequency: 1,
+  usageCategory: 'contraceptive',
+  contraceptiveType: '24_4',
+  times: ['08:00'],
+  startDate: '2026-09-01',
+  totalStock: 56,
+  currentStock: 56,
+  color: 'pink',
+  active: true
+};
+
+assert(isMedicationScheduledOnDate(medAnti244, '2026-09-01'), '24+4 - 01/09: Dia 1 ativo');
+assert(isMedicationScheduledOnDate(medAnti244, '2026-09-24'), '24+4 - 24/09: Dia 24 ativo');
+assert(!isMedicationScheduledOnDate(medAnti244, '2026-09-25'), '24+4 - 25/09: Dia 25 PAUSA (1º dia de pausa)');
+assert(!isMedicationScheduledOnDate(medAnti244, '2026-09-28'), '24+4 - 28/09: Dia 28 PAUSA (4º dia de pausa)');
+assert(isMedicationScheduledOnDate(medAnti244, '2026-09-29'), '24+4 - 29/09: Dia 29 NOVO CICLO (Dia 1)');
+
+// Antes do início
+assert(!isContraceptivePauseDay(medAnti217, new Date(2026, 7, 31)), '31/08: Antes do início não é dia de pausa');
+
+// Virada de Ano (Início 15/12/2026)
+const medAntiAno: Medication = {
+  id: 'med-anti-ano',
+  name: 'Anticoncepcional Virada de Ano',
+  dosage: '1 comprimido',
+  unit: 'comprimido',
+  frequency: 1,
+  usageCategory: 'contraceptive',
+  contraceptiveType: '21_7',
+  times: ['08:00'],
+  startDate: '2026-12-15',
+  totalStock: 63,
+  currentStock: 63,
+  color: 'pink',
+  active: true
+};
+
+assert(isMedicationScheduledOnDate(medAntiAno, '2027-01-04'), '04/01/2027: Dia 21 ativo');
+assert(!isMedicationScheduledOnDate(medAntiAno, '2027-01-05'), '05/01/2027: Dia 22 PAUSA');
+assert(!isMedicationScheduledOnDate(medAntiAno, '2027-01-11'), '11/01/2027: Dia 28 PAUSA');
+assert(isMedicationScheduledOnDate(medAntiAno, '2027-01-12'), '12/01/2027: Dia 29 NOVO CICLO');
+
+// Teste de imunidade a fuso horário em America/Sao_Paulo
+const savedTZ = process.env.TZ;
+process.env.TZ = 'America/Sao_Paulo';
+const dateLocalPause22 = new Date(2026, 8, 22);
+assert(!isMedicationScheduledOnDate(medAnti217, dateLocalPause22), 'America/Sao_Paulo: Dia 22/09 deve ser PAUSA');
+process.env.TZ = savedTZ;
+
+// 17. Teste de Longo Prazo: Validação de 65 ciclos contínuos (5 anos / 1.820 dias)
+console.log('17. Testando uso de longo prazo por 5 anos (65 ciclos completos / 1.820 dias consecutivos)...');
+const medLongoPrazo217: Medication = {
+  id: 'med-longo-217',
+  name: 'Anticoncepcional 5 Anos 21+7',
+  dosage: '1 comprimido',
+  unit: 'comprimido',
+  frequency: 1,
+  usageCategory: 'contraceptive',
+  contraceptiveType: '21_7',
+  times: ['08:00'],
+  startDate: '2026-01-01',
+  totalStock: 1000,
+  currentStock: 1000,
+  color: 'pink',
+  active: true
+};
+
+const medLongoPrazo244: Medication = {
+  id: 'med-longo-244',
+  name: 'Anticoncepcional 5 Anos 24+4',
+  dosage: '1 comprimido',
+  unit: 'comprimido',
+  frequency: 1,
+  usageCategory: 'contraceptive',
+  contraceptiveType: '24_4',
+  times: ['08:00'],
+  startDate: '2026-01-01',
+  totalStock: 1000,
+  currentStock: 1000,
+  color: 'pink',
+  active: true
+};
+
+// Iterar dia a dia por 1.820 dias (65 ciclos de 28 dias)
+const startBaseUtc = Date.UTC(2026, 0, 1);
+for (let dayOffset = 0; dayOffset < 1820; dayOffset++) {
+  const currentUtc = new Date(startBaseUtc + dayOffset * 86400000);
+  const yyyy = currentUtc.getUTCFullYear();
+  const mm = String(currentUtc.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(currentUtc.getUTCDate()).padStart(2, '0');
+  const dateStr = `${yyyy}-${mm}-${dd}`;
+
+  const dayInCycle = (dayOffset % 28) + 1; // 1 a 28
+
+  // Validação 21+7
+  const is217Scheduled = isMedicationScheduledOnDate(medLongoPrazo217, dateStr);
+  const expected217 = dayInCycle <= 21;
+  assert(
+    is217Scheduled === expected217,
+    `Falha no dia ${dateStr} (Dia ${dayInCycle} do ciclo): Esperado ${expected217 ? 'DOSE' : 'PAUSA'}, obtido ${is217Scheduled ? 'DOSE' : 'PAUSA'}`
+  );
+
+  // Validação 24+4
+  const is244Scheduled = isMedicationScheduledOnDate(medLongoPrazo244, dateStr);
+  const expected244 = dayInCycle <= 24;
+  assert(
+    is244Scheduled === expected244,
+    `Falha 24+4 no dia ${dateStr} (Dia ${dayInCycle} do ciclo): Esperado ${expected244 ? 'DOSE' : 'PAUSA'}, obtido ${is244Scheduled ? 'DOSE' : 'PAUSA'}`
+  );
+}
+
+console.log('✅ Validação de 5 anos (65 ciclos / 1.820 dias) concluída com 100% de precisão!');
 
 console.log('✅ TODOS OS TESTES UNITÁRIOS DE MEDICATION SCHEDULE PASSARAM COM SUCESSO!');
