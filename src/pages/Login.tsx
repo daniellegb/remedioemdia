@@ -4,6 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Pill, Mail, Lock, Loader2, AlertTriangle, Activity, Wifi, WifiOff, ShieldCheck, CheckCircle, ArrowLeft, Eye, EyeOff, Check, X } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { testSupabaseConnection } from '../lib/supabase';
+import { validateEmailText } from '../domain/validation';
 
 const Login: React.FC = () => {
   // Estados locais controlados
@@ -119,8 +120,11 @@ const Login: React.FC = () => {
   };
 
   const handleForgotPassword = async () => {
-    if (!email || !email.includes('@')) {
-      setError('Por favor, informe um e-mail válido para recuperação.');
+    let validEmail = '';
+    try {
+      validEmail = validateEmailText(email, 'E-mail', true);
+    } catch (err: any) {
+      setError(err.message || 'Por favor, informe um e-mail válido para recuperação.');
       return;
     }
 
@@ -134,7 +138,7 @@ const Login: React.FC = () => {
     setSuccessMessage(null);
 
     try {
-      await resetPasswordForEmail(email, turnstileToken);
+      await resetPasswordForEmail(validEmail, turnstileToken);
       setSuccessMessage('Se o e-mail estiver cadastrado, você receberá as instruções para redefinir sua senha em instantes. Verifique também sua caixa de spam.');
     } catch (err: any) {
       console.error('Password reset error:', err);
@@ -165,14 +169,22 @@ const Login: React.FC = () => {
       return;
     }
 
+    let validEmail = '';
+    try {
+      validEmail = validateEmailText(email, 'E-mail', true);
+    } catch (err: any) {
+      setError(err.message);
+      return;
+    }
+
     // SetLoading(true)
     setLoading(true);
     // Limpar erro
     setError(null);
 
     try {
-      // Chamar signIn(email, password, turnstileToken)
-      await signIn(email, password, turnstileToken);
+      // Chamar signIn(validEmail, password, turnstileToken)
+      await signIn(validEmail, password, turnstileToken);
       navigate('/dashboard');
     } catch (err: any) {
       // Tratar erro se houver
@@ -218,6 +230,14 @@ const Login: React.FC = () => {
 
   // Implementar função handleRegister
   const handleRegister = async () => {
+    let validEmail = '';
+    try {
+      validEmail = validateEmailText(email, 'E-mail', true);
+    } catch (err: any) {
+      setError(err.message);
+      return;
+    }
+
     if (!hasMinLength) {
       setError('A senha precisa ter pelo menos 8 caracteres.');
       return;
@@ -254,7 +274,7 @@ const Login: React.FC = () => {
 
     try {
       const acceptanceTimestamp = new Date().toISOString();
-      await signUp(email, password, acceptanceTimestamp, turnstileToken);
+      await signUp(validEmail, password, acceptanceTimestamp, turnstileToken);
       setError('Cadastro realizado com sucesso! Verifique seu e-mail para confirmar a conta.');
       setIsSignUp(false);
       setPassword('');
@@ -382,7 +402,7 @@ const Login: React.FC = () => {
                 type="email"
                 id="email"
                 value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                onChange={(e) => setEmail(e.target.value.replace(/[^a-zA-Z0-9._%+\-@]/g, ''))}
                 className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all"
                 placeholder="seu@email.com"
                 required

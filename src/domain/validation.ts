@@ -148,6 +148,54 @@ export function validateAddressText(
 }
 
 /**
+ * Valida e sanitiza campo de e-mail permitindo exclusivamente caracteres válidos de e-mail
+ * (letras, números e os símbolos ., _, %, +, -, @).
+ * Rejeita qualquer outro caractere especial (como /, <, >, ;, ', ", \, (, ), {, }, etc.)
+ * e valida a estrutura formal do e-mail (nome@dominio.com), garantindo proteção contra ataques de injeção.
+ */
+export function validateEmailText(
+  value: string | null | undefined,
+  fieldName: string = 'E-mail',
+  required: boolean = true
+): string {
+  if (value === undefined || value === null) {
+    if (required) {
+      throw new Error(`${fieldName} é obrigatório.`);
+    }
+    return '';
+  }
+
+  const str = typeof value === 'string' ? value : String(value);
+  const trimmed = str.trim();
+
+  if (trimmed === '') {
+    if (required) {
+      throw new Error(`${fieldName} é obrigatório.`);
+    }
+    return '';
+  }
+
+  // Verificar se há caracteres proibidos fora do padrão seguro de e-mail
+  const hasForbiddenChars = /[^a-zA-Z0-9._%+\-@]/;
+  if (hasForbiddenChars.test(trimmed)) {
+    throw new Error(`${fieldName} contém caracteres inválidos. Apenas letras, números e os símbolos ., _, %, +, -, @ são permitidos. Caracteres especiais como <, >, /, ;, ', " não são permitidos.`);
+  }
+
+  // Limite de tamanho conforme RFC 5321 (máximo 254 caracteres)
+  if (trimmed.length > 254) {
+    throw new Error(`${fieldName} deve ter no máximo 254 caracteres.`);
+  }
+
+  // Validação estrita do formato do e-mail
+  const EMAIL_REGEX = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+  if (!EMAIL_REGEX.test(trimmed)) {
+    throw new Error(`${fieldName} inválido. Informe um e-mail no formato nome@dominio.com.`);
+  }
+
+  return trimmed.toLowerCase();
+}
+
+/**
  * Valida números de estoque (currentStock, totalStock).
  * Rejeita NaN, Infinity, valores negativos e acima de maxStock.
  */

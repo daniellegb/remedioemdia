@@ -5,7 +5,8 @@ import {
   validateStringLength,
   validateStockNumber,
   validateAlphanumericText,
-  validateAddressText
+  validateAddressText,
+  validateEmailText
 } from './validation';
 
 function assert(condition: boolean, message: string) {
@@ -98,5 +99,24 @@ assertThrows(() => validateAddressText('Av Paulista / Rua Augusta', 'Endereço',
 assertThrows(() => validateAddressText('Rua das Flores - 123', 'Endereço', 200, false), 'Caracteres como /, -, <, > não são permitidos');
 assertThrows(() => validateAddressText('<script>alert("xss")</script>', 'Endereço', 200, false), 'Caracteres como /, -, <, > não são permitidos');
 assertThrows(() => validateAddressText("SELECT * FROM address WHERE '1'='1';", 'Endereço', 200, false), 'Caracteres como /, -, <, > não são permitidos');
+
+// 7. Validação de E-mail (Segurança & Prevenção de Injeção)
+console.log('7. Testando validação de campo de e-mail...');
+assert(validateEmailText('usuario@dominio.com', 'E-mail', true) === 'usuario@dominio.com', 'E-mail simples válido');
+assert(validateEmailText('NOME.SOBRENOME+TAG@Sub.Domain.com.br', 'E-mail', true) === 'nome.sobrenome+tag@sub.domain.com.br', 'E-mail complexo com maiúsculas convertido para minúsculas');
+assert(validateEmailText('  user123_test%foo-bar@example.org  ', 'E-mail', true) === 'user123_test%foo-bar@example.org', 'E-mail com símbolos válidos e trim');
+
+// Rejeição de ataques de injeção e caracteres proibidos
+assertThrows(() => validateEmailText('<script>alert("xss")</script>@test.com', 'E-mail', true), 'Apenas letras, números e os símbolos ., _, %, +, -, @ são permitidos');
+assertThrows(() => validateEmailText("admin' OR '1'='1", 'E-mail', true), 'Apenas letras, números e os símbolos ., _, %, +, -, @ são permitidos');
+assertThrows(() => validateEmailText('user@domain.com; DROP TABLE users;', 'E-mail', true), 'Apenas letras, números e os símbolos ., _, %, +, -, @ são permitidos');
+assertThrows(() => validateEmailText('user/test@domain.com', 'E-mail', true), 'Apenas letras, números e os símbolos ., _, %, +, -, @ são permitidos');
+assertThrows(() => validateEmailText('user"test"@domain.com', 'E-mail', true), 'Apenas letras, números e os símbolos ., _, %, +, -, @ são permitidos');
+
+// Rejeição de formatos inválidos
+assertThrows(() => validateEmailText('usuario@dominio', 'E-mail', true), 'Informe um e-mail no formato nome@dominio.com');
+assertThrows(() => validateEmailText('usuario@@dominio.com', 'E-mail', true), 'Informe um e-mail no formato nome@dominio.com');
+assertThrows(() => validateEmailText('@dominio.com', 'E-mail', true), 'Informe um e-mail no formato nome@dominio.com');
+assertThrows(() => validateEmailText('', 'E-mail', true), 'E-mail é obrigatório');
 
 console.log('✅ TODOS OS TESTES UNITÁRIOS DE VALIDAÇÃO PASSARAM COM SUCESSO!');

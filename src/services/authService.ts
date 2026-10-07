@@ -1,9 +1,11 @@
 import { supabase } from '../lib/supabase';
+import { validateEmailText } from '../domain/validation';
 
 export const authService = {
   async signUp(email: string, password: string, legalAcceptanceAt?: string, captchaToken?: string) {
+    const validEmail = validateEmailText(email, 'E-mail', true);
     return await supabase.auth.signUp({ 
-      email, 
+      email: validEmail, 
       password,
       options: {
         emailRedirectTo: `${window.location.origin}/dashboard`,
@@ -14,8 +16,9 @@ export const authService = {
   },
 
   async signIn(email: string, password: string, captchaToken?: string) {
+    const validEmail = validateEmailText(email, 'E-mail', true);
     return await supabase.auth.signInWithPassword({ 
-      email, 
+      email: validEmail, 
       password,
       options: {
         captchaToken
@@ -67,7 +70,8 @@ export const authService = {
   },
 
   async resetPasswordForEmail(email: string, captchaToken?: string) {
-    return await supabase.auth.resetPasswordForEmail(email, {
+    const validEmail = validateEmailText(email, 'E-mail', true);
+    return await supabase.auth.resetPasswordForEmail(validEmail, {
       redirectTo: `${window.location.origin}/reset-password`,
       captchaToken
     });
