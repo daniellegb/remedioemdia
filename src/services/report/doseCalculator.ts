@@ -44,7 +44,7 @@ export const getMedicationDosesForPeriod = (
     // Sort chronologically
     prnRecords.sort((a, b) => {
       if (a.date !== b.date) return a.date.localeCompare(b.date);
-      return a.scheduled_time.localeCompare(b.scheduled_time);
+      return (a.scheduled_time || '').localeCompare(b.scheduled_time || '');
     });
 
     return prnRecords.map(r => {
@@ -62,9 +62,11 @@ export const getMedicationDosesForPeriod = (
         confTime = r.scheduled_time || '-';
       }
 
+      const adminTime = r.scheduled_time || confTime || '-';
+
       return {
         date: r.date,
-        scheduledTime: '-',
+        scheduledTime: adminTime,
         confirmationTime: confTime,
         status: 'taken' as const,
         statusLabel: 'Tomado'

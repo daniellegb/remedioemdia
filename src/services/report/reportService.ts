@@ -245,6 +245,8 @@ export const reportService = {
       doc.text(`Dosagem: ${dosageStr}   |   Frequência: ${frequencyStr}   |   Categoria: ${categoryStr}`, 15, currentY);
       currentY += 7;
 
+      const isPrn = med.usageCategory === 'prn';
+
       // Draw Table Header
       checkPageOverflow(15);
       doc.setFillColor(248, 250, 252); // slate-50
@@ -253,10 +255,17 @@ export const reportService = {
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8.5);
       doc.setTextColor(100, 116, 139); // slate-500
-      doc.text("Data", 18, currentY + 1);
-      doc.text("Horário Previsto", 63, currentY + 1);
-      doc.text("Confirmação", 108, currentY + 1);
-      doc.text("Situação", 158, currentY + 1);
+      
+      if (isPrn) {
+        doc.text("Data", 18, currentY + 1);
+        doc.text("Administrado", 88, currentY + 1);
+        doc.text("Situação", 158, currentY + 1);
+      } else {
+        doc.text("Data", 18, currentY + 1);
+        doc.text("Horário Previsto", 63, currentY + 1);
+        doc.text("Confirmação", 108, currentY + 1);
+        doc.text("Situação", 158, currentY + 1);
+      }
       
       doc.setDrawColor(226, 232, 240); // slate-200
       doc.setLineWidth(0.2);
@@ -278,9 +287,15 @@ export const reportService = {
           doc.setFontSize(9);
           doc.setTextColor(51, 65, 85); // slate-700
           
-          doc.text(formatBrazilianDate(dose.date), 18, currentY);
-          doc.text(dose.scheduledTime, 63, currentY);
-          doc.text(dose.confirmationTime || 'Não confirmada', 108, currentY);
+          if (isPrn) {
+            const adminTime = dose.scheduledTime !== '-' ? dose.scheduledTime : (dose.confirmationTime || '-');
+            doc.text(formatBrazilianDate(dose.date), 18, currentY);
+            doc.text(adminTime, 88, currentY);
+          } else {
+            doc.text(formatBrazilianDate(dose.date), 18, currentY);
+            doc.text(dose.scheduledTime, 63, currentY);
+            doc.text(dose.confirmationTime || 'Não confirmada', 108, currentY);
+          }
           
           if (dose.status === 'taken') {
             doc.setTextColor(16, 185, 129); // emerald-500
