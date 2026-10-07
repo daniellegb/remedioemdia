@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { stripeClientService } from '../services/stripeClientService';
+import { validateEmailText } from '../domain/validation';
 
 const Subscribe: React.FC = () => {
   // Estados locais controlados do formulário de assinatura
@@ -126,8 +127,11 @@ const Subscribe: React.FC = () => {
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!email || !email.includes('@')) {
-      setError('Por favor, informe um e-mail válido.');
+    let validEmail = '';
+    try {
+      validEmail = validateEmailText(email, 'E-mail', true);
+    } catch (err: any) {
+      setError(err.message || 'Por favor, informe um e-mail válido.');
       return;
     }
 
@@ -146,7 +150,7 @@ const Subscribe: React.FC = () => {
     setSuccessMessage(null);
 
     try {
-      const checkoutUrl = await stripeClientService.createGuestCheckoutSession(email, legalAccepted, turnstileToken);
+      const checkoutUrl = await stripeClientService.createGuestCheckoutSession(validEmail, legalAccepted, turnstileToken);
       setSuccessMessage('Redirecionando para o pagamento...');
       if (checkoutUrl) {
         window.location.href = checkoutUrl;
@@ -370,7 +374,7 @@ const Subscribe: React.FC = () => {
                   type="email"
                   id="email"
                   value={email}
-                  onChange={(e) => setEmail(e.target.value)}
+                  onChange={(e) => setEmail(e.target.value.replace(/[^a-zA-Z0-9._%+\-@]/g, ''))}
                   className="w-full bg-slate-50 border border-slate-100 rounded-2xl py-4 pl-12 pr-4 focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition-all text-sm font-medium"
                   placeholder="seu@email.com"
                   required
