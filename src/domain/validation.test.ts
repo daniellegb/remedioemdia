@@ -3,7 +3,9 @@ import {
   validateTimeFormat,
   validateOptionalTimeFormat,
   validateStringLength,
-  validateStockNumber
+  validateStockNumber,
+  validateAlphanumericText,
+  validateAddressText
 } from './validation';
 
 function assert(condition: boolean, message: string) {
@@ -68,5 +70,33 @@ assertThrows(() => validateStockNumber(NaN, 'Estoque'), 'deve ser um número vá
 assertThrows(() => validateStockNumber(Infinity, 'Estoque'), 'deve ser um número válido');
 assertThrows(() => validateStockNumber(2000000, 'Estoque', 1000000), 'não pode ser maior');
 assertThrows(() => validateStockNumber('abc', 'Estoque'), 'deve ser um número válido');
+
+// 5. Validação Alfanumérica (Segurança & Injeção)
+console.log('5. Testando validação de texto alfanumérico (letras e números)...');
+assert(validateAlphanumericText('Paracetamol 500mg', 'Nome do medicamento', 100, true) === 'Paracetamol 500mg', 'Nome válido com letras e números');
+assert(validateAlphanumericText('Dr Armando 123', 'Médico', 100, false) === 'Dr Armando 123', 'Médico válido com acentos e números');
+assert(validateAlphanumericText('Cardiologia', 'Especialidade', 100, false) === 'Cardiologia', 'Especialidade válida');
+assert(validateAlphanumericText('Lab Labor 2', 'Local', 200, false) === 'Lab Labor 2', 'Local válido');
+assert(validateAlphanumericText('Instrução sem pontuação extra', 'Observações', 500, false) === 'Instrução sem pontuação extra', 'Observações válidas');
+
+// Rejeição de caracteres proibidos (ex: /, -, <, >, ;, ', ", etc.)
+assertThrows(() => validateAlphanumericText('Paracetamol / Dipirona', 'Nome do medicamento', 100, true), 'deve conter apenas caracteres de texto e números');
+assertThrows(() => validateAlphanumericText('Remédio - 10mg', 'Nome do medicamento', 100, true), 'deve conter apenas caracteres de texto e números');
+assertThrows(() => validateAlphanumericText('Dr. Armando', 'Médico', 100, false), 'deve conter apenas caracteres de texto e números');
+assertThrows(() => validateAlphanumericText('<script>alert("xss")</script>', 'Nome do medicamento', 100, true), 'deve conter apenas caracteres de texto e números');
+assertThrows(() => validateAlphanumericText("SELECT * FROM users;", 'Observações', 500, false), 'deve conter apenas caracteres de texto e números');
+
+// 6. Validação de Endereço (Texto, Números, Vírgulas, Pontos, Ordinais)
+console.log('6. Testando validação de campo de endereço...');
+assert(validateAddressText('Av Paulista 1000, Sao Paulo', 'Endereço', 200, false) === 'Av Paulista 1000, Sao Paulo', 'Endereço válido com vírgula');
+assert(validateAddressText('Rua das Flores, 123. Apto 45, 2º andar', 'Endereço', 200, false) === 'Rua das Flores, 123. Apto 45, 2º andar', 'Endereço válido com ponto e ordinal º');
+assert(validateAddressText('2ª Travessa da Paz, nº 10', 'Endereço', 200, false) === '2ª Travessa da Paz, nº 10', 'Endereço válido com ordinal ª e nº');
+assert(validateAddressText('  Rua Central 50  ', 'Endereço', 200, false) === 'Rua Central 50', 'Endereço válido com trim');
+
+// Rejeição de caracteres não permitidos em endereço (ex: /, -, <, >, ;, ', ", etc.)
+assertThrows(() => validateAddressText('Av Paulista / Rua Augusta', 'Endereço', 200, false), 'Caracteres como /, -, <, > não são permitidos');
+assertThrows(() => validateAddressText('Rua das Flores - 123', 'Endereço', 200, false), 'Caracteres como /, -, <, > não são permitidos');
+assertThrows(() => validateAddressText('<script>alert("xss")</script>', 'Endereço', 200, false), 'Caracteres como /, -, <, > não são permitidos');
+assertThrows(() => validateAddressText("SELECT * FROM address WHERE '1'='1';", 'Endereço', 200, false), 'Caracteres como /, -, <, > não são permitidos');
 
 console.log('✅ TODOS OS TESTES UNITÁRIOS DE VALIDAÇÃO PASSARAM COM SUCESSO!');

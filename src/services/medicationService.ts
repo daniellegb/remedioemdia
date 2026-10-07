@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Medication } from '../../types';
 import { getNextDoseAt } from '../domain/medicationRules';
-import { validateStringLength, validateStockNumber, validateTimeFormat } from '../domain/validation';
+import { validateStringLength, validateStockNumber, validateTimeFormat, validateAlphanumericText } from '../domain/validation';
 
 export const mapMedToCamelCase = (med: any): Medication => ({
   id: med.id,
@@ -58,8 +58,8 @@ export const medicationService = {
 
   async createMedication(userId: string, data: Omit<Medication, 'id'>) {
     try {
-      const validName = validateStringLength(data.name, 'Nome do medicamento', 100, true)!;
-      const validNotes = validateStringLength(data.notes, 'Observações', 500, false);
+      const validName = validateAlphanumericText(data.name, 'Nome do medicamento', 100, true)!;
+      const validNotes = validateAlphanumericText(data.notes, 'Observações', 500, false);
       const validDosage = validateStringLength(data.dosage, 'Dosagem', 50, false) || '';
       const validUnit = validateStringLength(data.unit, 'Unidade', 50, false) || '';
       const validCurrentStock = validateStockNumber(data.currentStock, 'Estoque atual');
@@ -127,7 +127,7 @@ export const medicationService = {
   async updateMedication(userId: string, id: string, data: Partial<Medication>) {
     try {
       const updateData: any = {};
-      if (data.name !== undefined) updateData.name = validateStringLength(data.name, 'Nome do medicamento', 100, true);
+      if (data.name !== undefined) updateData.name = validateAlphanumericText(data.name, 'Nome do medicamento', 100, true);
       if (data.dosage !== undefined) updateData.dosage = validateStringLength(data.dosage, 'Dosagem', 50, false) || '';
       if (data.unit !== undefined) updateData.unit = validateStringLength(data.unit, 'Unidade', 50, false) || '';
       if (data.usageCategory !== undefined) updateData.usage_category = data.usageCategory;
@@ -150,11 +150,7 @@ export const medicationService = {
       if (data.totalStock !== undefined) updateData.total_stock = validateStockNumber(data.totalStock, 'Estoque total');
       if (data.currentStock !== undefined) updateData.current_stock = validateStockNumber(data.currentStock, 'Estoque atual');
       if (data.expiryDate !== undefined) updateData.expiry_date = nullIfEmpty(data.expiryDate);
-      if (data.notes !== undefined) updateData.notes = validateStringLength(data.notes, 'Observações', 500, false);
-      if (data.color !== undefined) updateData.color = data.color;
-      if (data.frequency !== undefined) updateData.frequency = data.frequency;
-      if (data.active !== undefined) updateData.active = data.active;
-      if (data.deleted !== undefined) updateData.deleted = data.deleted;
+      if (data.notes !== undefined) updateData.notes = validateAlphanumericText(data.notes, 'Observações', 500, false);
       if (data.color !== undefined) updateData.color = data.color;
       if (data.frequency !== undefined) updateData.frequency = data.frequency;
       if (data.active !== undefined) updateData.active = data.active;

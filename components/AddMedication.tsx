@@ -243,7 +243,7 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
             <label className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2">
               <Pill size={14} /> Nome do Medicamento
             </label>
-            <input required className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ex: Paracetamol" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} />
+            <input required className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none" placeholder="Ex: Paracetamol" value={formData.name} onChange={e => setFormData({...formData, name: e.target.value.replace(/[^\p{L}\p{N}\s]/gu, '')})} />
           </div>
           <div className="grid grid-cols-2 gap-6">
             <div className="space-y-2">
@@ -519,7 +519,7 @@ const AddMedication: React.FC<Props> = ({ onSave, onCancel, initialData, initial
         {/* 4. OBSERVAÇÕES */}
         <div className="bg-white p-8 rounded-3xl border border-slate-100 shadow-sm space-y-2">
           <label className="text-sm font-bold text-slate-500 uppercase tracking-wider flex items-center gap-2"><FileText size={14} /> Observações</label>
-          <textarea className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none resize-none transition-all" rows={3} placeholder="Instruções extras (Ex: Ingerir com água)" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value})} />
+          <textarea className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none resize-none transition-all" rows={3} placeholder="Instruções extras (Ex: Ingerir com água)" value={formData.notes} onChange={e => setFormData({...formData, notes: e.target.value.replace(/[^\p{L}\p{N}\s]/gu, '')})} />
         </div>
 
         {/* STATUS DO MEDICAMENTO (ATIVO / INATIVO) */}

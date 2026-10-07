@@ -1,7 +1,7 @@
 import { supabase } from '../lib/supabase';
 import { Appointment } from '../../types';
 import { notificationService } from './notificationService';
-import { validateTimeFormat, validateStringLength } from '../domain/validation';
+import { validateTimeFormat, validateStringLength, validateAlphanumericText, validateAddressText } from '../domain/validation';
 
 export const mapAppToCamelCase = (app: any): Appointment => ({
   id: app.id,
@@ -39,10 +39,10 @@ export const appointmentService = {
   async createAppointment(userId: string, data: Omit<Appointment, 'id'>) {
     const validTime = validateTimeFormat(data.time, 'Horário do compromisso');
     const validType = validateStringLength(data.type, 'Tipo de compromisso', 50, true)!;
-    const validDoctor = validateStringLength(data.doctor, 'Médico', 100, false) || '';
-    const validSpecialty = validateStringLength(data.specialty, 'Especialidade', 100, false) || '';
-    const validLocation = validateStringLength(data.location, 'Local', 200, false) || '';
-    const validNotes = validateStringLength(data.notes, 'Observações', 500, false);
+    const validDoctor = validateAlphanumericText(data.doctor, 'Médico / Local', 100, false) || '';
+    const validSpecialty = validateAlphanumericText(data.specialty, 'Especialidade / Tipo de Exame', 100, false) || '';
+    const validLocation = validateAddressText(data.location, 'Local / Endereço', 200, false) || '';
+    const validNotes = validateAlphanumericText(data.notes, 'Observações', 500, false);
 
     const { data: created, error } = await supabase
       .from('appointments')
@@ -80,10 +80,10 @@ export const appointmentService = {
   async updateAppointment(userId: string, id: string, data: Partial<Appointment>) {
     const updateData: any = {};
     if (data.type !== undefined) updateData.type = validateStringLength(data.type, 'Tipo de compromisso', 50, true);
-    if (data.doctor !== undefined) updateData.doctor = validateStringLength(data.doctor, 'Médico', 100, false) || '';
-    if (data.specialty !== undefined) updateData.specialty = validateStringLength(data.specialty, 'Especialidade', 100, false) || '';
-    if (data.location !== undefined) updateData.location = validateStringLength(data.location, 'Local', 200, false) || '';
-    if (data.notes !== undefined) updateData.notes = validateStringLength(data.notes, 'Observações', 500, false);
+    if (data.doctor !== undefined) updateData.doctor = validateAlphanumericText(data.doctor, 'Médico / Local', 100, false) || '';
+    if (data.specialty !== undefined) updateData.specialty = validateAlphanumericText(data.specialty, 'Especialidade / Tipo de Exame', 100, false) || '';
+    if (data.location !== undefined) updateData.location = validateAddressText(data.location, 'Local / Endereço', 200, false) || '';
+    if (data.notes !== undefined) updateData.notes = validateAlphanumericText(data.notes, 'Observações', 500, false);
     if (data.time !== undefined) updateData.time = validateTimeFormat(data.time, 'Horário do compromisso');
     if (data.date !== undefined) updateData.date = nullIfEmpty(data.date);
     if (data.active !== undefined) updateData.active = data.active;
