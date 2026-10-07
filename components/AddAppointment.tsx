@@ -78,7 +78,9 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
         );
         if (response.ok) {
           const data = await response.json();
-          const list = data.map((item: any) => item.display_name);
+          const list = data.map((item: any) =>
+            item.display_name.replace(/[^\p{L}\p{N}\s,.\u00BA\u00AA]/gu, '').replace(/\s+/g, ' ').trim()
+          );
           setSuggestions(list);
         } else {
           setSuggestions([]);
@@ -95,8 +97,9 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
   }, [formData.location, lastSelectedLocation]);
 
   const handleSelectSuggestion = (suggestion: string) => {
-    setLastSelectedLocation(suggestion);
-    setFormData(prev => ({ ...prev, location: suggestion }));
+    const cleanSuggestion = suggestion.replace(/[^\p{L}\p{N}\s,.\u00BA\u00AA]/gu, '').replace(/\s+/g, ' ').trim();
+    setLastSelectedLocation(cleanSuggestion);
+    setFormData(prev => ({ ...prev, location: cleanSuggestion }));
     setSuggestions([]);
     setShowDropdown(false);
   };
@@ -185,9 +188,9 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
             <input
               required
               className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-              placeholder={type === 'Consulta' ? 'Ex: Dr. Armando' : 'Ex: Lab Labor'}
+              placeholder={type === 'Consulta' ? 'Ex: Dr Armando' : 'Ex: Lab Labor'}
               value={formData.doctor}
-              onChange={e => setFormData({...formData, doctor: e.target.value})}
+              onChange={e => setFormData({...formData, doctor: e.target.value.replace(/[^\p{L}\p{N}\s]/gu, '')})}
             />
           </div>
 
@@ -199,9 +202,9 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
             <input
               required
               className="w-full bg-slate-50 border-none rounded-xl px-4 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all"
-              placeholder={type === 'Consulta' ? 'Ex: Cardiologia' : 'Ex: Sangue / Imagem'}
+              placeholder={type === 'Consulta' ? 'Ex: Cardiologia' : 'Ex: Sangue ou Imagem'}
               value={formData.specialty}
-              onChange={e => setFormData({...formData, specialty: e.target.value})}
+              onChange={e => setFormData({...formData, specialty: e.target.value.replace(/[^\p{L}\p{N}\s]/gu, '')})}
             />
           </div>
 
@@ -240,9 +243,9 @@ const AddAppointment: React.FC<Props> = ({ onSave, onCancel, initialData }) => {
             <div className="relative">
               <input
                 className="w-full bg-slate-50 border-none rounded-xl pl-4 pr-10 py-3 focus:ring-2 focus:ring-blue-500 outline-none transition-all text-slate-800"
-                placeholder="Ex: Av. Paulista, 1000, São Paulo"
+                placeholder="Ex: Av Paulista 1000, Sao Paulo"
                 value={formData.location}
-                onChange={e => setFormData({...formData, location: e.target.value})}
+                onChange={e => setFormData({...formData, location: e.target.value.replace(/[^\p{L}\p{N}\s,.\u00BA\u00AA]/gu, '')})}
                 onFocus={() => {
                   if (suggestions.length > 0) setShowDropdown(true);
                 }}

@@ -68,6 +68,86 @@ export function validateStringLength(
 }
 
 /**
+ * Valida e sanitiza campos de texto permitindo exclusivamente letras (incluindo acentuadas),
+ * números e espaços. Rejeita qualquer outro caractere como /, -, <, >, ;, ', ", etc.,
+ * aumentando a segurança contra ataques de injeção.
+ */
+export function validateAlphanumericText(
+  value: string | null | undefined,
+  fieldName: string,
+  maxLength: number,
+  required: boolean = false
+): string | null {
+  if (value === undefined || value === null) {
+    if (required) {
+      throw new Error(`${fieldName} é obrigatório.`);
+    }
+    return null;
+  }
+
+  const str = typeof value === 'string' ? value : String(value);
+  const trimmed = str.trim();
+
+  if (trimmed === '') {
+    if (required) {
+      throw new Error(`${fieldName} é obrigatório.`);
+    }
+    return null;
+  }
+
+  const hasForbiddenChars = /[^\p{L}\p{N}\s]/u.test(trimmed);
+  if (hasForbiddenChars) {
+    throw new Error(`${fieldName} deve conter apenas caracteres de texto e números. Caracteres especiais como /, -, <, > não são permitidos.`);
+  }
+
+  if (trimmed.length > maxLength) {
+    throw new Error(`${fieldName} deve ter no máximo ${maxLength} caracteres.`);
+  }
+
+  return trimmed;
+}
+
+/**
+ * Valida e sanitiza campo de endereço permitindo exclusivamente letras (incluindo acentuadas),
+ * números, espaços e caracteres fundamentais de endereço (vírgula ,, ponto ., e símbolos ordinais º e ª).
+ * Rejeita qualquer outro caractere como /, -, <, >, ;, ', ", etc., aumentando a segurança contra ataques de injeção.
+ */
+export function validateAddressText(
+  value: string | null | undefined,
+  fieldName: string = 'Endereço',
+  maxLength: number = 200,
+  required: boolean = false
+): string | null {
+  if (value === undefined || value === null) {
+    if (required) {
+      throw new Error(`${fieldName} é obrigatório.`);
+    }
+    return null;
+  }
+
+  const str = typeof value === 'string' ? value : String(value);
+  const trimmed = str.trim();
+
+  if (trimmed === '') {
+    if (required) {
+      throw new Error(`${fieldName} é obrigatório.`);
+    }
+    return null;
+  }
+
+  const hasForbiddenChars = /[^\p{L}\p{N}\s,.\u00BA\u00AA]/u.test(trimmed);
+  if (hasForbiddenChars) {
+    throw new Error(`${fieldName} deve conter apenas letras, números e caracteres fundamentais de endereço (, . º ª). Caracteres como /, -, <, > não são permitidos.`);
+  }
+
+  if (trimmed.length > maxLength) {
+    throw new Error(`${fieldName} deve ter no máximo ${maxLength} caracteres.`);
+  }
+
+  return trimmed;
+}
+
+/**
  * Valida números de estoque (currentStock, totalStock).
  * Rejeita NaN, Infinity, valores negativos e acima de maxStock.
  */
