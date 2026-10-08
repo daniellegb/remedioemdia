@@ -156,9 +156,9 @@ export const stripeServerService = {
     }
 
     // 2. Criar checkout session
-    let priceId = process.env.STRIPE_PRICE_ID || 'price_1TXRkOK6dW3wcsxW6lCAXqHR';
-    if (!priceId || priceId === 'price_1TRZZ5K6dW3wcsxWccq9X1Gc') {
-      priceId = 'price_1TXRkOK6dW3wcsxW6lCAXqHR';
+    const priceId = process.env.STRIPE_PRICE_ID;
+    if (!priceId) {
+      throw new Error('STRIPE_PRICE_ID environment variable is required');
     }
 
     const defaultUrl = (process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production')
@@ -201,9 +201,9 @@ export const stripeServerService = {
   async createGuestCheckoutSession(guestEmail: string, legalAcceptanceAt: string): Promise<string> {
     const stripe = getStripe();
 
-    let priceId = process.env.STRIPE_PRICE_ID || 'price_1TXRkOK6dW3wcsxW6lCAXqHR';
-    if (!priceId || priceId === 'price_1TRZZ5K6dW3wcsxWccq9X1Gc') {
-      priceId = 'price_1TXRkOK6dW3wcsxW6lCAXqHR';
+    const priceId = process.env.STRIPE_PRICE_ID;
+    if (!priceId) {
+      throw new Error('STRIPE_PRICE_ID environment variable is required');
     }
 
     const defaultUrl = (process.env.NODE_ENV === 'production' || process.env.VERCEL_ENV === 'production')
