@@ -170,6 +170,8 @@ export const stripeServerService = {
       customer: stripeCustomerId,
       mode: 'subscription',
       payment_method_types: ['card'],
+      allow_promotion_codes: true,
+      payment_method_collection: 'if_required',
       line_items: [
         {
           price: priceId,
@@ -215,6 +217,8 @@ export const stripeServerService = {
       customer_email: guestEmail,
       mode: 'subscription',
       payment_method_types: ['card'],
+      allow_promotion_codes: true,
+      payment_method_collection: 'if_required',
       line_items: [
         {
           price: priceId,
