@@ -255,7 +255,7 @@ const Subscription: React.FC<Props> = ({ setView }) => {
                       <CreditCard size={20} className="text-indigo-500 shrink-0" />
                       <div>
                         <span className="text-[10px] text-slate-400 font-bold uppercase block">Método de Cobrança</span>
-                        <span className="text-sm font-bold text-slate-700">Cartão de Crédito / Pix</span>
+                        <span className="text-sm font-bold text-slate-700">Cartão de Crédito</span>
                       </div>
                     </div>
                   </div>
