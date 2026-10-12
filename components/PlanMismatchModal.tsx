@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Medication, Appointment } from '../types';
 import { AlertCircle, CheckCircle2, Pill, Calendar, ArrowRight, ShieldAlert, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
@@ -11,6 +12,7 @@ interface Props {
 }
 
 export const PlanMismatchModal: React.FC<Props> = ({ isOpen, meds, appointments, onConfirm }) => {
+  const navigate = useNavigate();
   const [step, setStep] = useState<1 | 2>(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -111,9 +113,9 @@ export const PlanMismatchModal: React.FC<Props> = ({ isOpen, meds, appointments,
               </div>
               
               <div className="space-y-3">
-                <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Adequação ao Plano Gratuito</h2>
+                <h2 className="text-2xl font-extrabold text-slate-900 tracking-tight">Adequação de Plano</h2>
                 <p className="text-slate-600 text-sm md:text-base leading-relaxed max-w-md mx-auto">
-                  Sua assinatura mudou para o <strong>Plano Gratuito</strong>. Para continuar utilizando a plataforma, precisamos adaptar seus itens ativos aos limites permitidos:
+                  Sua assinatura Premium chegou ao fim. Renove para continuar aproveitando todos os recursos do plano Premium ou continue utilizando a plataforma no Plano Gratuito, adaptando seus itens ativos aos limites permitidos.
                 </p>
               </div>
 
@@ -137,14 +139,24 @@ export const PlanMismatchModal: React.FC<Props> = ({ isOpen, meds, appointments,
                 </p>
               </div>
 
-              <button
-                type="button"
-                onClick={() => setStep(2)}
-                className="w-full max-w-md bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-blue-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2 mt-4 cursor-pointer"
-              >
-                <span>Selecionar itens ativos</span>
-                <ArrowRight size={18} />
-              </button>
+              <div className="w-full max-w-md space-y-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setStep(2)}
+                  className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-2xl shadow-lg hover:shadow-blue-200 transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Selecionar itens ativos</span>
+                  <ArrowRight size={18} />
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => navigate('/subscribe')}
+                  className="w-full bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold py-4 rounded-2xl transition-all active:scale-[0.98] flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <span>Quero continuar sendo Premium!</span>
+                </button>
+              </div>
             </motion.div>
           ) : (
             <motion.div 
