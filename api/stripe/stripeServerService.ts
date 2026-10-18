@@ -728,11 +728,15 @@ export const stripeServerService = {
             const endedAtIso = subscription.ended_at
               ? new Date(subscription.ended_at * 1000).toISOString()
               : new Date().toISOString();
+            const canceledAtIso = subscription.canceled_at
+              ? new Date(subscription.canceled_at * 1000).toISOString()
+              : endedAtIso;
             await this.updateSubscriptionHistory({
               userId,
               stripeCustomerId,
               stripeSubscriptionId,
               status: 'ended',
+              canceledAt: canceledAtIso,
               endedAt: endedAtIso,
               accessExpiresAt: endedAtIso,
             });

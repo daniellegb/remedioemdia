@@ -148,8 +148,6 @@ export function validateAddressText(
 }
 
 /**
-<<<<<<< HEAD
-=======
  * Valida e sanitiza campo de e-mail permitindo exclusivamente caracteres válidos de e-mail
  * (letras, números e os símbolos ., _, %, +, -, @).
  * Rejeita qualquer outro caractere especial (como /, <, >, ;, ', ", \, (, ), {, }, etc.)
@@ -198,7 +196,6 @@ export function validateEmailText(
 }
 
 /**
->>>>>>> dev
  * Valida números de estoque (currentStock, totalStock).
  * Rejeita NaN, Infinity, valores negativos e acima de maxStock.
  */

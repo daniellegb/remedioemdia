@@ -5,12 +5,8 @@ import {
   validateStringLength,
   validateStockNumber,
   validateAlphanumericText,
-<<<<<<< HEAD
-  validateAddressText
-=======
   validateAddressText,
   validateEmailText
->>>>>>> dev
 } from './validation';
 
 function assert(condition: boolean, message: string) {
@@ -104,8 +100,6 @@ assertThrows(() => validateAddressText('Rua das Flores - 123', 'Endereço', 200,
 assertThrows(() => validateAddressText('<script>alert("xss")</script>', 'Endereço', 200, false), 'Caracteres como /, -, <, > não são permitidos');
 assertThrows(() => validateAddressText("SELECT * FROM address WHERE '1'='1';", 'Endereço', 200, false), 'Caracteres como /, -, <, > não são permitidos');
 
-<<<<<<< HEAD
-=======
 // 7. Validação de E-mail (Segurança & Prevenção de Injeção)
 console.log('7. Testando validação de campo de e-mail...');
 assert(validateEmailText('usuario@dominio.com', 'E-mail', true) === 'usuario@dominio.com', 'E-mail simples válido');
@@ -125,5 +119,4 @@ assertThrows(() => validateEmailText('usuario@@dominio.com', 'E-mail', true), 'I
 assertThrows(() => validateEmailText('@dominio.com', 'E-mail', true), 'Informe um e-mail no formato nome@dominio.com');
 assertThrows(() => validateEmailText('', 'E-mail', true), 'E-mail é obrigatório');
 
->>>>>>> dev
 console.log('✅ TODOS OS TESTES UNITÁRIOS DE VALIDAÇÃO PASSARAM COM SUCESSO!');
