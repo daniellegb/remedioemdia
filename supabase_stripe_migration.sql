@@ -6,7 +6,7 @@ create table if not exists public.stripe_events (
   stripe_customer_id text,
   stripe_subscription_id text,
   stripe_session_id text,
-  user_id uuid references auth.users(id),
+  user_id uuid references auth.users(id) on delete set null,
   payload_json jsonb not null,
   processed_at timestamp with time zone default now()
 );

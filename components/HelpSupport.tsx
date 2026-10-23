@@ -1,5 +1,5 @@
 import React from 'react';
-import { ArrowLeft, Mail, ExternalLink, HelpCircle } from 'lucide-react';
+import { ArrowLeft, Mail, ExternalLink, HelpCircle, Video } from 'lucide-react';
 import { ViewType } from '../types';
 import { motion } from 'motion/react';
 
@@ -33,6 +33,38 @@ export const HelpSupport: React.FC<Props> = ({ setView }) => {
       </div>
 
       <div className="space-y-6">
+        {/* Card de Tutoriais */}
+        <div id="help-support-tutorials-card" className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 md:p-8 space-y-6">
+          <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
+            <div className="p-2.5 bg-blue-50 text-blue-600 rounded-2xl">
+              <Video size={22} />
+            </div>
+            <div>
+              <h3 className="text-base font-bold text-slate-800">Tutoriais</h3>
+              <p className="text-xs text-slate-400">Aprenda a usar o aplicativo com vídeos explicativos</p>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <p className="text-sm text-slate-600 leading-relaxed font-medium">
+              Confira vídeos explicativos sobre as funcionalidades do Remédio em Dia.
+            </p>
+
+            <div className="flex justify-start sm:justify-end">
+              <a
+                id="btn-access-tutorials"
+                href="https://remedioemdia.com/tutoriais/"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center justify-center gap-2 px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs md:text-sm rounded-xl shadow-xs transition-all active:scale-[0.98] cursor-pointer shrink-0"
+              >
+                <ExternalLink size={16} />
+                Acessar tutoriais
+              </a>
+            </div>
+          </div>
+        </div>
+
         {/* Card de Contato por E-mail */}
         <div id="help-support-contact-card" className="bg-white rounded-3xl border border-slate-100 shadow-sm overflow-hidden p-6 md:p-8 space-y-6">
           <div className="flex items-center gap-3 border-b border-slate-100 pb-4">
